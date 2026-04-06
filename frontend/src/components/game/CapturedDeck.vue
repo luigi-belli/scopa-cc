@@ -1,6 +1,6 @@
 <template>
   <div class="captured-deck" :class="mine ? 'mine' : 'opponent'" ref="capturedEl">
-    <div class="captured-stack" v-if="count > 0 || scopaCards.length > 0">
+    <div class="captured-stack">
       <!-- Scopa marker cards: face-up, rotated 90°, behind the deck -->
       <div
         v-for="(sc, i) in scopaCards"
@@ -11,7 +11,7 @@
       </div>
       <!-- Main card back stack (on top of scopa markers) -->
       <CardBack v-if="count > 0" :deckStyle="deckStyle" class="captured-back" />
-      <span class="captured-count">{{ count }}</span>
+      <span v-if="count > 0" class="captured-count">{{ count }}</span>
     </div>
   </div>
 </template>

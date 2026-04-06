@@ -137,8 +137,9 @@ grep 'getSlotRect' frontend/src/components/screens/GameScreen.vue
 # 9. commitState/finishAnimation AFTER animation await
 grep -n 'commitState\|finishAnimation' frontend/src/components/screens/GameScreen.vue
 
-# 10-11. restoreStyles and clearLayer BEFORE snapshotByIdentity
-grep -n 'restoreStyles\|clearLayer\|snapshotByIdentity' frontend/src/components/screens/GameScreen.vue
+# 10-11. restoreStyles AFTER commitState/finishAnimation + nextTick (prevents one-frame flash)
+# clearLayer BEFORE commitState/finishAnimation; restoreStyles AFTER nextTick
+grep -n 'restoreStyles\|clearLayer\|snapshotByIdentity\|finishAnimation\|nextTick' frontend/src/components/screens/GameScreen.vue
 
 # 14. Card animations use aLayer().appendChild (clone only)
 grep -n 'aLayer()\.appendChild' frontend/src/components/screens/GameScreen.vue
@@ -151,6 +152,14 @@ grep -n 'table-center.*appendChild\|hand-row.*appendChild\|table-center.*remove\
 
 # 18. inPostAnimDelay blocks events
 grep -n 'inPostAnimDelay' frontend/src/components/screens/GameScreen.vue
+
+# 19. choosing turn-result handled with animPlace
+grep -n "choosing.*animPlace\|animPlace.*choosing" frontend/src/components/screens/GameScreen.vue
+# PASS if choosing turn-results are routed to animPlace
+
+# 19b. showCaptureChoice re-enabled after finishAnimation commits choosing state
+grep -n "choosing.*showCaptureChoice\|showCaptureChoice.*choosing" frontend/src/components/screens/GameScreen.vue
+# PASS if showCaptureChoice is set to true when committed state is choosing
 
 # 20. Deal animation triggers on initial load, re-deal, new round
 grep -n 'runDealAnimation' frontend/src/components/screens/GameScreen.vue
@@ -282,9 +291,12 @@ These are manual/visual tests to verify when doing significant changes. Report w
 - Hand cards (player and opponent) slide smoothly when a card is played (FLIP on both hands)
 - Opponent card backs FLIP-animate when their count changes
 - Capture choice overlay dismisses BEFORE the capture animation starts
-- Capture choice overlay re-shows when a new choosing state arrives
+- Capture choice overlay re-shows when a new choosing state arrives (Fix 3: showCaptureChoice re-enabled after finishAnimation)
+- Choosing turn-result animates the played card leaving the hand (Fix 3: choosing routes to animPlace)
 - Animation layer is empty after every animation completes (no stale clones)
 - During animations, scores/turn indicator/deck count do NOT update (only update on commitState)
+- No one-frame flash of hidden cards between animation end and commitState (Fix 1: restoreStyles after nextTick)
+- End-of-round sweep does not flash score badges to final values before sweep completes (Fix 2: intermediate state preserves display scores)
 - Deal animation: card-back clones fly from deck to each card position (table + both hands)
 - LobbyScreen does NOT commitState -- stores state in pendingState, GameScreen deal-animates it
 - No card flash on initial load (displayState is null until deal animation commits it)

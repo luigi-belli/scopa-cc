@@ -414,10 +414,19 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
 
   // First, commit an intermediate state that shows the post-play table
   // (with remaining cards visible) so Vue renders them for us to animate.
+  // Preserve current display scores/counts — newState has post-scoring values
+  // that would flash before the sweep completes.
+  const ds = store.displayState
   const intermediateState: GameState = {
     ...newState,
     table: remainingCards,
     state: 'playing', // keep playing state so no overlay appears
+    myCapturedCount: ds?.myCapturedCount ?? newState.myCapturedCount,
+    opponentCapturedCount: ds?.opponentCapturedCount ?? newState.opponentCapturedCount,
+    myScope: ds?.myScope ?? newState.myScope,
+    opponentScope: ds?.opponentScope ?? newState.opponentScope,
+    myTotalScore: ds?.myTotalScore ?? newState.myTotalScore,
+    opponentTotalScore: ds?.opponentTotalScore ?? newState.opponentTotalScore,
   }
   store.commitState(intermediateState)
   await nextTick()
@@ -469,9 +478,10 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
     console.error('End-of-round sweep animation error:', e)
   }
 
-  restoreStyles()
   clearLayer()
   store.commitState(newState)
+  await nextTick()
+  restoreStyles()
   store.animating = false
 }
 
@@ -576,18 +586,35 @@ async function handleTurnResult(result: TurnResult) {
   try {
     if (result.type === 'place')   await animPlace(result)
     else if (result.type === 'capture') await animCapture(result)
+    else if (result.type === 'choosing') await animPlace(result)
   } catch (e) { console.error('Animation error:', e) }
 
   clearTimeout(safety)
 
-  // 1. Undo all imperative style changes (visibility:hidden etc)
-  restoreStyles()
+  // 1. Clear animation layer (clones no longer needed)
   clearLayer()
 
-  // 2. Snapshot card positions NOW — old state fully visible, no clones
+  // 2. When the round ends, the server publishes turn-result + round-end (no
+  //    separate game-state event — see publishTurnOutcome). So pendingState is null.
+  //    If we follow the normal path, restoreStyles() would flash the captured cards
+  //    back to visible for 600ms+ before the sweep starts.
+  //    Fix: skip restore/FLIP/delay and go straight to processQueue, which runs
+  //    animateEndOfRoundSweep (it commits its own intermediate state via commitState).
+  //    Keep animating=true so any straggler events stay queued through the sweep.
+  if (!store.pendingState && store.pendingEvents.length > 0 &&
+      (store.pendingEvents[0].type === 'round-end' || store.pendingEvents[0].type === 'game-over')) {
+    styledEls.length = 0  // discard tracked styles — Vue will replace all elements
+    processQueue()
+    return
+  }
+
+  // 3. Snapshot card positions NOW — elements still in old state.
+  //    visibility:hidden elements still have valid layout for getBoundingClientRect().
+  //    Do NOT restoreStyles() here — that would flash hidden cards visible for one
+  //    frame before Vue removes them at commitState.
   const beforeRects = snapshotByIdentity()
 
-  // 3. Check if pending state is a re-deal.
+  // 4. Check if pending state is a re-deal.
   //    Can't use isDealState here because displayState hasn't committed the
   //    just-played card yet (hand still shows 1 when it should be 0).
   //    Instead compare deckCount: normal plays never change it, only dealHands does.
@@ -597,15 +624,23 @@ async function handleTurnResult(result: TurnResult) {
   // Pre-set dealHiding so new hand cards render with opacity:0 (no flash)
   if (isRedeal) store.dealHiding = true
 
-  // 4. *** HARD INVARIANT: commitState ONLY here, after ALL animation ***
+  // 5. *** HARD INVARIANT: commitState ONLY here, after ALL animation ***
   if (store.pendingState) store.finishAnimation()
   else store.animating = false
+
+  // Re-enable capture choice overlay if committed state is choosing
+  // (needed because showCaptureChoice is set to false on selection,
+  // and the game-state was stashed — not routed through the Mercure handler)
+  if (gs.value?.state === 'choosing') showCaptureChoice.value = true
 
   // Keep animating flag set through FLIP + deal so incoming events stay queued
   if (isRedeal) store.animating = true
 
   // 5. FLIP: animate surviving cards from old positions to new
   await nextTick()
+  // Now safe to restore styles — Vue has already removed animated-away elements,
+  // so restoring visibility on them is a no-op. Surviving elements get cleaned up.
+  restoreStyles()
   await flipRearrange(beforeRects)
 
   // 6. If re-deal detected, run deal animation instead of normal post-anim flow
@@ -744,21 +779,24 @@ async function animCapture(result: TurnResult) {
     }
   }
 
-  // 2. If we have a source (card was in hand), clone flies hand → landing
+  // 2. If we have a source (card was in hand), clone flies hand → landing.
+  //    Keep the clone alive through pause+glow so the played card stays visible
+  //    on top of the captured card until the sweep starts.
+  let playClone: HTMLElement | null = null
   let playCloneR: DOMRect | null = null
   if (srcR) {
-    const playClone = isMe ? mkFace(card, srcR) : mkBack(srcR)
+    playClone = isMe ? mkFace(card, srcR) : mkBack(srcR)
     aLayer().appendChild(playClone)
     if (!isMe) {
       setTimeout(() => {
-        const img = playClone.querySelector('img')
+        const img = playClone!.querySelector('img')
         if (img) img.src = cardImagePath(card, currentDeckStyle.value)
       }, SLIDE_MS * 0.4)
     }
     if (landR) await flyTo(playClone, landR, SLIDE_MS, SLIDE_EASE)
     else await sleep(SLIDE_MS)
     playCloneR = playClone.getBoundingClientRect()
-    if (playClone.parentNode) playClone.remove()
+    // Do NOT remove playClone here — it stays visible during pause+glow
   }
 
   // 3. Pause
@@ -776,7 +814,11 @@ async function animCapture(result: TurnResult) {
   await sleep(GLOW_MS)
   glowEls.forEach(el => el.classList.remove('captured-glow'))
 
-  // 5. Snapshot positions of cards to sweep, then hide originals
+  // 5. Remove play clone now — sweep clones are about to be created at the same
+  //    position, so there's no visible gap.
+  if (playClone?.parentNode) playClone.remove()
+
+  // Snapshot positions of cards to sweep, then hide originals
   const sweepItems: { card: Card; rect: DOMRect }[] = []
   // Include played card — use its landing position (or first captured card position as fallback)
   if (playCloneR) {

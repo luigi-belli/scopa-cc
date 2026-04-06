@@ -19,7 +19,6 @@ export const useGameStore = defineStore('game', () => {
   const pendingState = ref<GameState | null>(null)
 
   const animating = ref(false)
-  const pendingTurnResult = ref<TurnResult | null>(null)
   const pendingEvents = ref<QueuedEvent[]>([])
 
   // Deal animation flags
@@ -95,7 +94,6 @@ export const useGameStore = defineStore('game', () => {
     serverState.value = null
     pendingState.value = null
     animating.value = false
-    pendingTurnResult.value = null
     pendingEvents.value = []
     dealHiding.value = false
     dealHidingTable.value = false
@@ -109,7 +107,7 @@ export const useGameStore = defineStore('game', () => {
     serverState,
     pendingState,
     animating,
-    pendingTurnResult,
+
     pendingEvents,
     dealHiding,
     dealHidingTable,

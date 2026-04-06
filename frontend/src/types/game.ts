@@ -1,7 +1,9 @@
 import type { Card } from './card'
 
+export type GameStateValue = 'waiting' | 'playing' | 'choosing' | 'round-end' | 'game-over' | 'finished'
+
 export interface GameState {
-  state: string
+  state: GameStateValue
   currentPlayer: number
   myIndex: number
   myName: string
