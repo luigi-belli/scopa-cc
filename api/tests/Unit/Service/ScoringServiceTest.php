@@ -38,6 +38,8 @@ class ScoringServiceTest extends TestCase
 
         $this->assertEquals(1, $scores[0]['carte']);
         $this->assertEquals(0, $scores[1]['carte']);
+        $this->assertSame(22, $scores[0]['carteCount']);
+        $this->assertSame(18, $scores[1]['carteCount']);
     }
 
     public function testCarte_Tied(): void
@@ -51,6 +53,8 @@ class ScoringServiceTest extends TestCase
 
         $this->assertEquals(0, $scores[0]['carte']);
         $this->assertEquals(0, $scores[1]['carte']);
+        $this->assertSame(20, $scores[0]['carteCount']);
+        $this->assertSame(20, $scores[1]['carteCount']);
     }
 
     public function testDenari_MoreDenari(): void
@@ -69,6 +73,8 @@ class ScoringServiceTest extends TestCase
 
         $this->assertEquals(1, $scores[0]['denari']);
         $this->assertEquals(0, $scores[1]['denari']);
+        $this->assertSame(6, $scores[0]['denariCount']);
+        $this->assertSame(4, $scores[1]['denariCount']);
     }
 
     public function testDenari_Tied(): void
@@ -100,6 +106,8 @@ class ScoringServiceTest extends TestCase
 
         $this->assertEquals(1, $scores[0]['setteBello']);
         $this->assertEquals(0, $scores[1]['setteBello']);
+        $this->assertTrue($scores[0]['hasSetteBello']);
+        $this->assertFalse($scores[1]['hasSetteBello']);
     }
 
     public function testSetteBello_Player2Has(): void
@@ -113,6 +121,8 @@ class ScoringServiceTest extends TestCase
 
         $this->assertEquals(0, $scores[0]['setteBello']);
         $this->assertEquals(1, $scores[1]['setteBello']);
+        $this->assertFalse($scores[0]['hasSetteBello']);
+        $this->assertTrue($scores[1]['hasSetteBello']);
     }
 
     public function testPrimiera_Normal(): void
@@ -137,6 +147,8 @@ class ScoringServiceTest extends TestCase
 
         $this->assertEquals(1, $scores[0]['primiera']);
         $this->assertEquals(0, $scores[1]['primiera']);
+        $this->assertSame(84, $scores[0]['primieraValue']);
+        $this->assertSame(72, $scores[1]['primieraValue']);
     }
 
     public function testPrimiera_OneMissingSuit(): void
@@ -160,6 +172,8 @@ class ScoringServiceTest extends TestCase
 
         $this->assertEquals(1, $scores[0]['primiera']);
         $this->assertEquals(0, $scores[1]['primiera']);
+        $this->assertSame(64, $scores[0]['primieraValue']); // 16+16+16+16
+        $this->assertNull($scores[1]['primieraValue']);
     }
 
     public function testPrimiera_BothMissingSuit(): void
@@ -179,6 +193,8 @@ class ScoringServiceTest extends TestCase
 
         $this->assertEquals(0, $scores[0]['primiera']);
         $this->assertEquals(0, $scores[1]['primiera']);
+        $this->assertNull($scores[0]['primieraValue']);
+        $this->assertNull($scores[1]['primieraValue']);
     }
 
     public function testPrimiera_ValueMapping(): void
@@ -239,6 +255,16 @@ class ScoringServiceTest extends TestCase
         // Scope: p1=1
         $this->assertEquals(1, $scores[0]['scope']);
         $this->assertEquals(0, $scores[1]['scope']);
+
+        // Detail fields
+        $this->assertSame(5, $scores[0]['carteCount']);
+        $this->assertSame(4, $scores[1]['carteCount']);
+        $this->assertSame(2, $scores[0]['denariCount']);
+        $this->assertSame(1, $scores[1]['denariCount']);
+        $this->assertTrue($scores[0]['hasSetteBello']);
+        $this->assertFalse($scores[1]['hasSetteBello']);
+        $this->assertSame(68, $scores[0]['primieraValue']); // 21+18+15+14
+        $this->assertSame(75, $scores[1]['primieraValue']); // 12+21+21+21
 
         // Totals: p1=4, p2=1
         $this->assertEquals(4, $this->service->totalRoundScore($scores[0]));

@@ -57,8 +57,14 @@ final class PlayCardProcessor implements ProcessorInterface
         $gameId = (string) $game->getId();
 
         if ($result['type'] === 'choosing') {
-            // Publish choose-capture to the current player
-            $this->mercurePublisher->publishChooseCapture($gameId, $playerIndex, $result['options']);
+            // Publish a turn-result so the frontend animates the card leaving the hand
+            $this->mercurePublisher->publishToBothPlayers($gameId, 'turn-result', [
+                'type' => 'place',
+                'card' => $result['card'],
+                'playerIndex' => $playerIndex,
+                'captured' => [],
+                'scopa' => false,
+            ]);
             $this->mercurePublisher->publishGameState($gameId, $game, $this->gameEngine);
         } else {
             $this->mercurePublisher->publishTurnOutcome($gameId, $game, $this->gameEngine, $result);

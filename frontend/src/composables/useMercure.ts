@@ -1,15 +1,18 @@
 import { ref, onUnmounted } from 'vue'
+import type { GameState, TurnResult, RoundEndData, GameOverData } from '@/types/game'
+
+export interface MercureHandlers {
+  onGameState?: (data: GameState) => void | Promise<void>
+  onTurnResult?: (data: TurnResult) => void | Promise<void>
+  onChooseCapture?: (data: unknown) => void | Promise<void>
+  onRoundEnd?: (data: RoundEndData) => void | Promise<void>
+  onGameOver?: (data: GameOverData) => void | Promise<void>
+  onOpponentDisconnected?: () => void
+}
 
 export function useMercure(
   gameId: string,
-  handlers: {
-    onGameState?: (data: any) => void
-    onTurnResult?: (data: any) => void
-    onChooseCapture?: (data: any) => void
-    onRoundEnd?: (data: any) => void
-    onGameOver?: (data: any) => void
-    onOpponentDisconnected?: () => void
-  }
+  handlers: MercureHandlers
 ) {
   const connected = ref(false)
   let eventSource: EventSource | null = null

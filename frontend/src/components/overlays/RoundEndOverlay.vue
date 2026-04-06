@@ -1,7 +1,7 @@
 <template>
   <div class="overlay overlay-enter">
     <div class="overlay-content round-summary">
-      <h2>Fine del turno</h2>
+      <h2>{{ t('round.end') }}</h2>
       <ScoreTable
         :scores="scores"
         :myIndex="myIndex"
@@ -10,7 +10,7 @@
         :globalScores="{ my: myTotalScore, opp: opponentTotalScore }"
       />
       <button class="btn btn-primary" @click="$emit('nextRound')">
-        Prossimo turno
+        {{ t('round.next') }}
       </button>
     </div>
   </div>
@@ -19,6 +19,7 @@
 <script setup lang="ts">
 import type { RoundScores } from '@/types/game'
 import ScoreTable from './ScoreTable.vue'
+import { useI18n } from '@/i18n'
 
 defineProps<{
   scores: [RoundScores, RoundScores]
@@ -32,4 +33,6 @@ defineProps<{
 defineEmits<{
   nextRound: []
 }>()
+
+const { t } = useI18n()
 </script>

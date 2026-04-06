@@ -1,13 +1,13 @@
 <template>
   <div class="game-board" ref="boardEl">
-    <button class="exit-btn" title="Esci dalla partita" @click="handleExit">&times;</button>
+    <button class="exit-btn" :title="t('game.exit')" @click="handleExit">&times;</button>
 
     <!-- Opponent Area -->
     <div class="player-area opponent">
       <div class="player-info">
         <span class="player-name">{{ gs?.opponentName }}</span>
-        <span class="score-badge">{{ gs?.opponentTotalScore }} pts</span>
-        <span class="scopa-badge" v-if="(gs?.opponentScope ?? 0) > 0">{{ gs?.opponentScope }} scope</span>
+        <span class="score-badge">{{ gs?.opponentTotalScore }} {{ t('game.pts') }}</span>
+        <span class="scopa-badge" v-if="(gs?.opponentScope ?? 0) > 0">{{ gs?.opponentScope }} {{ t('game.scope') }}</span>
       </div>
       <TurnIndicator
         :isMyTurn="false"
@@ -79,8 +79,8 @@
       />
       <div class="player-info">
         <span class="player-name">{{ gs?.myName }}</span>
-        <span class="score-badge">{{ gs?.myTotalScore }} pts</span>
-        <span class="scopa-badge" v-if="(gs?.myScope ?? 0) > 0">{{ gs?.myScope }} scope</span>
+        <span class="score-badge">{{ gs?.myTotalScore }} {{ t('game.pts') }}</span>
+        <span class="scopa-badge" v-if="(gs?.myScope ?? 0) > 0">{{ gs?.myScope }} {{ t('game.scope') }}</span>
       </div>
     </div>
 
@@ -131,9 +131,10 @@ import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/gameStore'
 import { useApi } from '@/composables/useApi'
 import { useMercure } from '@/composables/useMercure'
+import { useI18n } from '@/i18n'
 import type { Card, DeckStyle } from '@/types/card'
 import { cardImagePath, cardBackPath } from '@/types/card'
-import type { GameState, TurnResult, RoundScores } from '@/types/game'
+import type { GameState, TurnResult, RoundScores, RoundEndData, GameOverData, SweepData } from '@/types/game'
 import { cardKey, sleep, computeSlotRect } from '@/animations/flipUtils'
 import type { SlotGridParams } from '@/animations/flipUtils'
 
@@ -158,7 +159,11 @@ const CAP_PAUSE   = 150
 const GLOW_MS     = 500
 const SWEEP_MS    = 450
 const SWEEP_LAG   = 100
-const SWEEP_SCALE = 55 / 75 // 0.733
+/** Compute sweep scale: shrink only if captured deck is smaller than card */
+function sweepScale(cardW: number, capR: DOMRect): number | undefined {
+  const ratio = capR.width / cardW
+  return ratio < 1 ? ratio : undefined
+}
 const DEAL_MS     = 350
 const DEAL_HND_LAG = 150
 const DEAL_TBL_LAG = 75
@@ -169,6 +174,7 @@ const props = defineProps<{ gameId: string }>()
 const router = useRouter()
 const store  = useGameStore()
 const api    = useApi()
+const { t }  = useI18n()
 
 // ─── DOM refs ───
 const boardEl          = ref<HTMLElement>()
@@ -300,11 +306,12 @@ function flyTo(el: HTMLElement, to: DOMRect, dur: number, ease: string, scale?: 
   const fromT = parseFloat(el.style.top)
   const fromW = parseFloat(el.style.width)
   const fromH = parseFloat(el.style.height)
-  const s = scale ?? 1
-  const toW = s * to.width, toH = s * to.height
-  // Use transform for smooth animation, update left/top at end for final position
-  const dx = to.left - fromL + (to.width - toW) / 2
-  const dy = to.top  - fromT + (to.height - toH) / 2
+  // scale: if provided, shrink/grow to target * scale; if absent, keep original size
+  const toW = scale != null ? scale * to.width : fromW
+  const toH = scale != null ? scale * to.height : fromH
+  // Centre the (possibly resized) clone on the target's centre
+  const dx = to.left + (to.width - toW) / 2 - fromL
+  const dy = to.top  + (to.height - toH) / 2 - fromT
   const sx = toW / fromW, sy = toH / fromH
   const a = el.animate([
     { transform: 'translate(0,0) scale(1)' },
@@ -344,7 +351,7 @@ function isBusy(): boolean {
 const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
   onTurnResult(data: TurnResult) {
     if (isBusy()) {
-      store.queueEvent('turn-result', data); return
+      store.queueEvent({ type: 'turn-result', data }); return
     }
     handleTurnResult(data)
   },
@@ -354,7 +361,7 @@ const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
       // is preserved (prevents stash-overwrite when multiple turns are queued).
       // Otherwise, stash it for the currently-running animation's finishAnimation.
       if (store.pendingEvents.length > 0) {
-        store.queueEvent('game-state', data)
+        store.queueEvent({ type: 'game-state', data })
       } else {
         store.stashState(data)
       }
@@ -365,17 +372,17 @@ const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
     maybeCommitOrDeal(data)
   },
   onChooseCapture() {},
-  onRoundEnd(data) {
+  async onRoundEnd(data) {
     if (isBusy()) {
-      store.queueEvent('round-end', data); return
+      store.queueEvent({ type: 'round-end', data }); return
     }
-    handleRoundEnd(data)
+    await handleRoundEnd(data)
   },
-  onGameOver(data) {
+  async onGameOver(data) {
     if (isBusy()) {
-      store.queueEvent('game-over', data); return
+      store.queueEvent({ type: 'game-over', data }); return
     }
-    handleGameOver(data)
+    await handleGameOver(data)
   },
   onOpponentDisconnected() { disconnected.value = true; store.clearSession() },
 })
@@ -393,16 +400,91 @@ function maybeCommitOrDeal(data: GameState) {
   else store.commitState(data)
 }
 
-function handleRoundEnd(data: any) {
+/** Animate remaining table cards sweeping to the last capturer's deck,
+ *  then commit the new state. Used at round-end and game-over.
+ *  The sweep data (remainingCards + lastCapturer) comes from the backend event,
+ *  not from displayState, because the turn animation may not have committed state. */
+async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): Promise<void> {
+  if (!sweep || sweep.remainingCards.length === 0) {
+    store.commitState(newState)
+    return
+  }
+
+  const { remainingCards, lastCapturer } = sweep
+
+  // First, commit an intermediate state that shows the post-play table
+  // (with remaining cards visible) so Vue renders them for us to animate.
+  const intermediateState: GameState = {
+    ...newState,
+    table: remainingCards,
+    state: 'playing', // keep playing state so no overlay appears
+  }
+  store.commitState(intermediateState)
+  await nextTick()
+
+  store.animating = true
+
+  try {
+    // Pause before sweep so there's a visual gap after the last turn animation
+    await sleep(CAP_PAUSE)
+
+    // Glow all remaining table cards
+    const glowEls: HTMLElement[] = []
+    remainingCards.forEach((card, idx) => {
+      const el = q(`[data-card-key="${cardKey(card, idx)}"]`)
+      if (el) { el.classList.add('captured-glow'); glowEls.push(el) }
+    })
+    await sleep(GLOW_MS)
+    glowEls.forEach(el => el.classList.remove('captured-glow'))
+
+    // Snapshot positions then hide originals
+    const sweepItems: { card: Card; rect: DOMRect }[] = []
+    remainingCards.forEach((card, idx) => {
+      const el = q(`[data-card-key="${cardKey(card, idx)}"]`)
+      if (el) {
+        sweepItems.push({ card, rect: el.getBoundingClientRect() })
+        setStyle(el, 'visibility', 'hidden')
+      }
+    })
+
+    // Sweep to captured deck
+    const capR = capturedR(lastCapturer)
+    if (capR && sweepItems.length > 0) {
+      const scale = sweepScale(sweepItems[0].rect.width, capR)
+      const ps: Promise<void>[] = []
+      sweepItems.forEach((si, i) => {
+        const cl = mkFace(si.card, si.rect)
+        aLayer().appendChild(cl)
+        ps.push(
+          sleep(i * SWEEP_LAG).then(() =>
+            flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
+              if (cl.parentNode) cl.remove()
+            })
+          )
+        )
+      })
+      await Promise.all(ps)
+    }
+  } catch (e) {
+    console.error('End-of-round sweep animation error:', e)
+  }
+
+  restoreStyles()
+  clearLayer()
+  store.commitState(newState)
+  store.animating = false
+}
+
+async function handleRoundEnd(data: RoundEndData): Promise<void> {
   lastRoundScores.value = data.scores
-  if (data.gameState) store.commitState(data.gameState)
+  if (data.gameState) await animateEndOfRoundSweep(data.gameState, data.sweep)
   showRoundEnd.value = true
 }
 
-function handleGameOver(data: any) {
+async function handleGameOver(data: GameOverData): Promise<void> {
   lastRoundScores.value = data.scores
   gameOverWinner.value = data.winner
-  if (data.gameState) store.commitState(data.gameState)
+  if (data.gameState) await animateEndOfRoundSweep(data.gameState, data.sweep)
   showGameOver.value = true
   store.clearSession()
   if (data.winner === store.myIndex) nextTick(() => confettiRef.value?.start())
@@ -715,14 +797,15 @@ async function animCapture(result: TurnResult) {
 
   // 6. Sweep
   const capR = capturedR(result.playerIndex)
-  if (capR) {
+  if (capR && sweepItems.length > 0) {
+    const scale = sweepScale(sweepItems[0].rect.width, capR)
     const ps: Promise<void>[] = []
     sweepItems.forEach((si, i) => {
       const cl = mkFace(si.card, si.rect)
       aLayer().appendChild(cl)
       ps.push(
         sleep(i * SWEEP_LAG).then(() =>
-          flyTo(cl, capR, SWEEP_MS, 'ease-in-out', SWEEP_SCALE).then(() => {
+          flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
             if (cl.parentNode) cl.remove()
           })
         )
@@ -851,7 +934,7 @@ async function runDealAnimation(newState: GameState) {
 // Event queue
 // ════════════════════════════════════════════════════
 
-function processQueue() {
+async function processQueue() {
   const ev = store.shiftEvent()
   if (!ev) return
 
@@ -860,23 +943,23 @@ function processQueue() {
     // finishAnimation() can commit it (preserves correct per-turn state ordering).
     if (store.pendingEvents.length > 0 && store.pendingEvents[0].type === 'game-state') {
       const gsEv = store.shiftEvent()!
-      store.stashState(gsEv.data)
+      if (gsEv.type === 'game-state') store.stashState(gsEv.data)
     }
     handleTurnResult(ev.data)
   }
   else if (ev.type === 'game-state') {
-    if ((ev.data as GameState).state === 'choosing') showCaptureChoice.value = true
+    if (ev.data.state === 'choosing') showCaptureChoice.value = true
     maybeCommitOrDeal(ev.data)
     // Chain: process next event unless a deal animation started
     if (!store.animating) processQueue()
   }
   else if (ev.type === 'round-end') {
-    handleRoundEnd(ev.data)
+    await handleRoundEnd(ev.data)
     // Round-end shows overlay; drain remaining events (unlikely, but safe)
     processQueue()
   }
   else if (ev.type === 'game-over') {
-    handleGameOver(ev.data)
+    await handleGameOver(ev.data)
   }
 }
 
@@ -887,18 +970,18 @@ function processQueue() {
 async function handlePlayCard(cardIndex: number) {
   if (!canPlay.value) return
   try { await api.playCard(props.gameId, cardIndex) }
-  catch (e: any) { console.error('Play card error:', e) }
+  catch (e: unknown) { console.error('Play card error:', e) }
 }
 async function handleSelectCapture(optionIndex: number) {
   // Dismiss the overlay BEFORE the API call so the animation is visible
   showCaptureChoice.value = false
   try { await api.selectCapture(props.gameId, optionIndex) }
-  catch (e: any) { console.error('Select capture error:', e) }
+  catch (e: unknown) { console.error('Select capture error:', e) }
 }
 async function handleNextRound() {
   showRoundEnd.value = false; lastRoundScores.value = null
   try { await api.nextRound(props.gameId) }
-  catch (e: any) { console.error('Next round error:', e) }
+  catch (e: unknown) { console.error('Next round error:', e) }
 }
 function handleBackToLobby() {
   api.leaveGame(props.gameId).catch(() => {})

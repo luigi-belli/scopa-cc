@@ -14,19 +14,30 @@ final class ScoringService
         8 => 10, 9 => 10, 10 => 10,
     ];
 
+    /**
+     * @return array{0: array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: ?int, hasSetteBello: bool}, 1: array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: ?int, hasSetteBello: bool}}
+     */
     public function scoreRound(Game $game): array
     {
         $p1Captured = $game->getPlayer1Captured();
         $p2Captured = $game->getPlayer2Captured();
 
+        // Raw counts
+        $c1 = count($p1Captured);
+        $c2 = count($p2Captured);
+        $d1 = $this->countSuit($p1Captured, 'Denari');
+        $d2 = $this->countSuit($p2Captured, 'Denari');
+        $prim1 = $this->calculatePrimiera($p1Captured);
+        $prim2 = $this->calculatePrimiera($p2Captured);
+
         $scores = [
-            ['carte' => 0, 'denari' => 0, 'setteBello' => 0, 'primiera' => 0, 'scope' => 0],
-            ['carte' => 0, 'denari' => 0, 'setteBello' => 0, 'primiera' => 0, 'scope' => 0],
+            ['carte' => 0, 'denari' => 0, 'setteBello' => 0, 'primiera' => 0, 'scope' => 0,
+             'carteCount' => $c1, 'denariCount' => $d1, 'primieraValue' => $prim1, 'hasSetteBello' => false],
+            ['carte' => 0, 'denari' => 0, 'setteBello' => 0, 'primiera' => 0, 'scope' => 0,
+             'carteCount' => $c2, 'denariCount' => $d2, 'primieraValue' => $prim2, 'hasSetteBello' => false],
         ];
 
         // Carte (most cards)
-        $c1 = count($p1Captured);
-        $c2 = count($p2Captured);
         if ($c1 > $c2) {
             $scores[0]['carte'] = 1;
         } elseif ($c2 > $c1) {
@@ -34,8 +45,6 @@ final class ScoringService
         }
 
         // Denari (most Denari suit)
-        $d1 = $this->countSuit($p1Captured, 'Denari');
-        $d2 = $this->countSuit($p2Captured, 'Denari');
         if ($d1 > $d2) {
             $scores[0]['denari'] = 1;
         } elseif ($d2 > $d1) {
@@ -45,13 +54,13 @@ final class ScoringService
         // Sette Bello (7 of Denari)
         if ($this->hasCard($p1Captured, 'Denari', 7)) {
             $scores[0]['setteBello'] = 1;
+            $scores[0]['hasSetteBello'] = true;
         } elseif ($this->hasCard($p2Captured, 'Denari', 7)) {
             $scores[1]['setteBello'] = 1;
+            $scores[1]['hasSetteBello'] = true;
         }
 
         // Primiera
-        $prim1 = $this->calculatePrimiera($p1Captured);
-        $prim2 = $this->calculatePrimiera($p2Captured);
         if ($prim1 !== null && $prim2 !== null) {
             if ($prim1 > $prim2) {
                 $scores[0]['primiera'] = 1;

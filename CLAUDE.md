@@ -2,7 +2,7 @@
 
 ## Overview
 
-Web-based two-player Scopa card game with real-time multiplayer and single-player AI mode. Uses traditional **carte piacentine** card images on a green casino-table background. Built with API Platform (PHP/Symfony), Vue 3 + TypeScript, PostgreSQL, and Mercure SSE for real-time.
+Web-based two-player Scopa card game with real-time multiplayer and single-player AI mode. Uses traditional Italian regional card images on a green casino-table background. Built with API Platform (PHP/Symfony), Vue 3 + TypeScript, PostgreSQL, and Mercure SSE for real-time.
 
 ## Tech Stack
 
@@ -143,6 +143,10 @@ scopa/
         game.ts                # GameState, TurnResult, RoundEndData, CreateGameResponse, etc.
       stores/
         gameStore.ts           # Pinia: displayState/serverState separation, event queue
+      i18n/
+        index.ts               # useI18n() composable: reactive locale, t() translator, setLocale()
+        it.ts                  # Italian translations (source of truth for keys)
+        en.ts                  # English translations
       composables/
         useApi.ts              # REST client with X-Player-Token auth
         useMercure.ts          # SSE subscription with typed event handlers
@@ -151,7 +155,7 @@ scopa/
         flipUtils.ts           # FLIP helpers: snapshot, animateFLIP, createCardClone, animateClone
       components/
         screens/
-          LobbyScreen.vue      # Create/join/single-player (Italian UI)
+          LobbyScreen.vue      # Create/join/single-player, language selector
           WaitingScreen.vue    # Waiting for opponent with Mercure subscription
           GameScreen.vue       # Game board + animation orchestration + event processing
         game/
@@ -536,7 +540,7 @@ Events that arrive while busy (`store.animating || inPostAnimDelay`) are queued 
 | Capture pause | 150ms | — |
 | Capture glow | 500ms | — |
 | Sweep to captured | 450ms, 100ms stagger | ease-in-out |
-| Sweep scale | 55/75 (0.733) | — |
+| Sweep scale | none (same size) | ~0.69 (40/58) |
 | Deal slide | 350ms | cubic-bezier(0.22, 0.61, 0.36, 1) |
 | Deal stagger (hands) | 150ms | — |
 | Deal stagger (table) | 75ms | — |
@@ -575,7 +579,7 @@ grid-template-rows: 1fr auto 1fr
 | Table area height | 340px (fixed) | calc(50vh - 8px), min 200px, max 380px |
 | Table cards height | 276px (2 rows) | flex, overflow hidden |
 | Grid gap | 24px | 16px |
-| Captured stack | 55 × 97px | 40 × 71px |
+| Captured stack | 75 × 133px | 40 × 71px |
 | Max game width | 900px | 100vw |
 
 ### Z-Index Layers
@@ -596,6 +600,18 @@ grid-template-rows: 1fr auto 1fr
 **useMercure.ts**: Creates `EventSource` connection to `/.well-known/mercure?topic=...`. Accepts typed handler callbacks for each event type. Auto-disconnects on component unmount via `onUnmounted`.
 
 **useDeckStyle.ts**: Reactive `ref<DeckStyle>` persisted to `localStorage('scopa-deck-style')`. Global singleton (defined at module level, not per-component).
+
+### Internationalization (i18n)
+
+Lightweight, custom i18n system in `frontend/src/i18n/` — no external library.
+
+- **Supported locales**: Italian (`it`), English (`en`)
+- **Composable**: `useI18n()` returns `{ locale, setLocale, t }`. Module-level singleton `ref<Locale>` so all components share the same reactive locale.
+- **Translation files**: `it.ts` (source of truth for keys) and `en.ts`. Both export `as const satisfies Record<string, string>` for type safety. `TranslationKey` type derived from the Italian file.
+- **`t(key, params?)`**: Looks up key in current locale, falls back to English, then returns raw key. Supports `{param}` interpolation via `replaceAll`.
+- **Language detection**: On first visit, checks `navigator.language` — Italian browsers get `it`, all others get `en`. Persisted to `localStorage('scopa-locale')`.
+- **Language selector**: Two buttons on the lobby screen (🇮🇹 Italiano / 🇬🇧 English). Styled with `.language-selector` / `.lang-btn` classes matching the deck selector aesthetic.
+- **Coverage**: All user-facing strings in all Vue components, overlays, effects, and API error messages use `t()` keys. No hardcoded display text remains in templates.
 
 ### Docker Architecture
 
@@ -626,7 +642,7 @@ These constraints MUST be respected after EVERY change. Verify all of them befor
 3. **Playing area NEVER shrinks when deck empties** — deck is `position: absolute`, fades to `opacity: 0`, table-center `padding-left` transitions smoothly
 4. **Turn indicator NEVER overlapped and NEVER causes layout shift** — fixed `height: 24px` slot in player-area sub-grid, toggled via `visibility:hidden` (not `v-if`), always occupies space
 5. **Player names NEVER move** — fixed `height: 28px`, in a dedicated grid row within `.player-area` sub-grid, position depends only on viewport height
-6. **Captured decks NEVER shift** — pinned in fixed grid column within `.hand-strip` (3-column grid: `70px 1fr 70px`). Mine at column 3 (right of hand), opponent at column 1 (left of hand). Hand cards centred in column 2.
+6. **Captured decks NEVER shift** — pinned in fixed grid column within `.hand-strip` (3-column grid: `75px 1fr 75px`). Mine at column 3 (right of hand), opponent at column 1 (left of hand). Hand cards centred in column 2.
 7. **Hand-to-table gap** — 24px desktop, 16px mobile (clearance for 14px card hover lift + padding)
 8. **Card hover NOT clipped** — no `overflow: hidden` on `.player-area`
 8b. **Table cards in fixed 2×5 grid** — `.table-center` is `display: grid; grid-template-columns: repeat(5, 75px); grid-template-rows: repeat(2, 133px)`. Cards fill contiguous slots. ≤5 cards → one row centred; >5 → two rows centred. Place animation targets the next empty slot. After capture, remaining cards reflow into contiguous slots via FLIP.
@@ -687,7 +703,7 @@ All test knowledge, checklists, and verification procedures live in the agent de
 ## Development Notes
 
 - The game is entirely server-authoritative — all game logic runs on the server
-- The UI is entirely in Italian
+- The UI supports Italian and English (see i18n section), with language selectable on the lobby screen
 - **No Symfony controllers are used** — all endpoints use API Platform State Providers and Processors
 - CSS files use the same visual design as the lobby/game screens, adapted for CSS grid layout
 - Card images are currently SVG placeholders; originals from OMerkel/Scopa GitHub repo (GPL-3.0 licensed)

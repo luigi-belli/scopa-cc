@@ -1,0 +1,1 @@
+const c={Denari:"d",Coppe:"c",Bastoni:"b",Spade:"s"},s={piacentine:"jpg",napoletane:"jpg",toscane:"png",siciliane:"png"};function o(a,n){const t=s[n],e=c[a.suit];return`/assets/cards/${n}/${a.value}${e}.${t}`}function i(a){const n=s[a];return`/assets/cards/${a}/bg.${n}`}export{s as D,i as a,o as c};

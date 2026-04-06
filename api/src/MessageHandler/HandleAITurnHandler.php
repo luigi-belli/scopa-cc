@@ -11,6 +11,8 @@ use App\Service\AIService;
 use App\Service\GameEngine;
 use App\Service\MercurePublisher;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\OptimisticLockException;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Messenger\MessageBusInterface;
 
@@ -26,6 +28,7 @@ final class HandleAITurnHandler
         private readonly AIService $aiService,
         private readonly MercurePublisher $mercurePublisher,
         private readonly MessageBusInterface $messageBus,
+        private readonly LoggerInterface $logger,
     ) {}
 
     public function __invoke(HandleAITurnMessage $message): void
@@ -60,7 +63,13 @@ final class HandleAITurnHandler
             $result = $this->gameEngine->selectCapture($game, $optionIndex);
         }
 
-        $this->entityManager->flush();
+        try {
+            $this->entityManager->flush();
+        } catch (OptimisticLockException) {
+            $this->logger->warning('AI turn optimistic lock conflict for game {gameId}, retrying.', ['gameId' => $gameId]);
+            $this->messageBus->dispatch(new HandleAITurnMessage($gameId));
+            return;
+        }
 
         // Publish turn result, then appropriate game state event
         $this->mercurePublisher->publishTurnOutcome($gameId, $game, $this->gameEngine, $result);

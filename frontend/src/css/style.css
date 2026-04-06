@@ -133,6 +133,33 @@ body {
   border-color: rgba(255, 215, 0, 0.5);
 }
 
+.language-selector {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.lang-btn {
+  padding: 6px 14px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #c0b896;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.lang-btn.selected {
+  border-color: #ffd700;
+  background: rgba(255, 215, 0, 0.1);
+  color: #ffd700;
+}
+
+.lang-btn:hover {
+  border-color: rgba(255, 215, 0, 0.5);
+}
+
 .lobby-buttons {
   display: flex;
   gap: 12px;
@@ -391,7 +418,7 @@ body {
 /* ── Hand strip: horizontal row with hand centred and captured deck pinned ── */
 .hand-strip {
   display: grid;
-  grid-template-columns: 70px 1fr 70px;   /* captured | hand | captured */
+  grid-template-columns: 75px 1fr 75px;   /* captured | hand | captured */
   align-items: center;
   min-height: 133px;
 }
@@ -422,20 +449,22 @@ body {
 }
 
 .captured-stack {
-  width: 55px;
-  height: 97px;
+  width: 75px;
+  height: 133px;
   position: relative;
 }
 
 .captured-count {
   position: absolute;
-  bottom: -4px;
-  right: -4px;
+  top: 4px;
+  right: 4px;
   background: rgba(0,0,0,0.7);
   color: #ffd700;
   font-size: 0.7rem;
+  font-weight: bold;
   padding: 1px 5px;
   border-radius: 8px;
+  z-index: 2;
 }
 
 /* ── Table Area ── */

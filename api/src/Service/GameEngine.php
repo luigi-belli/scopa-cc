@@ -150,7 +150,7 @@ final class GameEngine
             $tableCards[] = $playedCard;
             $game->setTableCards($tableCards);
 
-            $this->advanceTurn($game);
+            $sweep = $this->advanceTurn($game);
 
             return [
                 'type' => 'place',
@@ -158,6 +158,7 @@ final class GameEngine
                 'playerIndex' => $playerIndex,
                 'captured' => [],
                 'scopa' => false,
+                'sweep' => $sweep,
             ];
         }
 
@@ -243,7 +244,7 @@ final class GameEngine
             $game->setPlayerScope($playerIndex, $game->getPlayerScope($playerIndex) + 1);
         }
 
-        $this->advanceTurn($game);
+        $sweep = $this->advanceTurn($game);
 
         return [
             'type' => 'capture',
@@ -251,10 +252,11 @@ final class GameEngine
             'playerIndex' => $playerIndex,
             'captured' => $capturedCards,
             'scopa' => $isScopa,
+            'sweep' => $sweep,
         ];
     }
 
-    private function advanceTurn(Game $game): void
+    private function advanceTurn(Game $game): ?array
     {
         // Check if both hands are empty
         if (count($game->getPlayer1Hand()) === 0 && count($game->getPlayer2Hand()) === 0) {
@@ -262,9 +264,8 @@ final class GameEngine
                 // Re-deal
                 $this->dealHands($game);
             } else {
-                // Round over
-                $this->endRound($game);
-                return;
+                // Round over — return sweep data for the caller
+                return $this->endRound($game);
             }
         }
 
@@ -272,15 +273,23 @@ final class GameEngine
             $game->setCurrentPlayer($game->getCurrentPlayer() === 0 ? 1 : 0);
             $game->setState(GameState::Playing);
         }
+
+        return null;
     }
 
-    public function endRound(Game $game): void
+    /**
+     * @return array{remainingCards: list<array{suit: string, value: int}>, lastCapturer: int|null}
+     */
+    private function endRound(Game $game): array
     {
-        // Last capturer gets remaining table cards
+        // Save pre-sweep state for animation
+        $remainingCards = $game->getTableCards();
         $lastCapturer = $game->getLastCapturer();
-        if ($lastCapturer !== null && count($game->getTableCards()) > 0) {
+
+        // Last capturer gets remaining table cards
+        if ($lastCapturer !== null && count($remainingCards) > 0) {
             $captured = $game->getPlayerCaptured($lastCapturer);
-            foreach ($game->getTableCards() as $card) {
+            foreach ($remainingCards as $card) {
                 $captured[] = $card;
             }
             $game->setPlayerCaptured($lastCapturer, $captured);
@@ -316,6 +325,8 @@ final class GameEngine
         } else {
             $game->setState(GameState::RoundEnd);
         }
+
+        return ['remainingCards' => $remainingCards, 'lastCapturer' => $lastCapturer];
     }
 
     public function nextRound(Game $game): void

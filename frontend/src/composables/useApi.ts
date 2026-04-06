@@ -1,4 +1,5 @@
 import { useGameStore } from '@/stores/gameStore'
+import { useI18n } from '@/i18n'
 import type {
   CreateGameResponse,
   JoinGameResponse,
@@ -8,47 +9,49 @@ import type {
 
 const BASE = '/api'
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const store = useGameStore()
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  }
-
-  if (store.playerToken) {
-    headers['X-Player-Token'] = store.playerToken
-  }
-
-  const response = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers,
-  })
-
-  if (response.status === 409) {
-    throw new Error('Conflict: please retry')
-  }
-
-  if (response.status === 403) {
-    throw new Error('Access denied: invalid token')
-  }
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`API error ${response.status}: ${text}`)
-  }
-
-  const contentType = response.headers.get('Content-Type') || ''
-  if (response.status === 204 || !contentType.includes('json')) {
-    return null as T
-  }
-
-  return response.json()
-}
-
 export function useApi() {
+  const store = useGameStore()
+  const { t } = useI18n()
+
+  async function request<T>(
+    path: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {}),
+    }
+
+    if (store.playerToken) {
+      headers['X-Player-Token'] = store.playerToken
+    }
+
+    const response = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers,
+    })
+
+    if (response.status === 409) {
+      throw new Error(t('api.conflict'))
+    }
+
+    if (response.status === 403) {
+      throw new Error(t('api.accessDenied'))
+    }
+
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(t('api.error', { status: response.status, text }))
+    }
+
+    const contentType = response.headers.get('Content-Type') || ''
+    if (response.status === 204 || !contentType.includes('json')) {
+      return null as T
+    }
+
+    return response.json()
+  }
+
   async function createGame(
     playerName: string,
     gameName: string | null,

@@ -1,17 +1,17 @@
 <template>
   <div class="screen active">
     <div class="lobby-container">
-      <h1 class="game-title">Scopa</h1>
-      <p class="subtitle">Il gioco di carte italiano</p>
+      <h1 class="game-title">{{ t('lobby.title') }}</h1>
+      <p class="subtitle">{{ t('lobby.subtitle') }}</p>
 
       <div class="lobby-form">
         <div class="form-group">
-          <label for="player-name">Il tuo nome</label>
+          <label for="player-name">{{ t('lobby.playerName') }}</label>
           <input
             id="player-name"
             v-model="playerName"
             type="text"
-            placeholder="Inserisci il tuo nome"
+            :placeholder="t('lobby.playerNamePlaceholder')"
             maxlength="30"
             autocomplete="off"
             @input="saveName"
@@ -19,12 +19,12 @@
         </div>
 
         <div class="form-group">
-          <label for="game-name">Nome della partita</label>
+          <label for="game-name">{{ t('lobby.gameName') }}</label>
           <input
             id="game-name"
             v-model="gameName"
             type="text"
-            placeholder="Scegli un nome per la partita"
+            :placeholder="t('lobby.gameNamePlaceholder')"
             maxlength="60"
             autocomplete="off"
             @keydown.enter="createGame"
@@ -32,19 +32,33 @@
         </div>
 
         <div class="form-group">
-          <label>Stile delle carte</label>
+          <label>{{ t('lobby.deckStyle') }}</label>
           <DeckSelector />
         </div>
 
-        <div class="lobby-buttons">
-          <button class="btn btn-primary" @click="createGame">Nuova Partita</button>
-          <button class="btn btn-secondary" @click="joinGame">Unisciti</button>
+        <div class="form-group">
+          <label>{{ t('lobby.language') }}</label>
+          <div class="language-selector">
+            <button
+              class="lang-btn" :class="{ selected: locale === 'it' }"
+              @click="setLocale('it')"
+            >🇮🇹 Italiano</button>
+            <button
+              class="lang-btn" :class="{ selected: locale === 'en' }"
+              @click="setLocale('en')"
+            >🇬🇧 English</button>
+          </div>
         </div>
 
-        <div class="lobby-divider"><span>oppure</span></div>
+        <div class="lobby-buttons">
+          <button class="btn btn-primary" @click="createGame">{{ t('lobby.newGame') }}</button>
+          <button class="btn btn-secondary" @click="joinGame">{{ t('lobby.join') }}</button>
+        </div>
+
+        <div class="lobby-divider"><span>{{ t('lobby.or') }}</span></div>
 
         <button class="btn btn-single" @click="startSinglePlayer">
-          Gioca contro Claude
+          {{ t('lobby.playClaude') }}
         </button>
 
         <div class="error-message">{{ error }}</div>
@@ -59,12 +73,14 @@ import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { useDeckStyle } from '@/composables/useDeckStyle'
 import { useGameStore } from '@/stores/gameStore'
+import { useI18n } from '@/i18n'
 import DeckSelector from '@/components/lobby/DeckSelector.vue'
 
 const router = useRouter()
 const api = useApi()
 const { selectedDeck } = useDeckStyle()
 const store = useGameStore()
+const { t, locale, setLocale } = useI18n()
 
 const playerName = ref('')
 const gameName = ref('')
@@ -87,11 +103,11 @@ function saveName() {
 
 function validate(requireGameName = true): boolean {
   if (!playerName.value.trim()) {
-    error.value = 'Inserisci il tuo nome.'
+    error.value = t('lobby.errorNameRequired')
     return false
   }
   if (requireGameName && !gameName.value.trim()) {
-    error.value = 'Inserisci il nome della partita.'
+    error.value = t('lobby.errorGameNameRequired')
     return false
   }
   error.value = ''
@@ -109,8 +125,8 @@ async function createGame() {
     )
     store.setGame(result.gameId, result.playerToken, 0)
     router.push({ name: 'waiting', params: { gameId: result.gameId } })
-  } catch (e: any) {
-    error.value = e.message
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
   }
 }
 
@@ -119,7 +135,7 @@ async function joinGame() {
   try {
     const lookup = await api.lookupGame(gameName.value.trim())
     if (lookup.length === 0) {
-      error.value = 'Partita non trovata'
+      error.value = t('lobby.errorGameNotFound')
       return
     }
     const result = await api.joinGame(lookup[0].id, playerName.value.trim())
@@ -127,8 +143,8 @@ async function joinGame() {
     // Don't commitState here — let GameScreen run the deal animation
     store.pendingState = result.gameState
     router.push({ name: 'game', params: { gameId: result.gameId } })
-  } catch (e: any) {
-    error.value = e.message
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
   }
 }
 
@@ -147,8 +163,8 @@ async function startSinglePlayer() {
       store.pendingState = result.gameState
     }
     router.push({ name: 'game', params: { gameId: result.gameId } })
-  } catch (e: any) {
-    error.value = e.message
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
   }
 }
 </script>

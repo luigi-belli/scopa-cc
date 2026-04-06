@@ -55,38 +55,45 @@ final class MercurePublisher
         ]);
     }
 
-    public function publishRoundEnd(string $gameId, Game $game, GameEngine $engine, array $scores): void
+    public function publishRoundEnd(string $gameId, Game $game, GameEngine $engine, array $scores, ?array $sweep = null): void
     {
         $state0 = $engine->getStateForPlayer($game, 0);
         $state1 = $engine->getStateForPlayer($game, 1);
 
-        $this->publishToPlayer($gameId, 0, 'round-end', [
+        $sweepData = $sweep ? ['remainingCards' => $sweep['remainingCards'], 'lastCapturer' => $sweep['lastCapturer']] : null;
+
+        $this->publishToPlayer($gameId, 0, 'round-end', array_filter([
             'scores' => $scores,
             'gameState' => $this->stateToArray($state0),
-        ]);
-        $this->publishToPlayer($gameId, 1, 'round-end', [
+            'sweep' => $sweepData,
+        ], fn ($v) => $v !== null));
+        $this->publishToPlayer($gameId, 1, 'round-end', array_filter([
             'scores' => $scores,
             'gameState' => $this->stateToArray($state1),
-        ]);
+            'sweep' => $sweepData,
+        ], fn ($v) => $v !== null));
     }
 
-    public function publishGameOver(string $gameId, Game $game, GameEngine $engine, array $scores): void
+    public function publishGameOver(string $gameId, Game $game, GameEngine $engine, array $scores, ?array $sweep = null): void
     {
         $state0 = $engine->getStateForPlayer($game, 0);
         $state1 = $engine->getStateForPlayer($game, 1);
 
         $winner = $game->getPlayer1TotalScore() > $game->getPlayer2TotalScore() ? 0 : 1;
+        $sweepData = $sweep ? ['remainingCards' => $sweep['remainingCards'], 'lastCapturer' => $sweep['lastCapturer']] : null;
 
-        $this->publishToPlayer($gameId, 0, 'game-over', [
+        $this->publishToPlayer($gameId, 0, 'game-over', array_filter([
             'scores' => $scores,
             'winner' => $winner,
             'gameState' => $this->stateToArray($state0),
-        ]);
-        $this->publishToPlayer($gameId, 1, 'game-over', [
+            'sweep' => $sweepData,
+        ], fn ($v) => $v !== null));
+        $this->publishToPlayer($gameId, 1, 'game-over', array_filter([
             'scores' => $scores,
             'winner' => $winner,
             'gameState' => $this->stateToArray($state1),
-        ]);
+            'sweep' => $sweepData,
+        ], fn ($v) => $v !== null));
     }
 
     /**
@@ -101,10 +108,11 @@ final class MercurePublisher
             $lastHistory = $game->getRoundHistory();
             $lastEntry = end($lastHistory);
             $scores = \is_array($lastEntry) ? ($lastEntry['scores'] ?? []) : [];
+            $sweep = $turnResult['sweep'] ?? null;
             if ($game->getState() === GameState::GameOver) {
-                $this->publishGameOver($gameId, $game, $engine, $scores);
+                $this->publishGameOver($gameId, $game, $engine, $scores, $sweep);
             } else {
-                $this->publishRoundEnd($gameId, $game, $engine, $scores);
+                $this->publishRoundEnd($gameId, $game, $engine, $scores, $sweep);
             }
         } else {
             $this->publishGameState($gameId, $game, $engine);

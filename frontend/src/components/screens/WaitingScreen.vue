@@ -1,9 +1,9 @@
 <template>
   <div class="waiting">
-    <h2>In attesa dell'avversario...</h2>
+    <h2>{{ t('waiting.title') }}</h2>
     <div class="spinner"></div>
-    <p style="color: #a8c8a0;">Condividi il nome della partita con il tuo avversario</p>
-    <button class="btn btn-secondary" @click="handleBack">Torna alla lobby</button>
+    <p style="color: #a8c8a0;">{{ t('waiting.share') }}</p>
+    <button class="btn btn-secondary" @click="handleBack">{{ t('waiting.back') }}</button>
   </div>
 </template>
 
@@ -13,6 +13,7 @@ import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/gameStore'
 import { useApi } from '@/composables/useApi'
 import { useMercure } from '@/composables/useMercure'
+import { useI18n } from '@/i18n'
 
 const props = defineProps<{
   gameId: string
@@ -21,6 +22,7 @@ const props = defineProps<{
 const router = useRouter()
 const store = useGameStore()
 const api = useApi()
+const { t } = useI18n()
 
 const { connect, disconnect } = useMercure(props.gameId, {
   onGameState(data) {

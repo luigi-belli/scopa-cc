@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { GameState, TurnResult } from '@/types/game'
+import type { GameState, TurnResult, RoundEndData, GameOverData } from '@/types/game'
+
+export type QueuedEvent =
+  | { type: 'turn-result'; data: TurnResult }
+  | { type: 'game-state'; data: GameState }
+  | { type: 'round-end'; data: RoundEndData }
+  | { type: 'game-over'; data: GameOverData }
 
 export const useGameStore = defineStore('game', () => {
   const gameId = ref<string | null>(null)
@@ -14,7 +20,7 @@ export const useGameStore = defineStore('game', () => {
 
   const animating = ref(false)
   const pendingTurnResult = ref<TurnResult | null>(null)
-  const pendingEvents = ref<Array<{ type: string; data: any }>>([])
+  const pendingEvents = ref<QueuedEvent[]>([])
 
   // Deal animation flags
   const dealHiding = ref(false)
@@ -72,11 +78,11 @@ export const useGameStore = defineStore('game', () => {
     localStorage.removeItem('scopa-active-game')
   }
 
-  function queueEvent(type: string, data: any) {
-    pendingEvents.value.push({ type, data })
+  function queueEvent(event: QueuedEvent): void {
+    pendingEvents.value.push(event)
   }
 
-  function shiftEvent(): { type: string; data: any } | undefined {
+  function shiftEvent(): QueuedEvent | undefined {
     return pendingEvents.value.shift()
   }
 

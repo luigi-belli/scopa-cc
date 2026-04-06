@@ -37,6 +37,10 @@ export interface RoundScores {
   setteBello: number
   primiera: number
   scope: number
+  carteCount: number
+  denariCount: number
+  primieraValue: number | null
+  hasSetteBello: boolean
 }
 
 export interface RoundHistoryEntry {
@@ -44,15 +48,22 @@ export interface RoundHistoryEntry {
   totals: [number, number]
 }
 
+export interface SweepData {
+  remainingCards: Card[]
+  lastCapturer: number
+}
+
 export interface RoundEndData {
   scores: [RoundScores, RoundScores]
   gameState: GameState
+  sweep?: SweepData
 }
 
 export interface GameOverData {
   scores: [RoundScores, RoundScores]
   winner: number
   gameState: GameState
+  sweep?: SweepData
 }
 
 export interface CreateGameResponse {

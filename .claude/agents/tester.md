@@ -254,6 +254,7 @@ These are manual/visual tests to verify when doing significant changes. Report w
 - Disconnect banner
 - Page refresh (token in localStorage)
 - Tied at 11 (game continues)
+- Messenger worker restart: verify stuck messages (delivered_at set but not completed) are reset by entrypoint.sh on container startup
 
 ### Race Condition & Event Pipeline Scenarios
 - **Post-anim play → choosing state**: Play a card during the 600ms post-animation delay that triggers a choosing state. Verify the capture choice overlay appears (not a hang).

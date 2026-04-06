@@ -70,10 +70,9 @@
    Card top sticks out left, bottom sticks out right. Deck stays in place. */
 .scopa-marker {
   position: absolute;
-  /* Card is 55×97 in captured scale; rotated 90° it becomes 97×55.
-     Centre it vertically on the 97px-tall stack. */
-  width: 55px;
-  height: 97px;
+  /* Full card size rotated 90°: 133×75 → fits the 75×133 stack */
+  width: 75px;
+  height: 133px;
   top: 0;
   left: 50%;
   transform: translateX(-50%) rotate(90deg);
@@ -93,10 +92,12 @@
 .scopa-marker:nth-child(2) { top: 4px; }
 .scopa-marker:nth-child(3) { top: 8px; }
 
-/* The card-back sits on top of the markers */
+/* The card-back sits on top of the markers, filling the captured-stack */
 .captured-back {
   position: relative;
   z-index: 1;
+  width: 100%;
+  height: 100%;
 }
 
 /* Mobile */
@@ -115,5 +116,10 @@
   .scopa-marker {
     width: 40px;
     height: 71px;
+  }
+
+  .captured-back {
+    width: 100%;
+    height: 100%;
   }
 }
