@@ -698,7 +698,6 @@ All test knowledge, checklists, and verification procedures live in the agent de
 - No game history persistence beyond current session
 - AI difficulty is not configurable (always plays optimally)
 - No keyboard navigation or screen reader support
-- Card assets are SVG placeholders — replace with real images for production
 
 ## Development Notes
 
@@ -706,7 +705,6 @@ All test knowledge, checklists, and verification procedures live in the agent de
 - The UI supports Italian and English (see i18n section), with language selectable on the lobby screen
 - **No Symfony controllers are used** — all endpoints use API Platform State Providers and Processors
 - CSS files use the same visual design as the lobby/game screens, adapted for CSS grid layout
-- Card images are currently SVG placeholders; originals from OMerkel/Scopa GitHub repo (GPL-3.0 licensed)
 - Heartbeat system: frontend sends every 10s, backend checks opponent staleness (>30s = disconnected)
 - Browser reload resumes game (session persisted in localStorage, no beforeunload leave beacon)
 - Exit button (×) in top-right corner of game board explicitly leaves the game
