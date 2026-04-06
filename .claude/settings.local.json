@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vue-tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\")",
+      "Bash(docker compose:*)",
+      "WebSearch"
+    ]
+  }
+}

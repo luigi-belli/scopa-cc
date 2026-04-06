@@ -1,0 +1,95 @@
+/* Scopa flash */
+@keyframes scopaFlash {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  30% {
+    transform: scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+}
+
+.scopa-flash-text {
+  font-size: 5rem;
+  font-weight: bold;
+  color: #ffd700;
+  text-shadow: 0 0 30px rgba(255, 215, 0, 0.8), 0 0 60px rgba(255, 215, 0, 0.4);
+  animation: scopaFlash 1500ms ease-out forwards;
+}
+
+/* Win animation */
+.gameover-content.winner {
+  animation: winPulse 0.6s ease-out;
+}
+
+@keyframes winPulse {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Lose animation */
+.gameover-content.loser {
+  animation: loseShake 0.6s ease-out;
+}
+
+@keyframes loseShake {
+  0% { transform: translateX(0) scale(0.8); opacity: 0; }
+  20% { transform: translateX(-10px) scale(1); opacity: 1; }
+  40% { transform: translateX(10px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+  100% { transform: translateX(0); }
+}
+
+/* Overlay transitions */
+.overlay-enter {
+  animation: overlayIn 0.3s ease-out;
+}
+
+@keyframes overlayIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Disconnect banner */
+.disconnect-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  background: rgba(139, 35, 35, 0.95);
+  color: white;
+  text-align: center;
+  font-size: 18px;
+  z-index: 500;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(0); }
+}
+
+/* Confetti canvas */
+.confetti-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 300;
+}

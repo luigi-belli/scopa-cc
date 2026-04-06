@@ -1,0 +1,7 @@
+framework:
+    messenger:
+        transports:
+            async:
+                dsn: 'doctrine://default?queue_name=async'
+        routing:
+            'App\Message\HandleAITurnMessage': async
