@@ -27,7 +27,13 @@ final class LeaveGameProcessor implements ProcessorInterface
         $game = $this->authenticator->loadGame($uriVariables);
         $playerIndex = $this->authenticator->authenticateWithQueryFallback($game);
 
-        $game->setState(GameState::Finished);
+        $gameAlreadyOver = $game->getState()->isTerminal();
+
+        if ($gameAlreadyOver) {
+            $this->entityManager->remove($game);
+        } else {
+            $game->setState(GameState::Finished);
+        }
 
         try {
             $this->entityManager->flush();
@@ -35,9 +41,11 @@ final class LeaveGameProcessor implements ProcessorInterface
             throw new ConflictHttpException('error.conflict');
         }
 
-        $opponentIndex = $playerIndex === 0 ? 1 : 0;
-        $gameId = (string) $game->getId();
-        $this->mercurePublisher->publishOpponentDisconnected($gameId, $opponentIndex);
+        if (!$gameAlreadyOver) {
+            $opponentIndex = $playerIndex === 0 ? 1 : 0;
+            $gameId = (string) $game->getId();
+            $this->mercurePublisher->publishOpponentDisconnected($gameId, $opponentIndex);
+        }
 
         return null;
     }

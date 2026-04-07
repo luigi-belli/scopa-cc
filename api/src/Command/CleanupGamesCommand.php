@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Entity\Game;
+use App\Enum\GameState;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -31,8 +32,17 @@ final class CleanupGamesCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $threshold = new \DateTimeImmutable(sprintf('-%d minutes', self::INACTIVE_THRESHOLD_MINUTES));
 
-        /** @var int|string $deleted */
-        $deleted = $this->entityManager->createQueryBuilder()
+        /** @var int|string $deletedFinished */
+        $deletedFinished = $this->entityManager->createQueryBuilder()
+            ->delete(Game::class, 'g')
+            ->where('g.state IN (:finishedStates)')
+            ->setParameter('finishedStates', [GameState::Finished->value, GameState::GameOver->value])
+            ->getQuery()
+            ->execute();
+        $deletedFinished = (int) $deletedFinished;
+
+        /** @var int|string $deletedInactive */
+        $deletedInactive = $this->entityManager->createQueryBuilder()
             ->delete(Game::class, 'g')
             ->where('g.createdAt < :threshold')
             ->andWhere('g.lastHeartbeat1 IS NULL OR g.lastHeartbeat1 < :threshold')
@@ -40,10 +50,11 @@ final class CleanupGamesCommand extends Command
             ->setParameter('threshold', $threshold)
             ->getQuery()
             ->execute();
-        $deleted = (int) $deleted;
+        $deletedInactive = (int) $deletedInactive;
 
-        if ($deleted > 0) {
-            $io->success(sprintf('Cleaned up %d inactive game(s).', $deleted));
+        $total = $deletedFinished + $deletedInactive;
+        if ($total > 0) {
+            $io->success(sprintf('Cleaned up %d game(s) (%d finished, %d inactive).', $total, $deletedFinished, $deletedInactive));
         }
 
         return Command::SUCCESS;

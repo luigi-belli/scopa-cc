@@ -706,6 +706,8 @@ These constraints MUST be respected after EVERY change. Verify all of them befor
 
 This workflow is **not optional** — it must run after every change, no exceptions.
 
+**HARD RULE: NEVER commit or push until ALL reviewer and tester agents have fully completed.** Wait for every spawned reviewer and tester agent to finish and report results before running `git commit` or `git push`. No exceptions — do not commit early to satisfy hooks or for any other reason.
+
 ### Tester Agent
 
 All testing is delegated to the **tester** agent (`.claude/agents/tester.md`). It handles:
