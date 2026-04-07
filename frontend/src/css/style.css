@@ -9,6 +9,7 @@ body {
   font-family: 'Georgia', 'Times New Roman', serif;
   color: #f0e6d0;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
@@ -17,6 +18,7 @@ body {
   display: none;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
 }
 .screen.active {
   display: flex;
@@ -261,6 +263,7 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  min-height: 100dvh;
   gap: 20px;
 }
 
@@ -307,6 +310,7 @@ body {
   max-width: 900px;
   margin: 0 auto;
   height: 100vh;
+  height: 100dvh;
   padding: 12px 16px;
   position: relative;
 }
@@ -551,6 +555,7 @@ body {
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
@@ -682,6 +687,7 @@ body {
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   pointer-events: none;
   z-index: 300;
 }
@@ -729,6 +735,7 @@ body {
 
   .table-area {
     height: calc(50vh - 8px);
+    height: calc(50dvh - 8px);
     min-height: 200px;
     max-height: 380px;
   }
