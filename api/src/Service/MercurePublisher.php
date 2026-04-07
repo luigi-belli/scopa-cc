@@ -10,12 +10,17 @@ use App\Enum\GameState;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
 
+/**
+ * @phpstan-import-type Card from Game
+ * @phpstan-import-type ScoreRow from Game
+ */
 final class MercurePublisher
 {
     public function __construct(
         private readonly HubInterface $hub,
     ) {}
 
+    /** @param array<string, mixed> $data */
     public function publishToPlayer(string $gameId, int $playerIndex, string $eventType, array $data): void
     {
         $topic = "/games/{$gameId}/player/{$playerIndex}";
@@ -33,6 +38,10 @@ final class MercurePublisher
         $this->hub->publish($update);
     }
 
+    /**
+     * @param array<string, mixed> $data
+     * @param array<string, mixed>|null $data2
+     */
     public function publishToBothPlayers(string $gameId, string $eventType, array $data, ?array $data2 = null): void
     {
         $this->publishToPlayer($gameId, 0, $eventType, $data);
@@ -48,6 +57,7 @@ final class MercurePublisher
         $this->publishToPlayer($gameId, 1, 'game-state', $this->stateToArray($state1));
     }
 
+    /** @param list<list<Card>> $options */
     public function publishChooseCapture(string $gameId, int $playerIndex, array $options): void
     {
         $this->publishToPlayer($gameId, $playerIndex, 'choose-capture', [
@@ -55,6 +65,10 @@ final class MercurePublisher
         ]);
     }
 
+    /**
+     * @param array{0: ScoreRow, 1: ScoreRow} $scores
+     * @param array{remainingCards: list<Card>, lastCapturer: int|null}|null $sweep
+     */
     public function publishRoundEnd(string $gameId, Game $game, GameEngine $engine, array $scores, ?array $sweep = null): void
     {
         $state0 = $engine->getStateForPlayer($game, 0);
@@ -74,6 +88,10 @@ final class MercurePublisher
         ], fn ($v) => $v !== null));
     }
 
+    /**
+     * @param array{0: ScoreRow, 1: ScoreRow} $scores
+     * @param array{remainingCards: list<Card>, lastCapturer: int|null}|null $sweep
+     */
     public function publishGameOver(string $gameId, Game $game, GameEngine $engine, array $scores, ?array $sweep = null): void
     {
         $state0 = $engine->getStateForPlayer($game, 0);
@@ -99,6 +117,8 @@ final class MercurePublisher
     /**
      * Publishes the complete turn outcome: turn-result followed by the appropriate
      * game state event (game-state, round-end, or game-over).
+     *
+     * @param array<string, mixed> $turnResult
      */
     public function publishTurnOutcome(string $gameId, Game $game, GameEngine $engine, array $turnResult): void
     {
@@ -107,7 +127,9 @@ final class MercurePublisher
         if ($game->getState() === GameState::RoundEnd || $game->getState() === GameState::GameOver) {
             $lastHistory = $game->getRoundHistory();
             $lastEntry = end($lastHistory);
-            $scores = \is_array($lastEntry) ? ($lastEntry['scores'] ?? []) : [];
+            /** @var array{0: ScoreRow, 1: ScoreRow} $scores */
+            $scores = \is_array($lastEntry) ? $lastEntry['scores'] : [];
+            /** @var array{remainingCards: list<Card>, lastCapturer: int|null}|null $sweep */
             $sweep = $turnResult['sweep'] ?? null;
             if ($game->getState() === GameState::GameOver) {
                 $this->publishGameOver($gameId, $game, $engine, $scores, $sweep);
@@ -124,6 +146,7 @@ final class MercurePublisher
         $this->publishToPlayer($gameId, $playerIndex, 'opponent-disconnected', []);
     }
 
+    /** @return array<string, mixed> */
     private function stateToArray(GameStateOutput $state): array
     {
         return [

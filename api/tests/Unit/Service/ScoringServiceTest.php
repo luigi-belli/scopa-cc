@@ -17,6 +17,8 @@ class ScoringServiceTest extends TestCase
         $this->service = new ScoringService();
     }
 
+    /** @param list<array{suit: string, value: int}> $p1Captured
+     *  @param list<array{suit: string, value: int}> $p2Captured */
     private function createGameWithCaptures(array $p1Captured, array $p2Captured): Game
     {
         $game = new Game();

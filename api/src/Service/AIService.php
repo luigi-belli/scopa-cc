@@ -6,6 +6,9 @@ namespace App\Service;
 
 use App\Entity\Game;
 
+/**
+ * @phpstan-import-type Card from Game
+ */
 final class AIService
 {
     public function __construct(
@@ -14,7 +17,7 @@ final class AIService
     ) {}
 
     /**
-     * Returns ['cardIndex' => int, 'optionIndex' => int|null]
+     * @return array{cardIndex: int, optionIndex: int|null}
      */
     public function evaluateMove(Game $game, int $aiIndex): array
     {
@@ -85,6 +88,11 @@ final class AIService
         return $bestIdx;
     }
 
+    /**
+     * @param Card $playedCard
+     * @param list<Card> $capturedCards
+     * @param list<Card> $tableCards
+     */
     private function scoreCapture(array $playedCard, array $capturedCards, array $tableCards, bool $clearsTable): float
     {
         $score = 0.0;
@@ -118,6 +126,10 @@ final class AIService
         return $score;
     }
 
+    /**
+     * @param Card $card
+     * @param list<Card> $tableCards
+     */
     private function scorePlacement(array $card, array $tableCards): float
     {
         $score = 0.0;

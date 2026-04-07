@@ -10,6 +10,7 @@ use App\Dto\Output\GameStateOutput;
 use App\Service\GameEngine;
 use App\Service\PlayerAuthenticator;
 
+/** @implements ProviderInterface<GameStateOutput> */
 final class GameStateProvider implements ProviderInterface
 {
     public function __construct(

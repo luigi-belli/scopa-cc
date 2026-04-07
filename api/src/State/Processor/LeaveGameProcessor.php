@@ -13,6 +13,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
+/** @implements ProcessorInterface<mixed, null> */
 final class LeaveGameProcessor implements ProcessorInterface
 {
     public function __construct(

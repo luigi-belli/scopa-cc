@@ -4,10 +4,17 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\Game;
 use App\Enum\Suit;
 
+/**
+ * @phpstan-import-type Card from Game
+ */
 final class DeckService
 {
+    /**
+     * @return list<Card>
+     */
     public function createDeck(): array
     {
         $deck = [];
@@ -19,6 +26,9 @@ final class DeckService
         return $deck;
     }
 
+    /**
+     * @param list<Card> $deck
+     */
     public function shuffle(array &$deck): void
     {
         $n = count($deck);

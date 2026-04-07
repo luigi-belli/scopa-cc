@@ -55,7 +55,7 @@ final class HandleAITurnHandler
         $move = $this->aiService->evaluateMove($game, self::AI_PLAYER_INDEX);
 
         // Play the card
-        $result = $this->gameEngine->playCard($game, self::AI_PLAYER_INDEX, (int) $move['cardIndex']);
+        $result = $this->gameEngine->playCard($game, self::AI_PLAYER_INDEX, $move['cardIndex']);
 
         if ($result['type'] === 'choosing') {
             // AI auto-selects capture

@@ -24,6 +24,8 @@ class AIServiceTest extends TestCase
         $this->ai = new AIService($this->engine, $scoringService);
     }
 
+    /** @param list<array{suit: string, value: int}> $aiHand
+     *  @param list<array{suit: string, value: int}> $table */
     private function createGame(array $aiHand, array $table): Game
     {
         $game = new Game();

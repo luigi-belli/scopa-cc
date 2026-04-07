@@ -6,6 +6,10 @@ namespace App\Service;
 
 use App\Entity\Game;
 
+/**
+ * @phpstan-import-type Card from Game
+ * @phpstan-import-type ScoreRow from Game
+ */
 final class ScoringService
 {
     private const PRIMIERA_VALUES = [
@@ -15,7 +19,7 @@ final class ScoringService
     ];
 
     /**
-     * @return array{0: array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: ?int, hasSetteBello: bool}, 1: array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: ?int, hasSetteBello: bool}}
+     * @return array{0: ScoreRow, 1: ScoreRow}
      */
     public function scoreRound(Game $game): array
     {
@@ -80,6 +84,7 @@ final class ScoringService
         return $scores;
     }
 
+    /** @param ScoreRow $scoreRow */
     public function totalRoundScore(array $scoreRow): int
     {
         return $scoreRow['carte'] + $scoreRow['denari'] + $scoreRow['setteBello']
@@ -91,6 +96,9 @@ final class ScoringService
         return self::PRIMIERA_VALUES[$cardValue] ?? 0;
     }
 
+    /**
+     * @param list<Card> $cards
+     */
     private function countSuit(array $cards, string $suit): int
     {
         $count = 0;
@@ -102,6 +110,9 @@ final class ScoringService
         return $count;
     }
 
+    /**
+     * @param list<Card> $cards
+     */
     private function hasCard(array $cards, string $suit, int $value): bool
     {
         foreach ($cards as $card) {
@@ -112,8 +123,12 @@ final class ScoringService
         return false;
     }
 
+    /**
+     * @param list<Card> $cards
+     */
     private function calculatePrimiera(array $cards): ?int
     {
+        /** @var array<string, int> $bestPerSuit */
         $bestPerSuit = [];
         foreach ($cards as $card) {
             $suit = $card['suit'];

@@ -4,8 +4,21 @@ declare(strict_types=1);
 
 namespace App\Dto\Output;
 
+use App\Entity\Game;
+
+/**
+ * @phpstan-import-type Card from Game
+ * @phpstan-import-type RoundHistoryEntry from Game
+ */
 final readonly class GameStateOutput
 {
+    /**
+     * @param list<Card> $myHand
+     * @param list<Card> $table
+     * @param list<list<Card>>|null $pendingChoice
+     * @param list<RoundHistoryEntry> $roundHistory
+     * @param array<string, mixed>|null $turnResult
+     */
     public function __construct(
         public string $state,
         public int $currentPlayer,

@@ -108,12 +108,18 @@ You are a senior PHP/Symfony architect reviewing the Scopa backend codebase. You
 
 When reviewing, follow this order:
 
-1. **Read the changed files** (or all backend files for a full review)
-2. **Check each file** against the best practices above
-3. **Plan fixes** — group related changes together
-4. **Apply fixes** — edit files, preserving all business logic
-5. **Verify** — spawn the `tester` agent to run all tests
-6. **Report** — list all issues found and fixes applied
+1. **Run PHPStan** — always run PHPStan first to catch type errors:
+   ```bash
+   docker run --rm -v "$(pwd)/api:/app" -w /app php:8.4-cli php vendor/bin/phpstan analyse --no-progress --memory-limit=512M
+   ```
+   Fix any PHPStan errors before proceeding. PHPStan is configured at **max level** (`phpstan.neon`).
+2. **Read the changed files** (or all backend files for a full review)
+3. **Check each file** against the best practices above
+4. **Plan fixes** — group related changes together
+5. **Apply fixes** — edit files, preserving all business logic
+6. **Re-run PHPStan** — verify all fixes pass PHPStan max level
+7. **Verify** — spawn the `tester` agent to run all tests
+8. **Report** — list all issues found and fixes applied
 
 ### Report Format
 
@@ -126,6 +132,9 @@ When reviewing, follow this order:
 
 ### Issues Found & Not Fixed (needs discussion)
 1. [FILE] Description of issue → Why it wasn't auto-fixed
+
+### PHPStan
+- PHPStan max level: PASS/FAIL (X errors found → Y fixed)
 
 ### Tests
 - Spawned tester agent: PASS/FAIL
@@ -140,6 +149,7 @@ X issues found, Y fixed, Z need discussion
 - **NEVER change business logic** — the game rules, scoring, AI behavior, and event publishing order must remain identical
 - **NEVER change the API contract** — endpoint paths, request/response shapes, and HTTP status codes must remain identical
 - **NEVER change the database schema** — column names, types, and indices must remain identical
+- **ALWAYS run PHPStan** at max level before and after making changes — zero errors required
 - **ALWAYS run tests** after making changes — spawn the tester agent
 - **ALWAYS preserve the Mercure event publishing order** — turn-result before game-state, etc.
 - When in doubt about whether a change affects behavior, **don't make it** — report it instead

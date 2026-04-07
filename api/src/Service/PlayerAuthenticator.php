@@ -17,6 +17,7 @@ final class PlayerAuthenticator
         private readonly RequestStack $requestStack,
     ) {}
 
+    /** @param array<string, mixed> $uriVariables */
     public function loadGame(array $uriVariables): Game
     {
         $id = $uriVariables['id'] ?? null;

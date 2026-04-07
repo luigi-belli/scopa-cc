@@ -8,6 +8,9 @@ use App\Dto\Output\GameStateOutput;
 use App\Entity\Game;
 use App\Enum\GameState;
 
+/**
+ * @phpstan-import-type Card from Game
+ */
 final class GameEngine
 {
     public function __construct(
@@ -70,6 +73,10 @@ final class GameEngine
      * Find all capture options for a given card on the table.
      * Returns array of options, each option is an array of table card indices.
      * Single-card matches take priority over sum combinations.
+     *
+     * @param list<Card> $tableCards
+     * @param Card $playedCard
+     * @return list<list<int>>
      */
     public function findCaptures(array $tableCards, array $playedCard): array
     {
@@ -94,18 +101,28 @@ final class GameEngine
     /**
      * Find all subsets of table cards that sum to the target value.
      * Returns array of arrays of indices.
+     *
+     * @param list<Card> $tableCards
+     * @return list<list<int>>
      */
     public function findSubsetsWithSum(array $tableCards, int $target): array
     {
+        /** @var list<list<int>> $results */
         $results = [];
         $indices = array_keys($tableCards);
-        $values = array_values($tableCards);
+        $values = $tableCards;
 
         $this->backtrack($values, $indices, $target, 0, [], $results);
 
         return $results;
     }
 
+    /**
+     * @param list<Card> $cards
+     * @param list<int> $indices
+     * @param list<int> $current
+     * @param list<list<int>> $results
+     */
     private function backtrack(array $cards, array $indices, int $remaining, int $start, array $current, array &$results): void
     {
         if ($remaining === 0 && count($current) >= 2) {
@@ -129,6 +146,8 @@ final class GameEngine
     /**
      * Play a card from a player's hand.
      * Returns: ['type' => 'place'|'capture'|'choosing', 'card' => ..., 'captured' => [...], 'scopa' => bool, 'options' => [...]]
+     *
+     * @return array<string, mixed>
      */
     public function playCard(Game $game, int $playerIndex, int $cardIndex): array
     {
@@ -185,6 +204,9 @@ final class GameEngine
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function selectCapture(Game $game, int $optionIndex): array
     {
         $pending = $game->getPendingPlay();
@@ -207,6 +229,11 @@ final class GameEngine
         );
     }
 
+    /**
+     * @param Card $playedCard
+     * @param list<int> $captureIndices
+     * @return array<string, mixed>
+     */
     private function executeCapture(Game $game, int $playerIndex, array $playedCard, array $captureIndices): array
     {
         $tableCards = $game->getTableCards();
@@ -256,6 +283,9 @@ final class GameEngine
         ];
     }
 
+    /**
+     * @return array{remainingCards: list<Card>, lastCapturer: int|null}|null
+     */
     private function advanceTurn(Game $game): ?array
     {
         // Check if both hands are empty
@@ -278,7 +308,7 @@ final class GameEngine
     }
 
     /**
-     * @return array{remainingCards: list<array{suit: string, value: int}>, lastCapturer: int|null}
+     * @return array{remainingCards: list<Card>, lastCapturer: int|null}
      */
     private function endRound(Game $game): array
     {
@@ -375,6 +405,11 @@ final class GameEngine
         );
     }
 
+    /**
+     * @param list<Card> $tableCards
+     * @param list<list<int>> $options
+     * @return list<list<Card>>
+     */
     private function buildCaptureOptions(array $tableCards, array $options): array
     {
         $result = [];

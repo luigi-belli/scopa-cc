@@ -12,6 +12,7 @@ use App\Enum\GameState;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 
+/** @implements ProviderInterface<GameLookupOutput> */
 final class GameLookupProvider implements ProviderInterface
 {
     public function __construct(

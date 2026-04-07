@@ -19,6 +19,7 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\Messenger\MessageBusInterface;
 
+/** @implements ProcessorInterface<mixed, GameStateOutput> */
 final class PlayCardProcessor implements ProcessorInterface
 {
     public function __construct(

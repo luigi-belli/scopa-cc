@@ -12,7 +12,6 @@ use App\Entity\Game;
 use App\Enum\GameState;
 use App\Message\HandleAITurnMessage;
 use App\Service\GameEngine;
-use App\Service\MercurePublisher;
 use App\Service\PlayerTokenService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
@@ -20,13 +19,13 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\Messenger\MessageBusInterface;
 
+/** @implements ProcessorInterface<mixed, CreateGameOutput> */
 final class CreateGameProcessor implements ProcessorInterface
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly PlayerTokenService $tokenService,
         private readonly GameEngine $gameEngine,
-        private readonly MercurePublisher $mercurePublisher,
         private readonly MessageBusInterface $messageBus,
     ) {}
 

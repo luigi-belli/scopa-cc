@@ -19,6 +19,7 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
+/** @implements ProcessorInterface<mixed, JoinGameOutput> */
 final class JoinGameProcessor implements ProcessorInterface
 {
     public function __construct(

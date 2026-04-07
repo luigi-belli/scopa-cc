@@ -24,6 +24,11 @@
         "symfony/runtime": "^7.3"
     },
     "require-dev": {
+        "phpstan/extension-installer": "*",
+        "phpstan/phpstan": "*",
+        "phpstan/phpstan-doctrine": "*",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpstan/phpstan-symfony": "*",
         "phpunit/phpunit": "^11.0",
         "symfony/browser-kit": "^7.3",
         "symfony/http-client": "^7.3",
@@ -41,7 +46,8 @@
     },
     "config": {
         "allow-plugins": {
-            "symfony/runtime": true
+            "symfony/runtime": true,
+            "phpstan/extension-installer": true
         },
         "optimize-autoloader": true,
         "sort-packages": true
