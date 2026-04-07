@@ -27,7 +27,7 @@ final class LeaveGameProcessor implements ProcessorInterface
         $game = $this->authenticator->loadGame($uriVariables);
         $playerIndex = $this->authenticator->authenticateWithQueryFallback($game);
 
-        $gameAlreadyOver = \in_array($game->getState(), [GameState::GameOver, GameState::Finished], true);
+        $gameAlreadyOver = $game->getState()->isTerminal();
 
         if ($gameAlreadyOver) {
             $this->entityManager->remove($game);

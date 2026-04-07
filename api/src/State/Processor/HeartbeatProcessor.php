@@ -40,7 +40,7 @@ final class HeartbeatProcessor implements ProcessorInterface
             $opponentHeartbeat = $playerIndex === 0 ? $game->getLastHeartbeat2() : $game->getLastHeartbeat1();
             if ($opponentHeartbeat !== null) {
                 $diff = $now->getTimestamp() - $opponentHeartbeat->getTimestamp();
-                if ($diff > 30 && !in_array($game->getState(), [GameState::Finished, GameState::GameOver], true)) {
+                if ($diff > 30 && !$game->getState()->isTerminal()) {
                     $game->setState(GameState::Finished);
                     $gameId = (string) $game->getId();
                     $this->mercurePublisher->publishOpponentDisconnected($gameId, $playerIndex);
