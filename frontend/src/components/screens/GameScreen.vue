@@ -389,6 +389,19 @@ const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
     await handleGameOver(data)
   },
   onOpponentDisconnected() { disconnected.value = true; store.clearSession() },
+  async onReconnect() {
+    try {
+      const freshState = await api.getState(props.gameId)
+      if (isBusy()) {
+        store.queueEvent({ type: 'game-state', data: freshState })
+      } else {
+        if (freshState.state === 'choosing') showCaptureChoice.value = true
+        maybeCommitOrDeal(freshState)
+      }
+    } catch (e) {
+      console.error('Failed to re-fetch state on reconnect:', e)
+    }
+  },
 })
 
 function isDealState(prev: GameState | null, next: GameState): boolean {
@@ -625,8 +638,13 @@ async function handleTurnResult(result: TurnResult) {
   const pending = store.pendingState
   const isRedeal = !!(pending && store.displayState && pending.deckCount < store.displayState.deckCount)
 
-  // Pre-set dealHiding so new hand cards render with opacity:0 (no flash)
-  if (isRedeal) store.dealHiding = true
+  // Pre-set dealHiding so new hand cards render with opacity:0 (no flash).
+  // Freeze deck visual at pre-deal count so it doesn't vanish when finishAnimation
+  // commits the post-deal state (where deckCount may be 0).
+  if (isRedeal) {
+    store.dealHiding = true
+    dealDeckCountOverride.value = store.displayState!.deckCount
+  }
 
   // 5. *** HARD INVARIANT: commitState ONLY here, after ALL animation ***
   if (store.pendingState) store.finishAnimation()
@@ -899,12 +917,12 @@ async function runDealAnimation(newState: GameState) {
   store.dealHiding = true
   store.dealHidingTable = isNewRound
   // Freeze deck visual at pre-deal count so it doesn't vanish before animation.
-  // When displayState exists, use its deckCount (accurate pre-deal value).
-  // On first load (displayState is null), compute pre-deal count by adding back
-  // the cards that were dealt (server's deckCount is already post-deal).
+  // Compute pre-deal count by adding back the cards that were dealt
+  // (server's deckCount is already post-deal). If the override was already set
+  // (re-deal path sets it before finishAnimation to prevent flicker), keep it.
   const dealtCardCount = (isNewRound ? newState.table.length : 0)
     + newState.myHand.length + newState.opponentHandCount
-  const preDealDeckCount = store.displayState?.deckCount
+  const preDealDeckCount = dealDeckCountOverride.value
     ?? (newState.deckCount + dealtCardCount)
   dealDeckCountOverride.value = preDealDeckCount
   // Commit state — cards render with opacity:0 via reactive :style bindings

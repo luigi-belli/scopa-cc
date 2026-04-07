@@ -228,6 +228,19 @@ grep -n -A5 "ev.type === 'turn-result'" frontend/src/components/screens/GameScre
 grep -n -B1 -A1 'animating = false' frontend/src/components/screens/GameScreen.vue | grep 'processQueue'
 # PASS if processQueue() appears near early-return paths in runDealAnimation
 
+# RC12. Deck visual stays visible during deal animation (no flicker)
+# a) In re-deal path, dealDeckCountOverride must be set BEFORE finishAnimation
+#    so the deck doesn't briefly show post-deal deckCount (possibly 0/empty)
+grep -n -A6 'isRedeal.*{' frontend/src/components/screens/GameScreen.vue | grep 'dealDeckCountOverride'
+# PASS if dealDeckCountOverride is set inside the isRedeal block, before finishAnimation
+
+# b) In runDealAnimation, preDealDeckCount must NOT use store.displayState?.deckCount
+#    because displayState.deckCount is stale for new rounds (0 from previous round)
+#    and wrong for re-deals from capture/place (already committed post-deal value).
+#    Must use dealDeckCountOverride.value ?? (newState.deckCount + dealtCardCount)
+grep -n 'preDealDeckCount.*=' frontend/src/components/screens/GameScreen.vue | grep -v 'displayState'
+# PASS if preDealDeckCount formula does NOT reference store.displayState
+
 # RC9. WaitingScreen passes playerIndex to connect(), not useMercure constructor
 grep -n 'useMercure\|connect(' frontend/src/components/screens/WaitingScreen.vue
 # PASS if useMercure has no numeric playerIndex arg, and connect(0) is called
@@ -300,6 +313,9 @@ These are manual/visual tests to verify when doing significant changes. Report w
 - Deal animation: card-back clones fly from deck to each card position (table + both hands)
 - LobbyScreen does NOT commitState -- stores state in pendingState, GameScreen deal-animates it
 - No card flash on initial load (displayState is null until deal animation commits it)
+- Deck visual NEVER flickers or disappears during deal animation — stays visible from pre-deal count, decrements per card dealt, only goes empty when last card leaves
+- Deck visual stays visible during re-deal (mid-round when both hands empty) — dealDeckCountOverride is set before finishAnimation commits post-deal state
+- Deck visual correct on new round deal — preDealDeckCount computed from newState.deckCount + dealtCardCount (not from stale displayState.deckCount which is 0)
 - Scopa marker: when scopa is scored, the capturing card appears face-up rotated 90 degrees in the captured deck
 - Scopa markers cleared at the start of each new round
 - Round-end overlay shown ONLY after the last turn-result animation completes (not during animation)
