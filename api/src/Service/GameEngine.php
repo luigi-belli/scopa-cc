@@ -7,10 +7,13 @@ namespace App\Service;
 use App\Dto\Output\GameStateOutput;
 use App\Entity\Game;
 use App\Enum\GameState;
+use App\ValueObject\Card;
+use App\ValueObject\CardCollection;
+use App\ValueObject\PendingPlay;
+use App\ValueObject\SweepData;
+use App\ValueObject\TurnResult;
+use App\ValueObject\TurnResultType;
 
-/**
- * @phpstan-import-type Card from Game
- */
 final class GameEngine
 {
     public function __construct(
@@ -21,36 +24,33 @@ final class GameEngine
     public function initializeGame(Game $game): void
     {
         $deck = $this->deckService->createDeck();
-        $this->deckService->shuffle($deck);
+        $deck = $this->deckService->shuffle($deck);
         $game->setDeck($deck);
-        $game->setPlayer1Captured([]);
-        $game->setPlayer2Captured([]);
+        $game->setPlayer1Captured(new CardCollection());
+        $game->setPlayer2Captured(new CardCollection());
         $game->setPlayer1Scope(0);
         $game->setPlayer2Scope(0);
         $game->setLastCapturer(null);
         $game->setPendingPlay(null);
-        $game->setTableCards([]);
-        $game->setPlayer1Hand([]);
-        $game->setPlayer2Hand([]);
+        $game->setTableCards(new CardCollection());
+        $game->setPlayer1Hand(new CardCollection());
+        $game->setPlayer2Hand(new CardCollection());
     }
 
     public function startRound(Game $game): void
     {
         $deck = $game->getDeck();
 
-        // Deal 4 cards to table
-        $tableCards = array_splice($deck, 0, 4);
+        ['taken' => $tableCards, 'remaining' => $deck] = $deck->take(4);
         $game->setTableCards($tableCards);
 
-        // Deal 3 cards to each player
-        $hand1 = array_splice($deck, 0, 3);
-        $hand2 = array_splice($deck, 0, 3);
+        ['taken' => $hand1, 'remaining' => $deck] = $deck->take(3);
+        ['taken' => $hand2, 'remaining' => $deck] = $deck->take(3);
         $game->setPlayer1Hand($hand1);
         $game->setPlayer2Hand($hand2);
 
         $game->setDeck($deck);
 
-        // Non-dealer goes first
         $game->setCurrentPlayer($game->getDealerIndex() === 0 ? 1 : 0);
         $game->setState(GameState::Playing);
     }
@@ -62,8 +62,8 @@ final class GameEngine
             return;
         }
 
-        $hand1 = array_splice($deck, 0, 3);
-        $hand2 = array_splice($deck, 0, 3);
+        ['taken' => $hand1, 'remaining' => $deck] = $deck->take(3);
+        ['taken' => $hand2, 'remaining' => $deck] = $deck->take(3);
         $game->setPlayer1Hand($hand1);
         $game->setPlayer2Hand($hand2);
         $game->setDeck($deck);
@@ -71,21 +71,15 @@ final class GameEngine
 
     /**
      * Find all capture options for a given card on the table.
-     * Returns array of options, each option is an array of table card indices.
      * Single-card matches take priority over sum combinations.
      *
-     * @param list<Card> $tableCards
-     * @param Card $playedCard
      * @return list<list<int>>
      */
-    public function findCaptures(array $tableCards, array $playedCard): array
+    public function findCaptures(CardCollection $tableCards, Card $playedCard): array
     {
-        $playedValue = $playedCard['value'];
-
-        // First: find single-card matches (priority rule)
         $singleMatches = [];
         foreach ($tableCards as $i => $tc) {
-            if ($tc['value'] === $playedValue) {
+            if ($tc->value === $playedCard->value) {
                 $singleMatches[] = [$i];
             }
         }
@@ -94,25 +88,20 @@ final class GameEngine
             return $singleMatches;
         }
 
-        // No single match: find sum combinations
-        return $this->findSubsetsWithSum($tableCards, $playedValue);
+        return $this->findSubsetsWithSum($tableCards, $playedCard->value);
     }
 
     /**
-     * Find all subsets of table cards that sum to the target value.
-     * Returns array of arrays of indices.
-     *
-     * @param list<Card> $tableCards
      * @return list<list<int>>
      */
-    public function findSubsetsWithSum(array $tableCards, int $target): array
+    public function findSubsetsWithSum(CardCollection $tableCards, int $target): array
     {
         /** @var list<list<int>> $results */
         $results = [];
-        $indices = array_keys($tableCards);
-        $values = $tableCards;
+        $cards = $tableCards->toArray();
+        $indices = array_keys($cards);
 
-        $this->backtrack($values, $indices, $target, 0, [], $results);
+        $this->backtrack($cards, $indices, $target, 0, [], $results);
 
         return $results;
     }
@@ -134,7 +123,7 @@ final class GameEngine
         }
 
         for ($i = $start; $i < count($cards); $i++) {
-            $cardValue = $cards[$i]['value'];
+            $cardValue = $cards[$i]->value;
             if ($cardValue <= $remaining) {
                 $current[] = $indices[$i];
                 $this->backtrack($cards, $indices, $remaining - $cardValue, $i + 1, $current, $results);
@@ -143,13 +132,7 @@ final class GameEngine
         }
     }
 
-    /**
-     * Play a card from a player's hand.
-     * Returns: ['type' => 'place'|'capture'|'choosing', 'card' => ..., 'captured' => [...], 'scopa' => bool, 'options' => [...]]
-     *
-     * @return array<string, mixed>
-     */
-    public function playCard(Game $game, int $playerIndex, int $cardIndex): array
+    public function playCard(Game $game, int $playerIndex, int $cardIndex): TurnResult
     {
         $hand = $game->getPlayerHand($playerIndex);
 
@@ -157,64 +140,57 @@ final class GameEngine
             throw new \InvalidArgumentException('Invalid card index');
         }
 
-        $playedCard = $hand[$cardIndex];
-        array_splice($hand, $cardIndex, 1);
+        ['card' => $playedCard, 'remaining' => $hand] = $hand->removeAt($cardIndex);
         $game->setPlayerHand($playerIndex, $hand);
 
         $tableCards = $game->getTableCards();
         $captures = $this->findCaptures($tableCards, $playedCard);
 
         if (count($captures) === 0) {
-            // Place card on table
-            $tableCards[] = $playedCard;
-            $game->setTableCards($tableCards);
+            $game->setTableCards($tableCards->withAppended($playedCard));
 
             $sweep = $this->advanceTurn($game);
 
-            return [
-                'type' => 'place',
-                'card' => $playedCard,
-                'playerIndex' => $playerIndex,
-                'captured' => [],
-                'scopa' => false,
-                'sweep' => $sweep,
-            ];
+            return new TurnResult(
+                type: TurnResultType::Place,
+                card: $playedCard,
+                playerIndex: $playerIndex,
+                captured: new CardCollection(),
+                scopa: false,
+                sweep: $sweep,
+            );
         }
 
         if (count($captures) === 1) {
-            // Auto-capture
             return $this->executeCapture($game, $playerIndex, $playedCard, $captures[0]);
         }
 
         // Multiple options: player must choose
         $game->setState(GameState::Choosing);
-        $game->setPendingPlay([
-            'card' => $playedCard,
-            'playerIndex' => $playerIndex,
-            'options' => $captures,
-        ]);
+        $game->setPendingPlay(new PendingPlay(
+            card: $playedCard,
+            playerIndex: $playerIndex,
+            options: $captures,
+        ));
 
-        return [
-            'type' => 'choosing',
-            'card' => $playedCard,
-            'playerIndex' => $playerIndex,
-            'options' => $this->buildCaptureOptions($tableCards, $captures),
-            'captured' => [],
-            'scopa' => false,
-        ];
+        return new TurnResult(
+            type: TurnResultType::Choosing,
+            card: $playedCard,
+            playerIndex: $playerIndex,
+            captured: new CardCollection(),
+            scopa: false,
+            options: $this->buildCaptureOptions($tableCards, $captures),
+        );
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function selectCapture(Game $game, int $optionIndex): array
+    public function selectCapture(Game $game, int $optionIndex): TurnResult
     {
         $pending = $game->getPendingPlay();
         if ($pending === null) {
             throw new \LogicException('No pending capture choice');
         }
 
-        $options = $pending['options'];
+        $options = $pending->options;
         if ($optionIndex < 0 || $optionIndex >= count($options)) {
             throw new \InvalidArgumentException('Invalid option index');
         }
@@ -223,44 +199,26 @@ final class GameEngine
 
         return $this->executeCapture(
             $game,
-            $pending['playerIndex'],
-            $pending['card'],
+            $pending->playerIndex,
+            $pending->card,
             $options[$optionIndex]
         );
     }
 
-    /**
-     * @param Card $playedCard
-     * @param list<int> $captureIndices
-     * @return array<string, mixed>
-     */
-    private function executeCapture(Game $game, int $playerIndex, array $playedCard, array $captureIndices): array
+    /** @param list<int> $captureIndices */
+    private function executeCapture(Game $game, int $playerIndex, Card $playedCard, array $captureIndices): TurnResult
     {
         $tableCards = $game->getTableCards();
         $captured = $game->getPlayerCaptured($playerIndex);
 
-        // Collect captured cards
-        $capturedCards = [];
-        foreach ($captureIndices as $idx) {
-            $capturedCards[] = $tableCards[$idx];
-        }
+        ['removed' => $capturedCards, 'remaining' => $tableCards] = $tableCards->removeIndices($captureIndices);
 
-        // Add played card + captured cards to player's captured pile
-        $captured[] = $playedCard;
-        foreach ($capturedCards as $card) {
-            $captured[] = $card;
-        }
+        $captured = $captured->withAppended($playedCard, ...$capturedCards->toArray());
         $game->setPlayerCaptured($playerIndex, $captured);
 
-        // Remove captured cards from table (reverse sort to maintain indices)
-        rsort($captureIndices);
-        foreach ($captureIndices as $idx) {
-            array_splice($tableCards, $idx, 1);
-        }
         $game->setTableCards($tableCards);
         $game->setLastCapturer($playerIndex);
 
-        // Check for scopa
         $isScopa = false;
         $isLastPlay = count($game->getPlayer1Hand()) === 0
             && count($game->getPlayer2Hand()) === 0
@@ -273,28 +231,22 @@ final class GameEngine
 
         $sweep = $this->advanceTurn($game);
 
-        return [
-            'type' => 'capture',
-            'card' => $playedCard,
-            'playerIndex' => $playerIndex,
-            'captured' => $capturedCards,
-            'scopa' => $isScopa,
-            'sweep' => $sweep,
-        ];
+        return new TurnResult(
+            type: TurnResultType::Capture,
+            card: $playedCard,
+            playerIndex: $playerIndex,
+            captured: $capturedCards,
+            scopa: $isScopa,
+            sweep: $sweep,
+        );
     }
 
-    /**
-     * @return array{remainingCards: list<Card>, lastCapturer: int|null}|null
-     */
-    private function advanceTurn(Game $game): ?array
+    private function advanceTurn(Game $game): ?SweepData
     {
-        // Check if both hands are empty
         if (count($game->getPlayer1Hand()) === 0 && count($game->getPlayer2Hand()) === 0) {
             if (count($game->getDeck()) > 0) {
-                // Re-deal
                 $this->dealHands($game);
             } else {
-                // Round over — return sweep data for the caller
                 return $this->endRound($game);
             }
         }
@@ -307,46 +259,33 @@ final class GameEngine
         return null;
     }
 
-    /**
-     * @return array{remainingCards: list<Card>, lastCapturer: int|null}
-     */
-    private function endRound(Game $game): array
+    private function endRound(Game $game): SweepData
     {
-        // Save pre-sweep state for animation
         $remainingCards = $game->getTableCards();
         $lastCapturer = $game->getLastCapturer();
 
-        // Last capturer gets remaining table cards
         if ($lastCapturer !== null && count($remainingCards) > 0) {
             $captured = $game->getPlayerCaptured($lastCapturer);
-            foreach ($remainingCards as $card) {
-                $captured[] = $card;
-            }
+            $captured = $captured->withAppended(...$remainingCards->toArray());
             $game->setPlayerCaptured($lastCapturer, $captured);
-            $game->setTableCards([]);
+            $game->setTableCards(new CardCollection());
         }
 
-        // Score the round
         $scores = $this->scoringService->scoreRound($game);
 
-        $p1RoundTotal = $this->scoringService->totalRoundScore($scores[0]);
-        $p2RoundTotal = $this->scoringService->totalRoundScore($scores[1]);
+        $p1RoundTotal = $scores->player1->total();
+        $p2RoundTotal = $scores->player2->total();
 
         $game->setPlayer1TotalScore($game->getPlayer1TotalScore() + $p1RoundTotal);
         $game->setPlayer2TotalScore($game->getPlayer2TotalScore() + $p2RoundTotal);
 
-        // Add to round history
         $history = $game->getRoundHistory();
-        $history[] = [
-            'scores' => $scores,
-            'totals' => [
-                $game->getPlayer1TotalScore(),
-                $game->getPlayer2TotalScore(),
-            ],
-        ];
+        $history[] = new \App\ValueObject\RoundHistoryEntry(
+            scores: $scores,
+            totals: [$game->getPlayer1TotalScore(), $game->getPlayer2TotalScore()],
+        );
         $game->setRoundHistory($history);
 
-        // Check win condition
         $s1 = $game->getPlayer1TotalScore();
         $s2 = $game->getPlayer2TotalScore();
 
@@ -356,12 +295,11 @@ final class GameEngine
             $game->setState(GameState::RoundEnd);
         }
 
-        return ['remainingCards' => $remainingCards, 'lastCapturer' => $lastCapturer];
+        return new SweepData(remainingCards: $remainingCards, lastCapturer: $lastCapturer);
     }
 
     public function nextRound(Game $game): void
     {
-        // Alternate dealer
         $game->setDealerIndex($game->getDealerIndex() === 0 ? 1 : 0);
         $this->initializeGame($game);
         $this->startRound($game);
@@ -371,13 +309,14 @@ final class GameEngine
     {
         $opponentIndex = $playerIndex === 0 ? 1 : 0;
 
+        /** @var list<list<Card>>|null $pendingChoice */
         $pendingChoice = null;
         if ($game->getState() === GameState::Choosing && $game->getPendingPlay() !== null) {
             $pending = $game->getPendingPlay();
-            if ($pending['playerIndex'] === $playerIndex) {
+            if ($pending->playerIndex === $playerIndex) {
                 $pendingChoice = $this->buildCaptureOptions(
                     $game->getTableCards(),
-                    $pending['options']
+                    $pending->options
                 );
             }
         }
@@ -406,19 +345,16 @@ final class GameEngine
     }
 
     /**
-     * @param list<Card> $tableCards
      * @param list<list<int>> $options
      * @return list<list<Card>>
      */
-    private function buildCaptureOptions(array $tableCards, array $options): array
+    private function buildCaptureOptions(CardCollection $tableCards, array $options): array
     {
         $result = [];
         foreach ($options as $indices) {
             $cards = [];
             foreach ($indices as $idx) {
-                if (isset($tableCards[$idx])) {
-                    $cards[] = $tableCards[$idx];
-                }
+                $cards[] = $tableCards->get($idx);
             }
             $result[] = $cards;
         }

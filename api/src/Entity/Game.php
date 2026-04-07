@@ -26,15 +26,12 @@ use App\State\Processor\PlayCardProcessor;
 use App\State\Processor\SelectCaptureProcessor;
 use App\State\Provider\GameLookupProvider;
 use App\State\Provider\GameStateProvider;
+use App\ValueObject\CardCollection;
+use App\ValueObject\PendingPlay;
+use App\ValueObject\RoundHistoryEntry;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 
-/**
- * @phpstan-type Card array{suit: string, value: int}
- * @phpstan-type PendingPlay array{card: Card, playerIndex: int, options: list<list<int>>}
- * @phpstan-type ScoreRow array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: int|null, hasSetteBello: bool}
- * @phpstan-type RoundHistoryEntry array{scores: array{0: ScoreRow, 1: ScoreRow}, totals: array{0: int, 1: int}}
- */
 #[ORM\Entity]
 #[ORM\Table(name: 'games')]
 #[ORM\Index(columns: ['state'], name: 'idx_game_state')]
@@ -136,19 +133,19 @@ class Game
     #[ORM\Column(type: 'string', length: 30, nullable: true)]
     private ?string $player2Name = null;
 
-    /** @var list<Card> */
+    /** @var list<array{suit: string, value: int}> */
     #[ORM\Column(type: 'json', options: ['jsonb' => true])]
     private array $player1Hand = [];
 
-    /** @var list<Card> */
+    /** @var list<array{suit: string, value: int}> */
     #[ORM\Column(type: 'json', options: ['jsonb' => true])]
     private array $player2Hand = [];
 
-    /** @var list<Card> */
+    /** @var list<array{suit: string, value: int}> */
     #[ORM\Column(type: 'json', options: ['jsonb' => true])]
     private array $tableCards = [];
 
-    /** @var list<Card> */
+    /** @var list<array{suit: string, value: int}> */
     #[ORM\Column(type: 'json', options: ['jsonb' => true])]
     private array $deck = [];
 
@@ -161,15 +158,15 @@ class Game
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $lastCapturer = null;
 
-    /** @var PendingPlay|null */
+    /** @var array{card: array{suit: string, value: int}, playerIndex: int, options: list<list<int>>}|null */
     #[ORM\Column(type: 'json', nullable: true, options: ['jsonb' => true])]
     private ?array $pendingPlay = null;
 
-    /** @var list<Card> */
+    /** @var list<array{suit: string, value: int}> */
     #[ORM\Column(type: 'json', options: ['jsonb' => true])]
     private array $player1Captured = [];
 
-    /** @var list<Card> */
+    /** @var list<array{suit: string, value: int}> */
     #[ORM\Column(type: 'json', options: ['jsonb' => true])]
     private array $player2Captured = [];
 
@@ -185,7 +182,7 @@ class Game
     #[ORM\Column(type: 'integer')]
     private int $player2TotalScore = 0;
 
-    /** @var list<RoundHistoryEntry> */
+    /** @var list<array<string, mixed>> */
     #[ORM\Column(type: 'json', options: ['jsonb' => true])]
     private array $roundHistory = [];
 
@@ -285,72 +282,62 @@ class Game
         return $this;
     }
 
-    /** @return list<Card> */
-    public function getPlayer1Hand(): array
+    public function getPlayer1Hand(): CardCollection
     {
-        return $this->player1Hand;
+        return CardCollection::fromArray($this->player1Hand);
     }
 
-    /** @param list<Card> $hand */
-    public function setPlayer1Hand(array $hand): self
+    public function setPlayer1Hand(CardCollection $hand): self
     {
-        $this->player1Hand = $hand;
+        $this->player1Hand = $hand->jsonSerialize();
         return $this;
     }
 
-    /** @return list<Card> */
-    public function getPlayer2Hand(): array
+    public function getPlayer2Hand(): CardCollection
     {
-        return $this->player2Hand;
+        return CardCollection::fromArray($this->player2Hand);
     }
 
-    /** @param list<Card> $hand */
-    public function setPlayer2Hand(array $hand): self
+    public function setPlayer2Hand(CardCollection $hand): self
     {
-        $this->player2Hand = $hand;
+        $this->player2Hand = $hand->jsonSerialize();
         return $this;
     }
 
-    /** @return list<Card> */
-    public function getPlayerHand(int $index): array
+    public function getPlayerHand(int $index): CardCollection
     {
-        return $index === 0 ? $this->player1Hand : $this->player2Hand;
+        return $index === 0 ? $this->getPlayer1Hand() : $this->getPlayer2Hand();
     }
 
-    /** @param list<Card> $hand */
-    public function setPlayerHand(int $index, array $hand): self
+    public function setPlayerHand(int $index, CardCollection $hand): self
     {
         if ($index === 0) {
-            $this->player1Hand = $hand;
+            $this->setPlayer1Hand($hand);
         } else {
-            $this->player2Hand = $hand;
+            $this->setPlayer2Hand($hand);
         }
         return $this;
     }
 
-    /** @return list<Card> */
-    public function getTableCards(): array
+    public function getTableCards(): CardCollection
     {
-        return $this->tableCards;
+        return CardCollection::fromArray($this->tableCards);
     }
 
-    /** @param list<Card> $cards */
-    public function setTableCards(array $cards): self
+    public function setTableCards(CardCollection $cards): self
     {
-        $this->tableCards = $cards;
+        $this->tableCards = $cards->jsonSerialize();
         return $this;
     }
 
-    /** @return list<Card> */
-    public function getDeck(): array
+    public function getDeck(): CardCollection
     {
-        return $this->deck;
+        return CardCollection::fromArray($this->deck);
     }
 
-    /** @param list<Card> $deck */
-    public function setDeck(array $deck): self
+    public function setDeck(CardCollection $deck): self
     {
-        $this->deck = $deck;
+        $this->deck = $deck->jsonSerialize();
         return $this;
     }
 
@@ -387,58 +374,53 @@ class Game
         return $this;
     }
 
-    /** @return PendingPlay|null */
-    public function getPendingPlay(): ?array
+    public function getPendingPlay(): ?PendingPlay
     {
-        return $this->pendingPlay;
+        if ($this->pendingPlay === null) {
+            return null;
+        }
+        return PendingPlay::fromArray($this->pendingPlay);
     }
 
-    /** @param PendingPlay|null $play */
-    public function setPendingPlay(?array $play): self
+    public function setPendingPlay(?PendingPlay $play): self
     {
-        $this->pendingPlay = $play;
+        $this->pendingPlay = $play?->jsonSerialize();
         return $this;
     }
 
-    /** @return list<Card> */
-    public function getPlayer1Captured(): array
+    public function getPlayer1Captured(): CardCollection
     {
-        return $this->player1Captured;
+        return CardCollection::fromArray($this->player1Captured);
     }
 
-    /** @param list<Card> $captured */
-    public function setPlayer1Captured(array $captured): self
+    public function setPlayer1Captured(CardCollection $captured): self
     {
-        $this->player1Captured = $captured;
+        $this->player1Captured = $captured->jsonSerialize();
         return $this;
     }
 
-    /** @return list<Card> */
-    public function getPlayer2Captured(): array
+    public function getPlayer2Captured(): CardCollection
     {
-        return $this->player2Captured;
+        return CardCollection::fromArray($this->player2Captured);
     }
 
-    /** @param list<Card> $captured */
-    public function setPlayer2Captured(array $captured): self
+    public function setPlayer2Captured(CardCollection $captured): self
     {
-        $this->player2Captured = $captured;
+        $this->player2Captured = $captured->jsonSerialize();
         return $this;
     }
 
-    /** @return list<Card> */
-    public function getPlayerCaptured(int $index): array
+    public function getPlayerCaptured(int $index): CardCollection
     {
-        return $index === 0 ? $this->player1Captured : $this->player2Captured;
+        return $index === 0 ? $this->getPlayer1Captured() : $this->getPlayer2Captured();
     }
 
-    /** @param list<Card> $captured */
-    public function setPlayerCaptured(int $index, array $captured): self
+    public function setPlayerCaptured(int $index, CardCollection $captured): self
     {
         if ($index === 0) {
-            $this->player1Captured = $captured;
+            $this->setPlayer1Captured($captured);
         } else {
-            $this->player2Captured = $captured;
+            $this->setPlayer2Captured($captured);
         }
         return $this;
     }
@@ -520,13 +502,20 @@ class Game
     /** @return list<RoundHistoryEntry> */
     public function getRoundHistory(): array
     {
-        return $this->roundHistory;
+        return array_map(
+            /** @param array<string, mixed> $entry */
+            static fn(array $entry): RoundHistoryEntry => RoundHistoryEntry::fromArray($entry),
+            $this->roundHistory,
+        );
     }
 
     /** @param list<RoundHistoryEntry> $history */
     public function setRoundHistory(array $history): self
     {
-        $this->roundHistory = $history;
+        $this->roundHistory = array_map(
+            static fn(RoundHistoryEntry $e): array => $e->jsonSerialize(),
+            $history,
+        );
         return $this;
     }
 

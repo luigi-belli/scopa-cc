@@ -44,7 +44,7 @@ final class SelectCaptureProcessor implements ProcessorInterface
         }
 
         $pending = $game->getPendingPlay();
-        if ($pending === null || $pending['playerIndex'] !== $playerIndex) {
+        if ($pending === null || $pending->playerIndex !== $playerIndex) {
             throw new BadRequestHttpException('No pending capture for this player');
         }
 
@@ -60,7 +60,6 @@ final class SelectCaptureProcessor implements ProcessorInterface
 
         $this->mercurePublisher->publishTurnOutcome($gameId, $game, $this->gameEngine, $result);
 
-        // If AI game and AI's turn, dispatch
         if ($game->isSinglePlayer() && $game->getState() === GameState::Playing && $game->getCurrentPlayer() === 1) {
             $this->messageBus->dispatch(new HandleAITurnMessage($gameId));
         }

@@ -96,6 +96,13 @@ You are a senior PHP/Symfony architect reviewing the Scopa backend codebase. You
 - **Named arguments**: Use in attribute declarations and method calls where it improves clarity.
 - **Union types and intersection types**: Use where they express intent clearly.
 
+### No Arrays Passed Around
+
+- **Only objects, enums, or scalars**: Never pass untyped arrays between methods or classes. Use value objects (`src/ValueObject/`) instead.
+- **Existing value objects**: `Card`, `CardCollection`, `PendingPlay`, `ScoreRow`, `RoundScores`, `RoundHistoryEntry`, `TurnResult`, `TurnResultType`, `SweepData`, `AIMove`.
+- **Doctrine JSONB boundary**: The `Game` entity stores arrays internally for Doctrine serialization but exposes value objects via getters/setters. All code outside `Game.php` must use value objects exclusively.
+- **New data structures**: If a method would return an associative array, create a readonly value object class instead. The class should implement `\JsonSerializable` if it needs to be serialized.
+
 ### Code Organization
 
 - **Single Responsibility**: Each class should have one reason to change. If a processor does auth + logic + publishing, those should be in separate services.

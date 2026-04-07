@@ -10,6 +10,7 @@ use App\Message\HandleAITurnMessage;
 use App\Service\AIService;
 use App\Service\GameEngine;
 use App\Service\MercurePublisher;
+use App\ValueObject\TurnResultType;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
 use Psr\Log\LoggerInterface;
@@ -40,7 +41,6 @@ final class HandleAITurnHandler
             return;
         }
 
-        // Verify game is still active and it's AI's turn
         if ($game->getState() !== GameState::Playing) {
             return;
         }
@@ -51,14 +51,11 @@ final class HandleAITurnHandler
 
         $gameId = (string) $game->getId();
 
-        // Evaluate best move
         $move = $this->aiService->evaluateMove($game, self::AI_PLAYER_INDEX);
 
-        // Play the card
-        $result = $this->gameEngine->playCard($game, self::AI_PLAYER_INDEX, $move['cardIndex']);
+        $result = $this->gameEngine->playCard($game, self::AI_PLAYER_INDEX, $move->cardIndex);
 
-        if ($result['type'] === 'choosing') {
-            // AI auto-selects capture
+        if ($result->type === TurnResultType::Choosing) {
             $optionIndex = $this->aiService->autoSelectCapture($game);
             $result = $this->gameEngine->selectCapture($game, $optionIndex);
         }
@@ -71,10 +68,8 @@ final class HandleAITurnHandler
             return;
         }
 
-        // Publish turn result, then appropriate game state event
         $this->mercurePublisher->publishTurnOutcome($gameId, $game, $this->gameEngine, $result);
 
-        // If it's still AI's turn (after re-deal), dispatch another message
         if ($game->getState() === GameState::Playing && $game->getCurrentPlayer() === self::AI_PLAYER_INDEX) {
             $this->messageBus->dispatch(new HandleAITurnMessage($gameId));
         }

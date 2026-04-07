@@ -6,10 +6,14 @@ namespace App\Tests\Unit\Service;
 
 use App\Entity\Game;
 use App\Enum\GameState;
+use App\Enum\Suit;
 use App\Service\AIService;
 use App\Service\DeckService;
 use App\Service\GameEngine;
 use App\Service\ScoringService;
+use App\ValueObject\Card;
+use App\ValueObject\CardCollection;
+use App\ValueObject\PendingPlay;
 use PHPUnit\Framework\TestCase;
 
 class AIServiceTest extends TestCase
@@ -24,109 +28,103 @@ class AIServiceTest extends TestCase
         $this->ai = new AIService($this->engine, $scoringService);
     }
 
-    /** @param list<array{suit: string, value: int}> $aiHand
-     *  @param list<array{suit: string, value: int}> $table */
-    private function createGame(array $aiHand, array $table): Game
+    private function createGame(CardCollection $aiHand, CardCollection $table): Game
     {
         $game = new Game();
         $game->setState(GameState::Playing);
-        $game->setCurrentPlayer(1); // AI is player 2
-        $game->setPlayer1Hand([]);
+        $game->setCurrentPlayer(1);
+        $game->setPlayer1Hand(new CardCollection());
         $game->setPlayer2Hand($aiHand);
         $game->setTableCards($table);
-        $game->setDeck(array_fill(0, 20, ['suit' => 'Bastoni', 'value' => 1]));
-        $game->setPlayer1Captured([]);
-        $game->setPlayer2Captured([]);
+        $game->setDeck(CardCollection::fill(20, new Card(Suit::Bastoni, 1)));
+        $game->setPlayer1Captured(new CardCollection());
+        $game->setPlayer2Captured(new CardCollection());
         return $game;
     }
 
     public function testEvaluateMove_PrefersCapture(): void
     {
         $game = $this->createGame(
-            [
-                ['suit' => 'Denari', 'value' => 3], // can capture
-                ['suit' => 'Coppe', 'value' => 8],  // must place
-            ],
-            [['suit' => 'Bastoni', 'value' => 3]]
+            new CardCollection([
+                new Card(Suit::Denari, 3),
+                new Card(Suit::Coppe, 8),
+            ]),
+            new CardCollection([new Card(Suit::Bastoni, 3)])
         );
 
         $move = $this->ai->evaluateMove($game, 1);
 
-        $this->assertEquals(0, $move['cardIndex']); // Should prefer the capturing card
+        $this->assertEquals(0, $move->cardIndex);
     }
 
     public function testEvaluateMove_PrefersSetteBello(): void
     {
         $game = $this->createGame(
-            [
-                ['suit' => 'Coppe', 'value' => 5],  // can capture a 5
-                ['suit' => 'Denari', 'value' => 7],  // can capture 7d (sette bello on table via sum)
-            ],
-            [
-                ['suit' => 'Bastoni', 'value' => 5],
-                ['suit' => 'Denari', 'value' => 7],  // sette bello!
-            ]
+            new CardCollection([
+                new Card(Suit::Coppe, 5),
+                new Card(Suit::Denari, 7),
+            ]),
+            new CardCollection([
+                new Card(Suit::Bastoni, 5),
+                new Card(Suit::Denari, 7),
+            ])
         );
 
         $move = $this->ai->evaluateMove($game, 1);
 
-        // Should prefer capturing 7 of Denari
-        $this->assertEquals(1, $move['cardIndex']);
+        $this->assertEquals(1, $move->cardIndex);
     }
 
     public function testEvaluateMove_PrefersScopa(): void
     {
         $game = $this->createGame(
-            [
-                ['suit' => 'Coppe', 'value' => 5],  // captures one of two cards
-                ['suit' => 'Spade', 'value' => 8],  // captures both (3+5=8), scopa!
-            ],
-            [
-                ['suit' => 'Bastoni', 'value' => 5],
-                ['suit' => 'Denari', 'value' => 3],
-            ]
+            new CardCollection([
+                new Card(Suit::Coppe, 5),
+                new Card(Suit::Spade, 8),
+            ]),
+            new CardCollection([
+                new Card(Suit::Bastoni, 5),
+                new Card(Suit::Denari, 3),
+            ])
         );
 
         $move = $this->ai->evaluateMove($game, 1);
 
-        $this->assertEquals(1, $move['cardIndex']); // Scopa is worth +80
+        $this->assertEquals(1, $move->cardIndex);
     }
 
     public function testEvaluateMove_PrefersMoreCards(): void
     {
         $game = $this->createGame(
-            [
-                ['suit' => 'Denari', 'value' => 10], // captures 4+6 (3 cards total)
-            ],
-            [
-                ['suit' => 'Bastoni', 'value' => 4],
-                ['suit' => 'Coppe', 'value' => 6],
-                ['suit' => 'Spade', 'value' => 2],
-            ]
+            new CardCollection([new Card(Suit::Denari, 10)]),
+            new CardCollection([
+                new Card(Suit::Bastoni, 4),
+                new Card(Suit::Coppe, 6),
+                new Card(Suit::Spade, 2),
+            ])
         );
 
         $move = $this->ai->evaluateMove($game, 1);
 
-        $this->assertEquals(0, $move['cardIndex']);
+        $this->assertEquals(0, $move->cardIndex);
     }
 
     public function testAutoSelectCapture(): void
     {
         $game = new Game();
         $game->setState(GameState::Choosing);
-        $game->setTableCards([
-            ['suit' => 'Denari', 'value' => 5], // Denari worth more
-            ['suit' => 'Coppe', 'value' => 5],
-        ]);
-        $game->setPendingPlay([
-            'card' => ['suit' => 'Spade', 'value' => 5],
-            'playerIndex' => 1,
-            'options' => [[0], [1]],
-        ]);
+        $game->setTableCards(new CardCollection([
+            new Card(Suit::Denari, 5),
+            new Card(Suit::Coppe, 5),
+        ]));
+        $game->setPendingPlay(new PendingPlay(
+            card: new Card(Suit::Spade, 5),
+            playerIndex: 1,
+            options: [[0], [1]],
+        ));
 
         $optionIndex = $this->ai->autoSelectCapture($game);
 
-        // Should prefer the Denari card (higher score due to denari bonus)
         $this->assertEquals(0, $optionIndex);
     }
 }

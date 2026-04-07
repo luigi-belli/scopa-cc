@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Game;
+use App\ValueObject\AIMove;
+use App\ValueObject\Card;
+use App\ValueObject\CardCollection;
 
-/**
- * @phpstan-import-type Card from Game
- */
 final class AIService
 {
     public function __construct(
@@ -16,10 +16,7 @@ final class AIService
         private readonly ScoringService $scoringService,
     ) {}
 
-    /**
-     * @return array{cardIndex: int, optionIndex: int|null}
-     */
-    public function evaluateMove(Game $game, int $aiIndex): array
+    public function evaluateMove(Game $game, int $aiIndex): AIMove
     {
         $hand = $game->getPlayerHand($aiIndex);
         $tableCards = $game->getTableCards();
@@ -31,7 +28,6 @@ final class AIService
             $captures = $this->gameEngine->findCaptures($tableCards, $card);
 
             if (count($captures) === 0) {
-                // Placement
                 $score = $this->scorePlacement($card, $tableCards);
                 if ($score > $bestScore) {
                     $bestScore = $score;
@@ -42,9 +38,9 @@ final class AIService
                 foreach ($captures as $optIdx => $captureIndices) {
                     $capturedCards = [];
                     foreach ($captureIndices as $idx) {
-                        $capturedCards[] = $tableCards[$idx];
+                        $capturedCards[] = $tableCards->get($idx);
                     }
-                    $score = $this->scoreCapture($card, $capturedCards, $tableCards, count($captureIndices) === count($tableCards));
+                    $score = $this->scoreCapture($card, new CardCollection($capturedCards), $tableCards, count($captureIndices) === count($tableCards));
                     if ($score > $bestScore) {
                         $bestScore = $score;
                         $bestCardIndex = $cardIndex;
@@ -54,10 +50,7 @@ final class AIService
             }
         }
 
-        return [
-            'cardIndex' => $bestCardIndex,
-            'optionIndex' => $bestOptionIndex,
-        ];
+        return new AIMove(cardIndex: $bestCardIndex, optionIndex: $bestOptionIndex);
     }
 
     public function autoSelectCapture(Game $game): int
@@ -68,17 +61,17 @@ final class AIService
         }
 
         $tableCards = $game->getTableCards();
-        $playedCard = $pending['card'];
-        $options = $pending['options'];
+        $playedCard = $pending->card;
+        $options = $pending->options;
         $bestScore = -PHP_FLOAT_MAX;
         $bestIdx = 0;
 
         foreach ($options as $optIdx => $captureIndices) {
             $capturedCards = [];
             foreach ($captureIndices as $idx) {
-                $capturedCards[] = $tableCards[$idx];
+                $capturedCards[] = $tableCards->get($idx);
             }
-            $score = $this->scoreCapture($playedCard, $capturedCards, $tableCards, count($captureIndices) === count($tableCards));
+            $score = $this->scoreCapture($playedCard, new CardCollection($capturedCards), $tableCards, count($captureIndices) === count($tableCards));
             if ($score > $bestScore) {
                 $bestScore = $score;
                 $bestIdx = $optIdx;
@@ -88,87 +81,75 @@ final class AIService
         return $bestIdx;
     }
 
-    /**
-     * @param Card $playedCard
-     * @param list<Card> $capturedCards
-     * @param list<Card> $tableCards
-     */
-    private function scoreCapture(array $playedCard, array $capturedCards, array $tableCards, bool $clearsTable): float
+    private function scoreCapture(Card $playedCard, CardCollection $capturedCards, CardCollection $tableCards, bool $clearsTable): float
     {
         $score = 0.0;
-        $allCaptured = array_merge([$playedCard], $capturedCards);
+        $allCaptured = (new CardCollection([$playedCard]))->withAppended(...$capturedCards->toArray());
 
         foreach ($allCaptured as $card) {
-            $score += 10; // +10 per card
-            if ($card['suit'] === 'Denari') {
-                $score += 15; // +15 per denari
+            $score += 10;
+            if ($card->suit === \App\Enum\Suit::Denari) {
+                $score += 15;
             }
-            if ($card['suit'] === 'Denari' && $card['value'] === 7) {
-                $score += 100; // +100 sette bello
+            if ($card->isSetteBello()) {
+                $score += 100;
             }
-            $score += $this->scoringService->getPrimieraValue($card['value']) * 0.5; // +0.5x primiera
-            if ($card['value'] === 7) {
-                $score += 12; // +12 per seven
+            $score += $this->scoringService->getPrimieraValue($card->value) * 0.5;
+            if ($card->value === 7) {
+                $score += 12;
             }
-            if ($card['value'] === 6) {
-                $score += 6; // +6 per six
+            if ($card->value === 6) {
+                $score += 6;
             }
         }
 
         if ($clearsTable) {
-            $score += 80; // +80 scopa
+            $score += 80;
         }
 
         if (count($capturedCards) > 1) {
-            $score += 3; // +3 multi-card bonus
+            $score += 3;
         }
 
         return $score;
     }
 
-    /**
-     * @param Card $card
-     * @param list<Card> $tableCards
-     */
-    private function scorePlacement(array $card, array $tableCards): float
+    private function scorePlacement(Card $card, CardCollection $tableCards): float
     {
         $score = 0.0;
 
-        $score -= $this->scoringService->getPrimieraValue($card['value']) * 0.8; // -0.8x primiera value lost
+        $score -= $this->scoringService->getPrimieraValue($card->value) * 0.8;
 
-        if ($card['suit'] === 'Denari' && $card['value'] === 7) {
-            $score -= 120; // -120 sette bello at risk
+        if ($card->isSetteBello()) {
+            $score -= 120;
         }
 
-        if ($card['suit'] === 'Denari') {
-            $score -= 20; // -20 denari at risk
+        if ($card->suit === \App\Enum\Suit::Denari) {
+            $score -= 20;
         }
 
-        if ($card['value'] === 7) {
-            $score -= 25; // -25 sevens at risk
+        if ($card->value === 7) {
+            $score -= 25;
         }
 
-        // Check if placing creates easy scopa (total table value easily summed)
         $tableSum = 0;
         foreach ($tableCards as $tc) {
-            $tableSum += $tc['value'];
+            $tableSum += $tc->value;
         }
-        $newSum = $tableSum + $card['value'];
+        $newSum = $tableSum + $card->value;
         if ($newSum <= 10) {
-            $score -= 30; // -30 easy scopa risk
+            $score -= 30;
         }
 
-        // Check if card matches value on table (opponent can capture)
         foreach ($tableCards as $tc) {
-            if ($tc['value'] === $card['value']) {
-                $score -= 15; // -15 matching value on table
+            if ($tc->value === $card->value) {
+                $score -= 15;
                 break;
             }
         }
 
-        // Face cards are less valuable to opponents
-        if ($card['value'] >= 8) {
-            $score += 5; // +5 face cards
+        if ($card->value >= 8) {
+            $score += 5;
         }
 
         return $score;

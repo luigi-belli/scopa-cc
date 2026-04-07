@@ -6,9 +6,14 @@ namespace App\Tests\Unit\Service;
 
 use App\Entity\Game;
 use App\Enum\GameState;
+use App\Enum\Suit;
 use App\Service\DeckService;
 use App\Service\GameEngine;
 use App\Service\ScoringService;
+use App\ValueObject\Card;
+use App\ValueObject\CardCollection;
+use App\ValueObject\PendingPlay;
+use App\ValueObject\TurnResultType;
 use PHPUnit\Framework\TestCase;
 
 class GameEngineTest extends TestCase
@@ -39,9 +44,9 @@ class GameEngineTest extends TestCase
         $this->engine->initializeGame($game);
 
         $this->assertCount(40, $game->getDeck());
-        $this->assertEmpty($game->getTableCards());
-        $this->assertEmpty($game->getPlayer1Hand());
-        $this->assertEmpty($game->getPlayer2Hand());
+        $this->assertCount(0, $game->getTableCards());
+        $this->assertCount(0, $game->getPlayer1Hand());
+        $this->assertCount(0, $game->getPlayer2Hand());
     }
 
     public function testStartRound(): void
@@ -53,15 +58,14 @@ class GameEngineTest extends TestCase
         $this->assertCount(3, $game->getPlayer2Hand());
         $this->assertCount(30, $game->getDeck());
         $this->assertEquals(GameState::Playing, $game->getState());
-        // Non-dealer goes first (dealer is 0, so player 1 goes first)
         $this->assertEquals(1, $game->getCurrentPlayer());
     }
 
     public function testDealHands(): void
     {
         $game = $this->createStartedGame();
-        $game->setPlayer1Hand([]);
-        $game->setPlayer2Hand([]);
+        $game->setPlayer1Hand(new CardCollection());
+        $game->setPlayer2Hand(new CardCollection());
         $deckBefore = count($game->getDeck());
 
         $this->engine->dealHands($game);
@@ -73,12 +77,12 @@ class GameEngineTest extends TestCase
 
     public function testFindCaptures_SingleMatch(): void
     {
-        $table = [
-            ['suit' => 'Denari', 'value' => 3],
-            ['suit' => 'Coppe', 'value' => 7],
-            ['suit' => 'Bastoni', 'value' => 5],
-        ];
-        $card = ['suit' => 'Spade', 'value' => 7];
+        $table = new CardCollection([
+            new Card(Suit::Denari, 3),
+            new Card(Suit::Coppe, 7),
+            new Card(Suit::Bastoni, 5),
+        ]);
+        $card = new Card(Suit::Spade, 7);
 
         $captures = $this->engine->findCaptures($table, $card);
 
@@ -88,12 +92,12 @@ class GameEngineTest extends TestCase
 
     public function testFindCaptures_MultipleSingleMatches(): void
     {
-        $table = [
-            ['suit' => 'Denari', 'value' => 5],
-            ['suit' => 'Coppe', 'value' => 7],
-            ['suit' => 'Bastoni', 'value' => 5],
-        ];
-        $card = ['suit' => 'Spade', 'value' => 5];
+        $table = new CardCollection([
+            new Card(Suit::Denari, 5),
+            new Card(Suit::Coppe, 7),
+            new Card(Suit::Bastoni, 5),
+        ]);
+        $card = new Card(Suit::Spade, 5);
 
         $captures = $this->engine->findCaptures($table, $card);
 
@@ -104,60 +108,57 @@ class GameEngineTest extends TestCase
 
     public function testFindCaptures_SingleMatchPriority(): void
     {
-        // Single match must take priority over sum
-        $table = [
-            ['suit' => 'Denari', 'value' => 7],
-            ['suit' => 'Coppe', 'value' => 3],
-            ['suit' => 'Bastoni', 'value' => 4],
-        ];
-        $card = ['suit' => 'Spade', 'value' => 7];
+        $table = new CardCollection([
+            new Card(Suit::Denari, 7),
+            new Card(Suit::Coppe, 3),
+            new Card(Suit::Bastoni, 4),
+        ]);
+        $card = new Card(Suit::Spade, 7);
 
         $captures = $this->engine->findCaptures($table, $card);
 
-        // Only the single-card match, NOT the 3+4=7 sum
         $this->assertCount(1, $captures);
         $this->assertEquals([0], $captures[0]);
     }
 
     public function testFindCaptures_SumMatch(): void
     {
-        $table = [
-            ['suit' => 'Denari', 'value' => 3],
-            ['suit' => 'Coppe', 'value' => 4],
-            ['suit' => 'Bastoni', 'value' => 2],
-        ];
-        $card = ['suit' => 'Spade', 'value' => 7];
+        $table = new CardCollection([
+            new Card(Suit::Denari, 3),
+            new Card(Suit::Coppe, 4),
+            new Card(Suit::Bastoni, 2),
+        ]);
+        $card = new Card(Suit::Spade, 7);
 
         $captures = $this->engine->findCaptures($table, $card);
 
         $this->assertCount(1, $captures);
-        $this->assertContains(0, $captures[0]); // 3
-        $this->assertContains(1, $captures[0]); // 4
+        $this->assertContains(0, $captures[0]);
+        $this->assertContains(1, $captures[0]);
     }
 
     public function testFindCaptures_MultipleSumMatches(): void
     {
-        $table = [
-            ['suit' => 'Denari', 'value' => 3],
-            ['suit' => 'Coppe', 'value' => 7],
-            ['suit' => 'Bastoni', 'value' => 4],
-            ['suit' => 'Spade', 'value' => 6],
-        ];
-        $card = ['suit' => 'Denari', 'value' => 10];
+        $table = new CardCollection([
+            new Card(Suit::Denari, 3),
+            new Card(Suit::Coppe, 7),
+            new Card(Suit::Bastoni, 4),
+            new Card(Suit::Spade, 6),
+        ]);
+        $card = new Card(Suit::Denari, 10);
 
         $captures = $this->engine->findCaptures($table, $card);
 
-        // 3+7=10, 4+6=10
         $this->assertCount(2, $captures);
     }
 
     public function testFindCaptures_NoMatch(): void
     {
-        $table = [
-            ['suit' => 'Denari', 'value' => 2],
-            ['suit' => 'Coppe', 'value' => 3],
-        ];
-        $card = ['suit' => 'Spade', 'value' => 8];
+        $table = new CardCollection([
+            new Card(Suit::Denari, 2),
+            new Card(Suit::Coppe, 3),
+        ]);
+        $card = new Card(Suit::Spade, 8);
 
         $captures = $this->engine->findCaptures($table, $card);
 
@@ -169,22 +170,16 @@ class GameEngineTest extends TestCase
         $game = new Game();
         $game->setState(GameState::Playing);
         $game->setCurrentPlayer(0);
-        $game->setPlayer1Hand([
-            ['suit' => 'Denari', 'value' => 8],
-        ]);
-        $game->setPlayer2Hand([
-            ['suit' => 'Coppe', 'value' => 1],
-        ]);
-        $game->setTableCards([
-            ['suit' => 'Bastoni', 'value' => 2],
-        ]);
-        $game->setDeck(array_fill(0, 30, ['suit' => 'Denari', 'value' => 1]));
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Denari, 8)]));
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Coppe, 1)]));
+        $game->setTableCards(new CardCollection([new Card(Suit::Bastoni, 2)]));
+        $game->setDeck(CardCollection::fill(30, new Card(Suit::Denari, 1)));
 
         $result = $this->engine->playCard($game, 0, 0);
 
-        $this->assertEquals('place', $result['type']);
+        $this->assertEquals(TurnResultType::Place, $result->type);
         $this->assertCount(2, $game->getTableCards());
-        $this->assertEmpty($game->getPlayer1Hand());
+        $this->assertCount(0, $game->getPlayer1Hand());
     }
 
     public function testPlayCard_AutoCapture(): void
@@ -192,23 +187,19 @@ class GameEngineTest extends TestCase
         $game = new Game();
         $game->setState(GameState::Playing);
         $game->setCurrentPlayer(0);
-        $game->setPlayer1Hand([
-            ['suit' => 'Denari', 'value' => 5],
-        ]);
-        $game->setPlayer2Hand([
-            ['suit' => 'Coppe', 'value' => 1],
-        ]);
-        $game->setTableCards([
-            ['suit' => 'Bastoni', 'value' => 5],
-            ['suit' => 'Spade', 'value' => 3],
-        ]);
-        $game->setDeck(array_fill(0, 30, ['suit' => 'Denari', 'value' => 1]));
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Denari, 5)]));
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Coppe, 1)]));
+        $game->setTableCards(new CardCollection([
+            new Card(Suit::Bastoni, 5),
+            new Card(Suit::Spade, 3),
+        ]));
+        $game->setDeck(CardCollection::fill(30, new Card(Suit::Denari, 1)));
 
         $result = $this->engine->playCard($game, 0, 0);
 
-        $this->assertEquals('capture', $result['type']);
-        $this->assertCount(1, $game->getTableCards()); // 3 remains
-        $this->assertCount(2, $game->getPlayer1Captured()); // played card + captured card
+        $this->assertEquals(TurnResultType::Capture, $result->type);
+        $this->assertCount(1, $game->getTableCards());
+        $this->assertCount(2, $game->getPlayer1Captured());
     }
 
     public function testPlayCard_Choosing(): void
@@ -216,21 +207,17 @@ class GameEngineTest extends TestCase
         $game = new Game();
         $game->setState(GameState::Playing);
         $game->setCurrentPlayer(0);
-        $game->setPlayer1Hand([
-            ['suit' => 'Denari', 'value' => 5],
-        ]);
-        $game->setPlayer2Hand([
-            ['suit' => 'Coppe', 'value' => 1],
-        ]);
-        $game->setTableCards([
-            ['suit' => 'Bastoni', 'value' => 5],
-            ['suit' => 'Spade', 'value' => 5],
-        ]);
-        $game->setDeck(array_fill(0, 30, ['suit' => 'Denari', 'value' => 1]));
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Denari, 5)]));
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Coppe, 1)]));
+        $game->setTableCards(new CardCollection([
+            new Card(Suit::Bastoni, 5),
+            new Card(Suit::Spade, 5),
+        ]));
+        $game->setDeck(CardCollection::fill(30, new Card(Suit::Denari, 1)));
 
         $result = $this->engine->playCard($game, 0, 0);
 
-        $this->assertEquals('choosing', $result['type']);
+        $this->assertEquals(TurnResultType::Choosing, $result->type);
         $this->assertEquals(GameState::Choosing, $game->getState());
         $this->assertNotNull($game->getPendingPlay());
     }
@@ -240,45 +227,34 @@ class GameEngineTest extends TestCase
         $game = new Game();
         $game->setState(GameState::Playing);
         $game->setCurrentPlayer(0);
-        $game->setPlayer1Hand([
-            ['suit' => 'Denari', 'value' => 5],
-        ]);
-        $game->setPlayer2Hand([
-            ['suit' => 'Coppe', 'value' => 1],
-        ]);
-        $game->setTableCards([
-            ['suit' => 'Bastoni', 'value' => 5],
-        ]);
-        $game->setDeck(array_fill(0, 30, ['suit' => 'Denari', 'value' => 1]));
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Denari, 5)]));
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Coppe, 1)]));
+        $game->setTableCards(new CardCollection([new Card(Suit::Bastoni, 5)]));
+        $game->setDeck(CardCollection::fill(30, new Card(Suit::Denari, 1)));
 
         $result = $this->engine->playCard($game, 0, 0);
 
-        $this->assertEquals('capture', $result['type']);
-        $this->assertTrue($result['scopa']);
+        $this->assertEquals(TurnResultType::Capture, $result->type);
+        $this->assertTrue($result->scopa);
         $this->assertEquals(1, $game->getPlayer1Scope());
     }
 
     public function testPlayCard_LastPlayNoScopa(): void
     {
-        // Last play of round — clearing table should NOT count as scopa
         $game = new Game();
         $game->setState(GameState::Playing);
         $game->setCurrentPlayer(0);
-        $game->setPlayer1Hand([
-            ['suit' => 'Denari', 'value' => 5],
-        ]);
-        $game->setPlayer2Hand([]); // opponent already played
-        $game->setTableCards([
-            ['suit' => 'Bastoni', 'value' => 5],
-        ]);
-        $game->setDeck([]); // no cards left
-        $game->setPlayer1Captured([]);
-        $game->setPlayer2Captured([['suit' => 'Coppe', 'value' => 1]]);
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Denari, 5)]));
+        $game->setPlayer2Hand(new CardCollection());
+        $game->setTableCards(new CardCollection([new Card(Suit::Bastoni, 5)]));
+        $game->setDeck(new CardCollection());
+        $game->setPlayer1Captured(new CardCollection());
+        $game->setPlayer2Captured(new CardCollection([new Card(Suit::Coppe, 1)]));
 
         $result = $this->engine->playCard($game, 0, 0);
 
-        $this->assertEquals('capture', $result['type']);
-        $this->assertFalse($result['scopa']);
+        $this->assertEquals(TurnResultType::Capture, $result->type);
+        $this->assertFalse($result->scopa);
         $this->assertEquals(0, $game->getPlayer1Scope());
     }
 
@@ -287,25 +263,24 @@ class GameEngineTest extends TestCase
         $game = new Game();
         $game->setState(GameState::Choosing);
         $game->setCurrentPlayer(0);
-        $game->setTableCards([
-            ['suit' => 'Bastoni', 'value' => 5],
-            ['suit' => 'Spade', 'value' => 5],
-            ['suit' => 'Coppe', 'value' => 3],
-        ]);
-        $game->setPlayer1Hand([]);
-        $game->setPlayer2Hand([['suit' => 'Denari', 'value' => 1]]);
-        $game->setDeck(array_fill(0, 30, ['suit' => 'Denari', 'value' => 1]));
-        $game->setPendingPlay([
-            'card' => ['suit' => 'Denari', 'value' => 5],
-            'playerIndex' => 0,
-            'options' => [[0], [1]], // two 5s
-        ]);
+        $game->setTableCards(new CardCollection([
+            new Card(Suit::Bastoni, 5),
+            new Card(Suit::Spade, 5),
+            new Card(Suit::Coppe, 3),
+        ]));
+        $game->setPlayer1Hand(new CardCollection());
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Denari, 1)]));
+        $game->setDeck(CardCollection::fill(30, new Card(Suit::Denari, 1)));
+        $game->setPendingPlay(new PendingPlay(
+            card: new Card(Suit::Denari, 5),
+            playerIndex: 0,
+            options: [[0], [1]],
+        ));
 
-        $result = $this->engine->selectCapture($game, 1); // select second 5
+        $result = $this->engine->selectCapture($game, 1);
 
-        $this->assertEquals('capture', $result['type']);
+        $this->assertEquals(TurnResultType::Capture, $result->type);
         $this->assertNull($game->getPendingPlay());
-        // Table should have the first 5 and the 3, minus the second 5
         $this->assertCount(2, $game->getTableCards());
     }
 
@@ -314,23 +289,20 @@ class GameEngineTest extends TestCase
         $game = new Game();
         $game->setState(GameState::Playing);
         $game->setCurrentPlayer(0);
-        $game->setPlayer1Hand([['suit' => 'Denari', 'value' => 8]]);
-        $game->setPlayer2Hand([]);
-        $game->setDeck([]);
-        $game->setTableCards([
-            ['suit' => 'Bastoni', 'value' => 2],
-            ['suit' => 'Coppe', 'value' => 3],
-        ]);
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Denari, 8)]));
+        $game->setPlayer2Hand(new CardCollection());
+        $game->setDeck(new CardCollection());
+        $game->setTableCards(new CardCollection([
+            new Card(Suit::Bastoni, 2),
+            new Card(Suit::Coppe, 3),
+        ]));
         $game->setLastCapturer(1);
-        $game->setPlayer1Captured([]);
-        $game->setPlayer2Captured([]);
+        $game->setPlayer1Captured(new CardCollection());
+        $game->setPlayer2Captured(new CardCollection());
 
-        // Playing a non-matching card will place it, then end round
         $this->engine->playCard($game, 0, 0);
 
-        // Player 2 (last capturer) should get remaining table cards
-        $this->assertEmpty($game->getTableCards());
-        // Player 2 captured: the 2, the 3, and the 8 that was placed on table
+        $this->assertCount(0, $game->getTableCards());
         $this->assertCount(3, $game->getPlayer2Captured());
     }
 
@@ -341,14 +313,12 @@ class GameEngineTest extends TestCase
         $state0 = $this->engine->getStateForPlayer($game, 0);
         $state1 = $this->engine->getStateForPlayer($game, 1);
 
-        // Player 0 sees own hand
         $this->assertCount(3, $state0->myHand);
         $this->assertEquals(3, $state0->opponentHandCount);
         $this->assertEquals(0, $state0->myIndex);
         $this->assertEquals('Alice', $state0->myName);
         $this->assertEquals('Bob', $state0->opponentName);
 
-        // Player 1 sees own hand
         $this->assertCount(3, $state1->myHand);
         $this->assertEquals(3, $state1->opponentHandCount);
         $this->assertEquals(1, $state1->myIndex);
@@ -362,17 +332,15 @@ class GameEngineTest extends TestCase
         $game->setState(GameState::Playing);
         $game->setDealerIndex(0);
         $game->setCurrentPlayer(0);
-        $game->setPlayer1Hand([['suit' => 'Denari', 'value' => 8]]);
-        $game->setPlayer2Hand([]);
-        $game->setTableCards([['suit' => 'Coppe', 'value' => 2]]);
-        $game->setDeck(array_fill(0, 12, ['suit' => 'Bastoni', 'value' => 1]));
-        $game->setPlayer1Captured([]);
-        $game->setPlayer2Captured([]);
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Denari, 8)]));
+        $game->setPlayer2Hand(new CardCollection());
+        $game->setTableCards(new CardCollection([new Card(Suit::Coppe, 2)]));
+        $game->setDeck(CardCollection::fill(12, new Card(Suit::Bastoni, 1)));
+        $game->setPlayer1Captured(new CardCollection());
+        $game->setPlayer2Captured(new CardCollection());
 
-        // Play the card (will place, then both hands empty, trigger re-deal)
         $this->engine->playCard($game, 0, 0);
 
-        // Should have re-dealt
         $this->assertCount(3, $game->getPlayer1Hand());
         $this->assertCount(3, $game->getPlayer2Hand());
         $this->assertCount(6, $game->getDeck());
@@ -380,86 +348,71 @@ class GameEngineTest extends TestCase
 
     public function testNoDuplicateCardsOnTable(): void
     {
-        // After placing a card on the table, no two table cards should be identical
         $game = new Game();
         $game->setState(GameState::Playing);
         $game->setCurrentPlayer(0);
-        $game->setPlayer1Hand([
-            ['suit' => 'Denari', 'value' => 3],
-        ]);
-        $game->setPlayer2Hand([
-            ['suit' => 'Coppe', 'value' => 1],
-        ]);
-        $game->setTableCards([
-            ['suit' => 'Bastoni', 'value' => 5],
-            ['suit' => 'Spade', 'value' => 7],
-        ]);
-        $game->setDeck(array_fill(0, 30, ['suit' => 'Bastoni', 'value' => 1]));
-        $game->setPlayer1Captured([]);
-        $game->setPlayer2Captured([]);
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Denari, 3)]));
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Coppe, 1)]));
+        $game->setTableCards(new CardCollection([
+            new Card(Suit::Bastoni, 5),
+            new Card(Suit::Spade, 7),
+        ]));
+        $game->setDeck(CardCollection::fill(30, new Card(Suit::Bastoni, 1)));
+        $game->setPlayer1Captured(new CardCollection());
+        $game->setPlayer2Captured(new CardCollection());
 
-        $this->engine->playCard($game, 0, 0); // places 3 on table
+        $this->engine->playCard($game, 0, 0);
 
-        // Verify no duplicates
         $table = $game->getTableCards();
-        $keys = array_map(fn($c) => $c['suit'] . '-' . $c['value'], $table);
+        $keys = array_map(fn($c) => $c->suit->value . '-' . $c->value, $table->toArray());
         $this->assertCount(count($keys), array_unique($keys), 'Table should have no duplicate cards');
     }
 
     public function testNoDuplicateCardsAfterCapture(): void
     {
-        // After capturing, the captured card must NOT remain on the table
         $game = new Game();
         $game->setState(GameState::Playing);
         $game->setCurrentPlayer(0);
-        $game->setPlayer1Hand([
-            ['suit' => 'Denari', 'value' => 5],
-        ]);
-        $game->setPlayer2Hand([
-            ['suit' => 'Coppe', 'value' => 1],
-        ]);
-        $game->setTableCards([
-            ['suit' => 'Bastoni', 'value' => 5],
-            ['suit' => 'Spade', 'value' => 7],
-        ]);
-        $game->setDeck(array_fill(0, 30, ['suit' => 'Bastoni', 'value' => 1]));
-        $game->setPlayer1Captured([]);
-        $game->setPlayer2Captured([]);
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Denari, 5)]));
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Coppe, 1)]));
+        $game->setTableCards(new CardCollection([
+            new Card(Suit::Bastoni, 5),
+            new Card(Suit::Spade, 7),
+        ]));
+        $game->setDeck(CardCollection::fill(30, new Card(Suit::Bastoni, 1)));
+        $game->setPlayer1Captured(new CardCollection());
+        $game->setPlayer2Captured(new CardCollection());
 
-        $result = $this->engine->playCard($game, 0, 0); // captures 5
+        $result = $this->engine->playCard($game, 0, 0);
 
-        $this->assertEquals('capture', $result['type']);
-        // The captured card (Bastoni 5) must not be on the table
+        $this->assertEquals(TurnResultType::Capture, $result->type);
         foreach ($game->getTableCards() as $tc) {
             $this->assertFalse(
-                $tc['suit'] === 'Bastoni' && $tc['value'] === 5,
+                $tc->suit === Suit::Bastoni && $tc->value === 5,
                 'Captured card must not remain on the table'
             );
         }
-        // The played card (Denari 5) must not be on the table either
         foreach ($game->getTableCards() as $tc) {
             $this->assertFalse(
-                $tc['suit'] === 'Denari' && $tc['value'] === 5,
+                $tc->suit === Suit::Denari && $tc->value === 5,
                 'Played card must not remain on the table after capture'
             );
         }
-        // Only the 7 should remain
         $this->assertCount(1, $game->getTableCards());
     }
 
     public function testDeckIntegrity_AllCardsAccountedFor(): void
     {
-        // After any number of plays, all 40 cards must be accounted for:
-        // deck + table + player1Hand + player2Hand + player1Captured + player2Captured = 40
         $game = $this->createStartedGame();
 
-        // Play several cards
         for ($turn = 0; $turn < 6; $turn++) {
             $playerIdx = $game->getCurrentPlayer();
             $hand = $game->getPlayerHand($playerIdx);
-            if (count($hand) === 0) break;
+            if (count($hand) === 0) {
+                break;
+            }
             $result = $this->engine->playCard($game, $playerIdx, 0);
-            if ($result['type'] === 'choosing') {
+            if ($result->type === TurnResultType::Choosing) {
                 $this->engine->selectCapture($game, 0);
             }
         }
@@ -476,22 +429,22 @@ class GameEngineTest extends TestCase
 
     public function testTableCardsUniqueAfterMultiplePlays(): void
     {
-        // Play through multiple turns and verify table never has duplicate cards
         $game = $this->createStartedGame();
 
         for ($turn = 0; $turn < 6; $turn++) {
             $playerIdx = $game->getCurrentPlayer();
             $hand = $game->getPlayerHand($playerIdx);
-            if (count($hand) === 0) break;
+            if (count($hand) === 0) {
+                break;
+            }
 
             $this->engine->playCard($game, $playerIdx, 0);
             if ($game->getState() === GameState::Choosing) {
                 $this->engine->selectCapture($game, 0);
             }
 
-            // Check table for duplicates after each play
             $table = $game->getTableCards();
-            $keys = array_map(fn($c) => $c['suit'] . '-' . $c['value'], $table);
+            $keys = array_map(fn($c) => $c->suit->value . '-' . $c->value, $table->toArray());
             $this->assertCount(
                 count($keys),
                 array_unique($keys),

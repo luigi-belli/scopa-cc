@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Service;
 
+use App\Enum\Suit;
 use App\Service\DeckService;
+use App\ValueObject\CardCollection;
 use PHPUnit\Framework\TestCase;
 
 class DeckServiceTest extends TestCase
@@ -22,23 +24,22 @@ class DeckServiceTest extends TestCase
 
         $this->assertCount(40, $deck);
 
-        // Verify 4 suits × 10 values
-        $suits = ['Denari', 'Coppe', 'Bastoni', 'Spade'];
-        foreach ($suits as $suit) {
-            $suitCards = array_filter($deck, fn($c) => $c['suit'] === $suit);
-            $this->assertCount(10, $suitCards);
+        foreach (Suit::cases() as $suit) {
+            $this->assertEquals(10, $deck->countBySuit($suit));
         }
 
         // Verify no duplicates
-        $keys = array_map(fn($c) => $c['suit'] . '-' . $c['value'], $deck);
+        $keys = array_map(fn($c) => $c->suit->value . '-' . $c->value, $deck->toArray());
         $this->assertCount(40, array_unique($keys));
 
         // Verify values 1-10
-        foreach ($suits as $suit) {
-            $values = array_map(
-                fn($c) => $c['value'],
-                array_filter($deck, fn($c) => $c['suit'] === $suit)
-            );
+        foreach (Suit::cases() as $suit) {
+            $values = [];
+            foreach ($deck as $card) {
+                if ($card->suit === $suit) {
+                    $values[] = $card->value;
+                }
+            }
             sort($values);
             $this->assertEquals(range(1, 10), $values);
         }
@@ -47,19 +48,17 @@ class DeckServiceTest extends TestCase
     public function testShuffle(): void
     {
         $deck1 = $this->service->createDeck();
-        $deck2 = $deck1; // copy
-        $this->service->shuffle($deck2);
+        $deck2 = $this->service->shuffle($deck1);
 
-        // Same cards, just different order (statistically very likely)
         $this->assertCount(40, $deck2);
 
-        $keys1 = array_map(fn($c) => $c['suit'] . '-' . $c['value'], $deck1);
-        $keys2 = array_map(fn($c) => $c['suit'] . '-' . $c['value'], $deck2);
+        $keys1 = array_map(fn($c) => $c->suit->value . '-' . $c->value, $deck1->toArray());
+        $keys2 = array_map(fn($c) => $c->suit->value . '-' . $c->value, $deck2->toArray());
         sort($keys1);
         sort($keys2);
         $this->assertEquals($keys1, $keys2);
 
         // Very unlikely to be in same order
-        $this->assertNotEquals($deck1, $deck2);
+        $this->assertNotEquals($deck1->jsonSerialize(), $deck2->jsonSerialize());
     }
 }

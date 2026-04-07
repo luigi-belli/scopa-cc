@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Game;
+use App\Enum\Suit;
+use App\ValueObject\Card;
+use App\ValueObject\CardCollection;
+use App\ValueObject\RoundScores;
+use App\ValueObject\ScoreRow;
 
-/**
- * @phpstan-import-type Card from Game
- * @phpstan-import-type ScoreRow from Game
- */
 final class ScoringService
 {
     private const PRIMIERA_VALUES = [
@@ -18,77 +19,64 @@ final class ScoringService
         8 => 10, 9 => 10, 10 => 10,
     ];
 
-    /**
-     * @return array{0: ScoreRow, 1: ScoreRow}
-     */
-    public function scoreRound(Game $game): array
+    public function scoreRound(Game $game): RoundScores
     {
         $p1Captured = $game->getPlayer1Captured();
         $p2Captured = $game->getPlayer2Captured();
 
-        // Raw counts
         $c1 = count($p1Captured);
         $c2 = count($p2Captured);
-        $d1 = $this->countSuit($p1Captured, 'Denari');
-        $d2 = $this->countSuit($p2Captured, 'Denari');
+        $d1 = $p1Captured->countBySuit(Suit::Denari);
+        $d2 = $p2Captured->countBySuit(Suit::Denari);
         $prim1 = $this->calculatePrimiera($p1Captured);
         $prim2 = $this->calculatePrimiera($p2Captured);
 
-        $scores = [
+        $s = [
             ['carte' => 0, 'denari' => 0, 'setteBello' => 0, 'primiera' => 0, 'scope' => 0,
              'carteCount' => $c1, 'denariCount' => $d1, 'primieraValue' => $prim1, 'hasSetteBello' => false],
             ['carte' => 0, 'denari' => 0, 'setteBello' => 0, 'primiera' => 0, 'scope' => 0,
              'carteCount' => $c2, 'denariCount' => $d2, 'primieraValue' => $prim2, 'hasSetteBello' => false],
         ];
 
-        // Carte (most cards)
         if ($c1 > $c2) {
-            $scores[0]['carte'] = 1;
+            $s[0]['carte'] = 1;
         } elseif ($c2 > $c1) {
-            $scores[1]['carte'] = 1;
+            $s[1]['carte'] = 1;
         }
 
-        // Denari (most Denari suit)
         if ($d1 > $d2) {
-            $scores[0]['denari'] = 1;
+            $s[0]['denari'] = 1;
         } elseif ($d2 > $d1) {
-            $scores[1]['denari'] = 1;
+            $s[1]['denari'] = 1;
         }
 
-        // Sette Bello (7 of Denari)
-        if ($this->hasCard($p1Captured, 'Denari', 7)) {
-            $scores[0]['setteBello'] = 1;
-            $scores[0]['hasSetteBello'] = true;
-        } elseif ($this->hasCard($p2Captured, 'Denari', 7)) {
-            $scores[1]['setteBello'] = 1;
-            $scores[1]['hasSetteBello'] = true;
+        if ($p1Captured->hasCard(Suit::Denari, 7)) {
+            $s[0]['setteBello'] = 1;
+            $s[0]['hasSetteBello'] = true;
+        } elseif ($p2Captured->hasCard(Suit::Denari, 7)) {
+            $s[1]['setteBello'] = 1;
+            $s[1]['hasSetteBello'] = true;
         }
 
-        // Primiera
         if ($prim1 !== null && $prim2 !== null) {
             if ($prim1 > $prim2) {
-                $scores[0]['primiera'] = 1;
+                $s[0]['primiera'] = 1;
             } elseif ($prim2 > $prim1) {
-                $scores[1]['primiera'] = 1;
+                $s[1]['primiera'] = 1;
             }
         } elseif ($prim1 !== null) {
-            $scores[0]['primiera'] = 1;
+            $s[0]['primiera'] = 1;
         } elseif ($prim2 !== null) {
-            $scores[1]['primiera'] = 1;
+            $s[1]['primiera'] = 1;
         }
 
-        // Scope
-        $scores[0]['scope'] = $game->getPlayer1Scope();
-        $scores[1]['scope'] = $game->getPlayer2Scope();
+        $s[0]['scope'] = $game->getPlayer1Scope();
+        $s[1]['scope'] = $game->getPlayer2Scope();
 
-        return $scores;
-    }
-
-    /** @param ScoreRow $scoreRow */
-    public function totalRoundScore(array $scoreRow): int
-    {
-        return $scoreRow['carte'] + $scoreRow['denari'] + $scoreRow['setteBello']
-            + $scoreRow['primiera'] + $scoreRow['scope'];
+        return new RoundScores(
+            new ScoreRow(...$s[0]),
+            new ScoreRow(...$s[1]),
+        );
     }
 
     public function getPrimieraValue(int $cardValue): int
@@ -96,43 +84,13 @@ final class ScoringService
         return self::PRIMIERA_VALUES[$cardValue] ?? 0;
     }
 
-    /**
-     * @param list<Card> $cards
-     */
-    private function countSuit(array $cards, string $suit): int
-    {
-        $count = 0;
-        foreach ($cards as $card) {
-            if ($card['suit'] === $suit) {
-                $count++;
-            }
-        }
-        return $count;
-    }
-
-    /**
-     * @param list<Card> $cards
-     */
-    private function hasCard(array $cards, string $suit, int $value): bool
-    {
-        foreach ($cards as $card) {
-            if ($card['suit'] === $suit && $card['value'] === $value) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * @param list<Card> $cards
-     */
-    private function calculatePrimiera(array $cards): ?int
+    private function calculatePrimiera(CardCollection $cards): ?int
     {
         /** @var array<string, int> $bestPerSuit */
         $bestPerSuit = [];
         foreach ($cards as $card) {
-            $suit = $card['suit'];
-            $pVal = self::PRIMIERA_VALUES[$card['value']];
+            $suit = $card->suit->value;
+            $pVal = self::PRIMIERA_VALUES[$card->value];
             if (!isset($bestPerSuit[$suit]) || $pVal > $bestPerSuit[$suit]) {
                 $bestPerSuit[$suit] = $pVal;
             }

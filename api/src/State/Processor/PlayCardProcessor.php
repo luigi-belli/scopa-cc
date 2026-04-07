@@ -13,6 +13,7 @@ use App\Message\HandleAITurnMessage;
 use App\Service\GameEngine;
 use App\Service\MercurePublisher;
 use App\Service\PlayerAuthenticator;
+use App\ValueObject\TurnResultType;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -57,11 +58,10 @@ final class PlayCardProcessor implements ProcessorInterface
 
         $gameId = (string) $game->getId();
 
-        if ($result['type'] === 'choosing') {
-            // Publish a turn-result so the frontend animates the card leaving the hand
+        if ($result->type === TurnResultType::Choosing) {
             $this->mercurePublisher->publishToBothPlayers($gameId, 'turn-result', [
                 'type' => 'place',
-                'card' => $result['card'],
+                'card' => $result->card->jsonSerialize(),
                 'playerIndex' => $playerIndex,
                 'captured' => [],
                 'scopa' => false,
@@ -70,7 +70,6 @@ final class PlayCardProcessor implements ProcessorInterface
         } else {
             $this->mercurePublisher->publishTurnOutcome($gameId, $game, $this->gameEngine, $result);
 
-            // If AI game and it's AI's turn, dispatch AI
             if ($game->isSinglePlayer() && $game->getState() === GameState::Playing && $game->getCurrentPlayer() === 1) {
                 $this->messageBus->dispatch(new HandleAITurnMessage($gameId));
             }

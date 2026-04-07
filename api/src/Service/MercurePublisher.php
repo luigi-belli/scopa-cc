@@ -7,13 +7,14 @@ namespace App\Service;
 use App\Dto\Output\GameStateOutput;
 use App\Entity\Game;
 use App\Enum\GameState;
+use App\ValueObject\Card;
+use App\ValueObject\RoundHistoryEntry;
+use App\ValueObject\RoundScores;
+use App\ValueObject\SweepData;
+use App\ValueObject\TurnResult;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
 
-/**
- * @phpstan-import-type Card from Game
- * @phpstan-import-type ScoreRow from Game
- */
 final class MercurePublisher
 {
     public function __construct(
@@ -60,80 +61,71 @@ final class MercurePublisher
     /** @param list<list<Card>> $options */
     public function publishChooseCapture(string $gameId, int $playerIndex, array $options): void
     {
+        $serialized = array_map(
+            static fn(array $cards): array => array_map(
+                static fn(Card $c): array => $c->jsonSerialize(),
+                $cards,
+            ),
+            $options,
+        );
         $this->publishToPlayer($gameId, $playerIndex, 'choose-capture', [
-            'options' => $options,
+            'options' => $serialized,
         ]);
     }
 
-    /**
-     * @param array{0: ScoreRow, 1: ScoreRow} $scores
-     * @param array{remainingCards: list<Card>, lastCapturer: int|null}|null $sweep
-     */
-    public function publishRoundEnd(string $gameId, Game $game, GameEngine $engine, array $scores, ?array $sweep = null): void
+    public function publishRoundEnd(string $gameId, Game $game, GameEngine $engine, RoundScores $scores, ?SweepData $sweep = null): void
     {
         $state0 = $engine->getStateForPlayer($game, 0);
         $state1 = $engine->getStateForPlayer($game, 1);
 
-        $sweepData = $sweep ? ['remainingCards' => $sweep['remainingCards'], 'lastCapturer' => $sweep['lastCapturer']] : null;
+        $sweepData = $sweep?->jsonSerialize();
 
         $this->publishToPlayer($gameId, 0, 'round-end', array_filter([
-            'scores' => $scores,
+            'scores' => $scores->jsonSerialize(),
             'gameState' => $this->stateToArray($state0),
             'sweep' => $sweepData,
-        ], fn ($v) => $v !== null));
+        ], static fn($v) => $v !== null));
         $this->publishToPlayer($gameId, 1, 'round-end', array_filter([
-            'scores' => $scores,
+            'scores' => $scores->jsonSerialize(),
             'gameState' => $this->stateToArray($state1),
             'sweep' => $sweepData,
-        ], fn ($v) => $v !== null));
+        ], static fn($v) => $v !== null));
     }
 
-    /**
-     * @param array{0: ScoreRow, 1: ScoreRow} $scores
-     * @param array{remainingCards: list<Card>, lastCapturer: int|null}|null $sweep
-     */
-    public function publishGameOver(string $gameId, Game $game, GameEngine $engine, array $scores, ?array $sweep = null): void
+    public function publishGameOver(string $gameId, Game $game, GameEngine $engine, RoundScores $scores, ?SweepData $sweep = null): void
     {
         $state0 = $engine->getStateForPlayer($game, 0);
         $state1 = $engine->getStateForPlayer($game, 1);
 
         $winner = $game->getPlayer1TotalScore() > $game->getPlayer2TotalScore() ? 0 : 1;
-        $sweepData = $sweep ? ['remainingCards' => $sweep['remainingCards'], 'lastCapturer' => $sweep['lastCapturer']] : null;
+        $sweepData = $sweep?->jsonSerialize();
 
         $this->publishToPlayer($gameId, 0, 'game-over', array_filter([
-            'scores' => $scores,
+            'scores' => $scores->jsonSerialize(),
             'winner' => $winner,
             'gameState' => $this->stateToArray($state0),
             'sweep' => $sweepData,
-        ], fn ($v) => $v !== null));
+        ], static fn($v) => $v !== null));
         $this->publishToPlayer($gameId, 1, 'game-over', array_filter([
-            'scores' => $scores,
+            'scores' => $scores->jsonSerialize(),
             'winner' => $winner,
             'gameState' => $this->stateToArray($state1),
             'sweep' => $sweepData,
-        ], fn ($v) => $v !== null));
+        ], static fn($v) => $v !== null));
     }
 
-    /**
-     * Publishes the complete turn outcome: turn-result followed by the appropriate
-     * game state event (game-state, round-end, or game-over).
-     *
-     * @param array<string, mixed> $turnResult
-     */
-    public function publishTurnOutcome(string $gameId, Game $game, GameEngine $engine, array $turnResult): void
+    public function publishTurnOutcome(string $gameId, Game $game, GameEngine $engine, TurnResult $turnResult): void
     {
-        $this->publishToBothPlayers($gameId, 'turn-result', $turnResult);
+        $this->publishToBothPlayers($gameId, 'turn-result', $turnResult->jsonSerialize());
 
         if ($game->getState() === GameState::RoundEnd || $game->getState() === GameState::GameOver) {
             $lastHistory = $game->getRoundHistory();
             $lastEntry = end($lastHistory);
-            /** @var array{0: ScoreRow, 1: ScoreRow} $scores */
-            $scores = \is_array($lastEntry) ? $lastEntry['scores'] : [];
-            /** @var array{remainingCards: list<Card>, lastCapturer: int|null}|null $sweep */
-            $sweep = $turnResult['sweep'] ?? null;
-            if ($game->getState() === GameState::GameOver) {
+            $scores = $lastEntry instanceof RoundHistoryEntry ? $lastEntry->scores : null;
+            $sweep = $turnResult->sweep;
+            if ($scores !== null && $game->getState() === GameState::GameOver) {
                 $this->publishGameOver($gameId, $game, $engine, $scores, $sweep);
-            } else {
+            } elseif ($scores !== null) {
                 $this->publishRoundEnd($gameId, $game, $engine, $scores, $sweep);
             }
         } else {
@@ -149,13 +141,24 @@ final class MercurePublisher
     /** @return array<string, mixed> */
     private function stateToArray(GameStateOutput $state): array
     {
+        $pendingChoice = null;
+        if ($state->pendingChoice !== null) {
+            $pendingChoice = array_map(
+                static fn(array $cards): array => array_map(
+                    static fn(Card $c): array => $c->jsonSerialize(),
+                    $cards,
+                ),
+                $state->pendingChoice,
+            );
+        }
+
         return [
             'state' => $state->state,
             'currentPlayer' => $state->currentPlayer,
             'myIndex' => $state->myIndex,
             'myName' => $state->myName,
             'opponentName' => $state->opponentName,
-            'myHand' => $state->myHand,
+            'myHand' => $state->myHand->jsonSerialize(),
             'myCapturedCount' => $state->myCapturedCount,
             'myScope' => $state->myScope,
             'myTotalScore' => $state->myTotalScore,
@@ -163,11 +166,14 @@ final class MercurePublisher
             'opponentCapturedCount' => $state->opponentCapturedCount,
             'opponentScope' => $state->opponentScope,
             'opponentTotalScore' => $state->opponentTotalScore,
-            'table' => $state->table,
+            'table' => $state->table->jsonSerialize(),
             'deckCount' => $state->deckCount,
             'isMyTurn' => $state->isMyTurn,
-            'pendingChoice' => $state->pendingChoice,
-            'roundHistory' => $state->roundHistory,
+            'pendingChoice' => $pendingChoice,
+            'roundHistory' => array_map(
+                static fn(RoundHistoryEntry $e): array => $e->jsonSerialize(),
+                $state->roundHistory,
+            ),
             'deckStyle' => $state->deckStyle,
         ];
     }

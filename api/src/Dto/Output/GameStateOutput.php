@@ -4,17 +4,13 @@ declare(strict_types=1);
 
 namespace App\Dto\Output;
 
-use App\Entity\Game;
+use App\ValueObject\Card;
+use App\ValueObject\CardCollection;
+use App\ValueObject\RoundHistoryEntry;
 
-/**
- * @phpstan-import-type Card from Game
- * @phpstan-import-type RoundHistoryEntry from Game
- */
 final readonly class GameStateOutput
 {
     /**
-     * @param list<Card> $myHand
-     * @param list<Card> $table
      * @param list<list<Card>>|null $pendingChoice
      * @param list<RoundHistoryEntry> $roundHistory
      * @param array<string, mixed>|null $turnResult
@@ -25,7 +21,7 @@ final readonly class GameStateOutput
         public int $myIndex,
         public string $myName,
         public string $opponentName,
-        public array $myHand,
+        public CardCollection $myHand,
         public int $myCapturedCount,
         public int $myScope,
         public int $myTotalScore,
@@ -33,7 +29,7 @@ final readonly class GameStateOutput
         public int $opponentCapturedCount,
         public int $opponentScope,
         public int $opponentTotalScore,
-        public array $table,
+        public CardCollection $table,
         public int $deckCount,
         public bool $isMyTurn,
         public ?array $pendingChoice = null,
