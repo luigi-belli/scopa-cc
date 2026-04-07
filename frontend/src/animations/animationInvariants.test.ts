@@ -440,3 +440,195 @@ describe('isDealState detection', () => {
     expect(isDealState(prev, next)).toBe(true)
   })
 })
+
+describe('Fix 6: deck visual stays visible during deal animation that exhausts deck', () => {
+  /**
+   * When the last hand is dealt (deck goes from N to 0), the deck visual must
+   * remain visible during the deal animation and fade smoothly as cards depart.
+   *
+   * Problem: commitState is called at the START of deal animation (with dealHiding
+   * flags). If newState.deckCount is 0, the DeckVisual immediately gets count=0,
+   * adds .empty class, and fades out before any card-back clones fly.
+   *
+   * Fix: dealDeckCountOverride freezes the shown deck count at the pre-deal value.
+   * During animation, tickDeckDOM() imperatively (not reactively) updates the deck
+   * DOM so Vue doesn't re-render and reset imperative opacity:1 on revealed cards.
+   */
+
+  it('shownDeckCount uses override when set, falls back to live value', () => {
+    // Replicates the computed: dealDeckCountOverride ?? gs?.deckCount ?? 0
+    function shownDeckCount(override: number | null, liveDeckCount: number | null): number {
+      return override ?? liveDeckCount ?? 0
+    }
+
+    // Override active: shows frozen value
+    expect(shownDeckCount(6, 0)).toBe(6)
+    expect(shownDeckCount(3, 0)).toBe(3)
+    // Override cleared: shows live value
+    expect(shownDeckCount(null, 14)).toBe(14)
+    expect(shownDeckCount(null, 0)).toBe(0)
+    // Both null: fallback
+    expect(shownDeckCount(null, null)).toBe(0)
+  })
+
+  it('pre-deal count is captured from displayState before commitState', () => {
+    // Before commitState, displayState has the old deckCount
+    const displayState = makeState({ deckCount: 6 })
+    const newState = makeState({ deckCount: 0 })
+
+    // The override must capture the displayState value, not the newState value
+    const preDealDeckCount = displayState.deckCount
+    expect(preDealDeckCount).toBe(6)
+    expect(newState.deckCount).toBe(0)
+  })
+
+  it('first load computes pre-deal count from newState by adding back dealt cards', () => {
+    // On first load, displayState is null. newState.deckCount is already post-deal.
+    // We must compute pre-deal count = newState.deckCount + dealt cards.
+    const newState = makeState({
+      deckCount: 30,
+      myHand: [{ suit: 'Denari', value: 1 }, { suit: 'Coppe', value: 2 }, { suit: 'Bastoni', value: 3 }],
+      opponentHandCount: 3,
+      table: [
+        { suit: 'Denari', value: 4 }, { suit: 'Coppe', value: 5 },
+        { suit: 'Bastoni', value: 6 }, { suit: 'Spade', value: 7 },
+      ],
+    })
+
+    const isNewRound = true // first load is always a new round
+    const dealtCardCount = (isNewRound ? newState.table.length : 0)
+      + newState.myHand.length + newState.opponentHandCount
+    const preDealDeckCount = newState.deckCount + dealtCardCount
+
+    // 30 + 4 table + 3 hand + 3 opponent = 40 (full deck)
+    expect(preDealDeckCount).toBe(40)
+    expect(dealtCardCount).toBe(10)
+  })
+
+  it('re-deal (not new round) only counts hand cards, not table', () => {
+    // Mid-round re-deal: table cards already exist, only hands are dealt
+    const newState = makeState({
+      deckCount: 14,
+      myHand: [{ suit: 'Denari', value: 1 }, { suit: 'Coppe', value: 2 }, { suit: 'Bastoni', value: 3 }],
+      opponentHandCount: 3,
+      table: [{ suit: 'Spade', value: 7 }, { suit: 'Denari', value: 5 }],
+    })
+
+    const isNewRound = false
+    const dealtCardCount = (isNewRound ? newState.table.length : 0)
+      + newState.myHand.length + newState.opponentHandCount
+
+    // Only 3+3=6 hand cards dealt, not table cards
+    expect(dealtCardCount).toBe(6)
+    // But for re-deal, displayState would exist, so this fallback path
+    // wouldn't normally run. Tested for completeness.
+    expect(newState.deckCount + dealtCardCount).toBe(20)
+  })
+
+  it('tickDeckDOM decrements count imperatively without triggering reactive updates', () => {
+    // Simulates the imperative deck DOM manipulation during deal animation.
+    // Uses a plain variable (not a reactive ref) to track count.
+    let remainingDeck = 6
+    const domState = { countText: '6', hasEmptyClass: false, countDisplay: '' }
+
+    function tickDeckDOM() {
+      remainingDeck--
+      if (remainingDeck <= 0) {
+        domState.hasEmptyClass = true
+        domState.countDisplay = 'none'
+      } else {
+        domState.countText = String(remainingDeck)
+      }
+    }
+
+    // 4 table cards + 3 my hand + 3 opponent hand = 10 cards from 6 deck
+    // (in real game, 6 deck = 3+3 hand cards only, but this tests the mechanism)
+    tickDeckDOM(); expect(domState.countText).toBe('5'); expect(domState.hasEmptyClass).toBe(false)
+    tickDeckDOM(); expect(domState.countText).toBe('4'); expect(domState.hasEmptyClass).toBe(false)
+    tickDeckDOM(); expect(domState.countText).toBe('3'); expect(domState.hasEmptyClass).toBe(false)
+    tickDeckDOM(); expect(domState.countText).toBe('2'); expect(domState.hasEmptyClass).toBe(false)
+    tickDeckDOM(); expect(domState.countText).toBe('1'); expect(domState.hasEmptyClass).toBe(false)
+    tickDeckDOM(); expect(domState.hasEmptyClass).toBe(true); expect(domState.countDisplay).toBe('none')
+  })
+
+  it('reactive tickDeck causes re-render that resets imperative opacity (the bug)', () => {
+    // Demonstrates WHY we must use imperative DOM updates, not reactive ref updates.
+    //
+    // When dealDeckCountOverride changes reactively, Vue re-renders the component.
+    // During re-render, Vue re-applies :style="dealHiding ? { opacity: '0' } : {}"
+    // on hand cards, which overwrites the imperative el.style.opacity = '1' that
+    // was set when a card-back clone arrived.
+    //
+    // Simulation: track what happens to a revealed card when a reactive update fires.
+    let dealHiding = true
+    const cardStyles: Record<string, string> = {}
+
+    // Card arrives: clone removed, real card revealed imperatively
+    cardStyles['card-1'] = '1' // el.style.opacity = '1'
+
+    // REACTIVE tick triggers re-render → Vue re-applies :style binding
+    function vueReRender() {
+      if (dealHiding) {
+        // Vue re-applies the reactive binding, overwriting imperative '1'
+        cardStyles['card-1'] = '0'
+      }
+    }
+
+    vueReRender()
+    // Bug: card-1 is invisible again even though it was revealed!
+    expect(cardStyles['card-1']).toBe('0')
+  })
+
+  it('imperative DOM cleanup restores deck state before Vue takes over', () => {
+    // After animation, imperative DOM changes must be cleaned up so Vue's
+    // reactive bindings produce the correct final state.
+    const domState = {
+      hasEmptyClass: true,    // added imperatively during animation
+      countDisplay: 'none',   // hidden imperatively
+      countText: '',
+    }
+
+    // Cleanup before clearing override
+    domState.hasEmptyClass = false  // deckEl.classList.remove('empty')
+    domState.countDisplay = ''       // countEl.style.display = ''
+    domState.countText = ''          // countEl.textContent = ''
+
+    // Now clearing the override lets Vue re-render with real deckCount
+    // If deckCount is 0, Vue will add .empty class via reactive binding
+    expect(domState.hasEmptyClass).toBe(false) // clean slate for Vue
+    expect(domState.countDisplay).toBe('')      // clean slate for Vue
+  })
+
+  it('early return from deal animation clears override', () => {
+    // If deckR() returns null or no elements to animate, the animation
+    // bails out early. The override must still be cleared.
+    let override: number | null = 6
+
+    // Simulate early return
+    const dr = null // deckR() returned null
+    if (!dr) {
+      override = null // must clear override
+    }
+
+    expect(override).toBeNull()
+  })
+
+  it('deck stays visible for non-exhausting deals (override > 0 throughout)', () => {
+    // When the deck has plenty of cards (e.g., 28→22 for 6 hand cards),
+    // the override starts at 28 and ticks down to 22 — never hits 0,
+    // so the deck stays fully visible throughout.
+    let remainingDeck = 28
+    const domState = { hasEmptyClass: false }
+
+    function tickDeckDOM() {
+      remainingDeck--
+      if (remainingDeck <= 0) domState.hasEmptyClass = true
+    }
+
+    // 6 cards dealt (3 per player, no table cards for re-deal)
+    for (let c = 0; c < 6; c++) tickDeckDOM()
+
+    expect(remainingDeck).toBe(22)
+    expect(domState.hasEmptyClass).toBe(false) // deck stays visible
+  })
+})

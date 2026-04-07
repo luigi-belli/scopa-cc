@@ -36,10 +36,10 @@
     <div class="table-area" ref="tableAreaEl">
       <DeckVisual
         :deckStyle="currentDeckStyle"
-        :count="gs?.deckCount ?? 0"
+        :count="shownDeckCount"
         ref="deckVisualRef"
       />
-      <div class="table-center" :class="{ 'no-deck': (gs?.deckCount ?? 0) === 0 }" ref="tableCenterEl">
+      <div class="table-center" :class="{ 'no-deck': shownDeckCount === 0 }" ref="tableCenterEl">
         <CardComponent
           v-for="(card, idx) in (gs?.table ?? [])"
           :key="cardKey(card, idx)"
@@ -201,6 +201,10 @@ const inPostAnimDelay  = ref(false)
 
 const gs = computed(() => store.displayState)
 const currentDeckStyle = computed<DeckStyle>(() => (gs.value?.deckStyle as DeckStyle) || 'piacentine')
+/** Override deck count during deal animation so the deck visual stays visible
+ *  until the last card-back clone flies out. null = use live gs value. */
+const dealDeckCountOverride = ref<number | null>(null)
+const shownDeckCount = computed(() => dealDeckCountOverride.value ?? gs.value?.deckCount ?? 0)
 const canPlay = computed(() =>
   gs.value?.isMyTurn === true && gs.value?.state === 'playing' && !store.animating && !inPostAnimDelay.value
 )
@@ -856,7 +860,6 @@ async function animCapture(result: TurnResult) {
     await Promise.all(ps)
   }
 
-  // 7. Scopa flash
   // 7. Scopa: flash + mark the capturing card in the captured deck
   if (result.scopa) {
     scopaFlashRef.value?.show()
@@ -895,6 +898,15 @@ async function runDealAnimation(newState: GameState) {
   // 1. Set hiding flags so Vue renders cards with opacity:0
   store.dealHiding = true
   store.dealHidingTable = isNewRound
+  // Freeze deck visual at pre-deal count so it doesn't vanish before animation.
+  // When displayState exists, use its deckCount (accurate pre-deal value).
+  // On first load (displayState is null), compute pre-deal count by adding back
+  // the cards that were dealt (server's deckCount is already post-deal).
+  const dealtCardCount = (isNewRound ? newState.table.length : 0)
+    + newState.myHand.length + newState.opponentHandCount
+  const preDealDeckCount = store.displayState?.deckCount
+    ?? (newState.deckCount + dealtCardCount)
+  dealDeckCountOverride.value = preDealDeckCount
   // Commit state — cards render with opacity:0 via reactive :style bindings
   store.commitState(newState)
   await nextTick()
@@ -911,6 +923,7 @@ async function runDealAnimation(newState: GameState) {
   const dr = deckR()
   if (!dr || dr.width === 0 || allEls.length === 0) {
     store.dealHiding = false; store.dealHidingTable = false
+    dealDeckCountOverride.value = null
     store.animating = false
     processQueue()
     return
@@ -919,18 +932,37 @@ async function runDealAnimation(newState: GameState) {
   const deals: Promise<void>[] = []
   let i = 0
 
+  /** Imperatively update deck count DOM as each card-back departs.
+   *  Uses direct DOM manipulation instead of reactive updates to avoid
+   *  Vue re-renders that would reset imperative opacity:1 on revealed cards. */
+  let remainingDeck = preDealDeckCount
+  function tickDeckDOM() {
+    remainingDeck--
+    const deckEl = deckVisualRef.value?.deckEl
+    if (!deckEl) return
+    if (remainingDeck <= 0) {
+      deckEl.classList.add('empty')
+      const countEl = deckEl.querySelector('.deck-count')
+      if (countEl) (countEl as HTMLElement).style.display = 'none'
+    } else {
+      const countEl = deckEl.querySelector('.deck-count')
+      if (countEl) countEl.textContent = String(remainingDeck)
+    }
+  }
+
   // Table cards (new round only)
   tblEls.forEach(el => {
     const target = el.getBoundingClientRect()
     const clone = mkBack(dr)
     aLayer().appendChild(clone)
     const d = i++ * DEAL_TBL_LAG
-    deals.push(sleep(d).then(() =>
-      flyTo(clone, target, DEAL_MS, SLIDE_EASE).then(() => {
+    deals.push(sleep(d).then(() => {
+      tickDeckDOM()
+      return flyTo(clone, target, DEAL_MS, SLIDE_EASE).then(() => {
         el.style.opacity = '1'   // override reactive opacity:0
         if (clone.parentNode) clone.remove()
       })
-    ))
+    }))
   })
 
   // My hand
@@ -939,12 +971,13 @@ async function runDealAnimation(newState: GameState) {
     const clone = mkBack(dr)
     aLayer().appendChild(clone)
     const d = i++ * DEAL_HND_LAG
-    deals.push(sleep(d).then(() =>
-      flyTo(clone, target, DEAL_MS, SLIDE_EASE).then(() => {
+    deals.push(sleep(d).then(() => {
+      tickDeckDOM()
+      return flyTo(clone, target, DEAL_MS, SLIDE_EASE).then(() => {
         el.style.opacity = '1'
         if (clone.parentNode) clone.remove()
       })
-    ))
+    }))
   })
 
   // Opponent hand
@@ -953,16 +986,26 @@ async function runDealAnimation(newState: GameState) {
     const clone = mkBack(dr)
     aLayer().appendChild(clone)
     const d = i++ * DEAL_HND_LAG
-    deals.push(sleep(d).then(() =>
-      flyTo(clone, target, DEAL_MS, SLIDE_EASE).then(() => {
+    deals.push(sleep(d).then(() => {
+      tickDeckDOM()
+      return flyTo(clone, target, DEAL_MS, SLIDE_EASE).then(() => {
         el.style.opacity = '1'
         if (clone.parentNode) clone.remove()
       })
-    ))
+    }))
   })
 
   await Promise.all(deals)
   clearLayer()
+  // Restore imperative deck DOM changes before Vue takes over
+  const deckEl = deckVisualRef.value?.deckEl
+  if (deckEl) {
+    deckEl.classList.remove('empty')
+    const countEl = deckEl.querySelector('.deck-count')
+    if (countEl) { (countEl as HTMLElement).style.display = ''; countEl.textContent = '' }
+  }
+  // Clear deck count override — let reactive value take over
+  dealDeckCountOverride.value = null
   // Clear hiding flags — Vue will remove :style opacity bindings
   store.dealHiding = false
   store.dealHidingTable = false
