@@ -42,6 +42,25 @@ services:
       APP_ENV: prod
     restart: unless-stopped
 
+  cron:
+    build: ./api
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        # Install crontab entries
+        echo '* * * * * /usr/local/bin/php /app/bin/console app:cleanup-games --env=prod >> /proc/1/fd/1 2>&1' > /etc/cron.d/scopa
+        chmod 0644 /etc/cron.d/scopa
+        crontab /etc/cron.d/scopa
+        # Run cron in foreground
+        exec cron -f
+    depends_on:
+      php:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=17
+      APP_ENV: prod
+    restart: unless-stopped
+
   mercure:
     image: dunglas/mercure
     environment:

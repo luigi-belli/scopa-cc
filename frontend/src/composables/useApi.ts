@@ -7,9 +7,28 @@ import type {
   GameState,
 } from '@/types/game'
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+interface Api {
+  createGame(playerName: string, gameName: string | null, singlePlayer: boolean, deckStyle: string): Promise<CreateGameResponse>
+  lookupGame(name: string): Promise<GameLookupResult[]>
+  joinGame(gameId: string, playerName: string): Promise<JoinGameResponse>
+  getState(gameId: string): Promise<GameState>
+  playCard(gameId: string, cardIndex: number): Promise<GameState>
+  selectCapture(gameId: string, optionIndex: number): Promise<GameState>
+  nextRound(gameId: string): Promise<GameState>
+  heartbeat(gameId: string): Promise<void>
+  leaveGame(gameId: string): Promise<void>
+}
+
 const BASE = '/api'
 
-export function useApi() {
+export function useApi(): Api {
   const store = useGameStore()
   const { t } = useI18n()
 
@@ -19,6 +38,7 @@ export function useApi() {
   ): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       ...(options.headers as Record<string, string> || {}),
     }
 
@@ -32,16 +52,21 @@ export function useApi() {
     })
 
     if (response.status === 409) {
-      throw new Error(t('api.conflict'))
+      let key = 'error.conflict'
+      try {
+        const body = await response.json()
+        if (body?.detail) key = body.detail
+      } catch { /* ignore parse errors */ }
+      throw new ApiError(t(key), 409)
     }
 
     if (response.status === 403) {
-      throw new Error(t('api.accessDenied'))
+      throw new ApiError(t('api.accessDenied'), 403)
     }
 
     if (!response.ok) {
       const text = await response.text()
-      throw new Error(t('api.error', { status: response.status, text }))
+      throw new ApiError(t('api.error', { status: response.status, text }), response.status)
     }
 
     const contentType = response.headers.get('Content-Type') || ''

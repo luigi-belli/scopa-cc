@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     libicu-dev \
     unzip \
+    cron \
     && docker-php-ext-install pdo_pgsql intl opcache \
     && rm -rf /var/lib/apt/lists/*
 

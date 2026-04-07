@@ -13,6 +13,7 @@ use App\Enum\GameState;
 use App\Message\HandleAITurnMessage;
 use App\Service\GameEngine;
 use App\Service\PlayerTokenService;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -61,12 +62,12 @@ final class CreateGameProcessor implements ProcessorInterface
                 throw new BadRequestHttpException('Game name is required for multiplayer');
             }
 
-            $gameName = $this->tokenService->sanitizeName($data->gameName, maxLength: 60);
+            $gameName = mb_strtolower($this->tokenService->sanitizeName($data->gameName, maxLength: 60));
 
-            // Check for duplicate name
+            // Check for duplicate name (unique partial index on name WHERE NOT NULL)
             $existing = $this->entityManager->getRepository(Game::class)->findOneBy(['name' => $gameName]);
-            if ($existing !== null && $existing->getState() === GameState::Waiting) {
-                throw new ConflictHttpException('A game with this name already exists');
+            if ($existing !== null) {
+                throw new ConflictHttpException('error.gameNameTaken');
             }
 
             $game->setName($gameName);
@@ -78,7 +79,9 @@ final class CreateGameProcessor implements ProcessorInterface
         try {
             $this->entityManager->flush();
         } catch (OptimisticLockException) {
-            throw new ConflictHttpException('Conflict, please retry');
+            throw new ConflictHttpException('error.conflict');
+        } catch (UniqueConstraintViolationException) {
+            throw new ConflictHttpException('error.gameNameTaken');
         }
 
         // If single player and AI goes first, dispatch AI turn

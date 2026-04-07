@@ -66,7 +66,7 @@ final class JoinGameProcessor implements ProcessorInterface
         try {
             $this->entityManager->flush();
         } catch (OptimisticLockException) {
-            throw new ConflictHttpException('Game was modified by another request, please retry');
+            throw new ConflictHttpException('error.conflict');
         }
 
         $gameId = (string) $game->getId();

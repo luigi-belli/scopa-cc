@@ -92,6 +92,42 @@ describe('computeSlotRect', () => {
     expect(rect.left + rect.width).toBeLessThan(mobileContainer.width)
   })
 
+  it('mobile deck visual does not overlap table grid', () => {
+    // Mobile: deck visual is 40px wide at left:8px → extends to 48px
+    // Table grid padding-left is 50px → grid starts at 50px
+    const deckLeft = 8
+    const deckWidth = 40  // mobile deck visual size
+    const deckRight = deckLeft + deckWidth  // 48px
+    const gridPadLeft = 50  // mobile padding-left
+
+    const mobileContainer = new DOMRect(0, 0, 400, 250)
+    const mobileGrid: SlotGridParams = {
+      colW: 58,
+      rowH: 103,
+      gap: 6,
+      padLeft: gridPadLeft,
+      rowCount: 2,
+    }
+    const slot0 = computeSlotRect(0, 58, 103, mobileContainer, mobileGrid)
+
+    // Deck must not overlap the first table card slot
+    expect(deckRight).toBeLessThanOrEqual(gridPadLeft)
+    expect(deckRight).toBeLessThanOrEqual(slot0.left)
+  })
+
+  it('desktop deck visual does not overlap table grid', () => {
+    // Desktop: deck is 75px wide at left:12px → extends to 87px
+    // But deck is position:absolute so padding-left:70px is the grid offset
+    const deckLeft = 12
+    const deckWidth = 75
+    const deckRight = deckLeft + deckWidth  // 87px
+
+    const slot0 = computeSlotRect(0, CARD_W, CARD_H, containerRect, grid)
+
+    // On desktop, first slot starts well past the deck due to centering
+    expect(slot0.left).toBeGreaterThan(deckRight)
+  })
+
   it('is a pure function -- same inputs always give same outputs', () => {
     const r0a = computeSlotRect(0, CARD_W, CARD_H, containerRect, grid)
     computeSlotRect(3, CARD_W, CARD_H, containerRect, grid)

@@ -1,5 +1,11 @@
-import { ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import type { DeckStyle } from '@/types/card'
+
+interface UseDeckStyleReturn {
+  selectedDeck: Ref<DeckStyle>
+  setDeckStyle: (style: DeckStyle) => void
+  deckStyle: Ref<DeckStyle>
+}
 
 const STORAGE_KEY = 'scopa-deck-style'
 const VALID_STYLES: DeckStyle[] = ['piacentine', 'napoletane', 'toscane', 'siciliane']
@@ -14,7 +20,7 @@ function loadSaved(): DeckStyle {
   return 'piacentine'
 }
 
-export function useDeckStyle() {
+export function useDeckStyle(): UseDeckStyleReturn {
   function setDeckStyle(style: DeckStyle) {
     selectedDeck.value = style
     localStorage.setItem(STORAGE_KEY, style)

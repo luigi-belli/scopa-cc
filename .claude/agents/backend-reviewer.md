@@ -30,6 +30,7 @@ You are a senior PHP/Symfony architect reviewing the Scopa backend codebase. You
 |---|---|
 | `src/Entity/Game.php` | Single entity with all game state + API Platform operation definitions |
 | `src/Enum/GameState.php` | State enum: waiting, playing, choosing, round-end, game-over, finished |
+| `src/Enum/DeckStyle.php` | Deck style enum: piacentine, napoletane, toscane, siciliane |
 | `src/Enum/Suit.php` | Card suit enum with letter() method |
 | `src/Service/GameEngine.php` | Core game logic (play card, capture, deal, scoring delegation) |
 | `src/Service/DeckService.php` | Deck creation and Fisher-Yates shuffle |
@@ -61,7 +62,7 @@ You are a senior PHP/Symfony architect reviewing the Scopa backend codebase. You
 - **Typed properties**: All class properties must have type declarations.
 - **Return types**: All methods must have explicit return type declarations.
 - **Attributes over annotations**: Use PHP 8 attributes (`#[...]`) exclusively. No DocBlock annotations for framework features.
-- **Enums**: Use native PHP enums (backed enums where applicable) instead of class constants.
+- **Enums**: Use native PHP enums (backed enums where applicable) instead of class constants. **No hardcoded domain strings** — all fixed sets of values (deck styles, game states, suits, etc.) must use backed enums. Never use string literals like `'piacentine'` or `'waiting'` directly; always reference the enum case (e.g., `DeckStyle::Piacentine`, `GameState::Waiting`).
 - **Named arguments**: Prefer named arguments for clarity in framework attribute usage.
 - **Final classes**: Services that aren't designed for extension should be `final`.
 - **Strict types**: Every PHP file should declare `declare(strict_types=1)`.

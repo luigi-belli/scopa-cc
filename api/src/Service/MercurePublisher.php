@@ -174,7 +174,7 @@ final class MercurePublisher
                 static fn(RoundHistoryEntry $e): array => $e->jsonSerialize(),
                 $state->roundHistory,
             ),
-            'deckStyle' => $state->deckStyle,
+            'deckStyle' => $state->deckStyle->value,
         ];
     }
 }

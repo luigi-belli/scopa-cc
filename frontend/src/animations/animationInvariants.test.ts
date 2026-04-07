@@ -397,6 +397,163 @@ describe('Fix 5: played card stays visible until sweep starts', () => {
   })
 })
 
+describe('Fix 7: flyTo scale is relative to source, not target', () => {
+  /**
+   * flyTo() computes the final visual size as scale × fromW (source dimensions).
+   * Previously, it computed scale × to.width (target dimensions), which caused
+   * double-shrinking when the target (captured deck) was already smaller than
+   * the source (table card).
+   *
+   * On mobile: card=58px, captured=40px, scale=40/58≈0.689
+   * OLD (bug): toW = 0.689 × 40 = 27.6px (way too small!)
+   * NEW (fix): toW = 0.689 × 58 = 40px (matches captured deck exactly)
+   */
+
+  /** Replicates sweepScale from GameScreen.vue */
+  function sweepScale(cardW: number, capW: number): number | undefined {
+    const ratio = capW / cardW
+    return ratio < 1 ? ratio : undefined
+  }
+
+  /** Replicates the fixed flyTo size calculation */
+  function flyToFinalSize(fromW: number, fromH: number, toW: number, toH: number, scale?: number) {
+    const finalW = scale != null ? scale * fromW : fromW
+    const finalH = scale != null ? scale * fromH : fromH
+    return { width: finalW, height: finalH }
+  }
+
+  it('mobile sweep: cards shrink to exactly captured deck size (40×71)', () => {
+    const cardW = 58, cardH = 103  // mobile card
+    const capW = 40, capH = 71     // mobile captured deck
+    const scale = sweepScale(cardW, capW)
+
+    expect(scale).toBeCloseTo(40 / 58)
+
+    const final = flyToFinalSize(cardW, cardH, capW, capH, scale)
+    expect(final.width).toBeCloseTo(capW, 1)  // 40px
+    expect(final.height).toBeCloseTo(capH, 1)  // 71px
+  })
+
+  it('desktop sweep: no scale needed (both 75×133)', () => {
+    const cardW = 75, cardH = 133
+    const capW = 75, capH = 133
+    const scale = sweepScale(cardW, capW)
+
+    expect(scale).toBeUndefined()
+
+    const final = flyToFinalSize(cardW, cardH, capW, capH, scale)
+    expect(final.width).toBe(75)
+    expect(final.height).toBe(133)
+  })
+
+  it('sweep centering: clone centers on captured deck rect', () => {
+    // flyTo centers the (possibly resized) clone on the target centre
+    const capR = { left: 10, top: 50, width: 40, height: 71 }
+    const fromW = 58
+    const scale = sweepScale(fromW, capR.width)!
+    const toW = scale * fromW  // 40
+
+    const dx_offset = capR.left + (capR.width - toW) / 2
+    // (40 - 40) / 2 = 0, so clone left = capR.left
+    expect(dx_offset).toBeCloseTo(capR.left)
+  })
+})
+
+describe('Fix 8: deal animation scales clones when deck is smaller than cards', () => {
+  /**
+   * When the deck visual is smaller than card slots (mobile: 40px → 58px),
+   * deal animation clones must grow from deck size to card size.
+   * dealScale = targetW / deckW. On desktop (same size), no scale.
+   */
+
+  /** Replicates dealScale computation from GameScreen.vue */
+  function computeDealScale(targetW: number, deckW: number): number | undefined {
+    return deckW > 0 && Math.abs(targetW / deckW - 1) > 0.01
+      ? targetW / deckW : undefined
+  }
+
+  /** Same flyTo size calc */
+  function flyToFinalSize(fromW: number, fromH: number, scale?: number) {
+    return {
+      width: scale != null ? scale * fromW : fromW,
+      height: scale != null ? scale * fromH : fromH,
+    }
+  }
+
+  it('mobile deal: clones grow from 40×71 to 58×103', () => {
+    const deckW = 40, deckH = 71    // mobile deck visual
+    const cardW = 58, cardH = 103   // mobile card slot
+    const scale = computeDealScale(cardW, deckW)
+
+    expect(scale).toBeCloseTo(58 / 40)
+
+    const final = flyToFinalSize(deckW, deckH, scale)
+    expect(final.width).toBeCloseTo(cardW, 1)
+    expect(final.height).toBeCloseTo(cardH, 1)
+  })
+
+  it('desktop deal: no scale needed (both 75×133)', () => {
+    const deckW = 75, deckH = 133
+    const cardW = 75, cardH = 133
+    const scale = computeDealScale(cardW, deckW)
+
+    expect(scale).toBeUndefined()
+
+    const final = flyToFinalSize(deckW, deckH, scale)
+    expect(final.width).toBe(75)
+    expect(final.height).toBe(133)
+  })
+
+  it('deal clone centres on target card slot', () => {
+    // Clone starts at deck rect, ends centred on card slot
+    const targetR = { left: 100, top: 200, width: 58, height: 103 }
+    const deckW = 40
+    const scale = computeDealScale(targetR.width, deckW)!
+    const toW = scale * deckW  // 58
+
+    const offset = targetR.left + (targetR.width - toW) / 2
+    expect(offset).toBeCloseTo(targetR.left)
+  })
+})
+
+describe('Mobile dimensions never affect desktop', () => {
+  /**
+   * Desktop dimensions are the CSS defaults (no media query).
+   * Mobile dimensions are in @media (max-width: 600px).
+   * Animation scale calculations use runtime measurements,
+   * so they auto-adapt. These tests verify both breakpoints
+   * produce correct final sizes.
+   */
+
+  function sweepScale(cardW: number, capW: number): number | undefined {
+    const ratio = capW / cardW
+    return ratio < 1 ? ratio : undefined
+  }
+
+  function computeDealScale(targetW: number, deckW: number): number | undefined {
+    return deckW > 0 && Math.abs(targetW / deckW - 1) > 0.01
+      ? targetW / deckW : undefined
+  }
+
+  it('desktop sweep produces no scale (card == captured == 75px)', () => {
+    expect(sweepScale(75, 75)).toBeUndefined()
+  })
+
+  it('desktop deal produces no scale (deck == card == 75px)', () => {
+    expect(computeDealScale(75, 75)).toBeUndefined()
+  })
+
+  it('mobile sweep produces correct shrink scale', () => {
+    const scale = sweepScale(58, 40)!
+    expect(scale * 58).toBeCloseTo(40, 0)
+  })
+
+  it('mobile deal produces correct grow scale', () => {
+    const scale = computeDealScale(58, 40)!
+    expect(scale * 40).toBeCloseTo(58, 0)
+  })
+})
+
 describe('isDealState detection', () => {
   /** Replicates isDealState logic from GameScreen.vue */
   function isDealState(prev: GameState | null, next: GameState): boolean {

@@ -11,7 +11,7 @@ Web-based two-player Scopa card game with real-time multiplayer and single-playe
 - **Database**: PostgreSQL 17 via Doctrine ORM 3 (JSONB for card arrays)
 - **Real-time**: Mercure SSE (server→client push), REST API (client→server)
 - **AI**: Symfony Messenger async handler with 1.5s delay
-- **Containerization**: Docker Compose — 5 services, exposed on port 5982
+- **Containerization**: Docker Compose — 6 services, exposed on port 5982
 - **Card assets**: 4 deck styles, each with 40 card face images + card back
 
 ## How to Run
@@ -42,7 +42,7 @@ docker compose exec php bin/console <command>
 
 ```
 scopa/
-  docker-compose.yml           # 5 services, port 5982
+  docker-compose.yml           # 6 services, port 5982
   
   api/                         # API Platform (PHP/Symfony)
     Dockerfile                 # PHP 8.4 CLI + composer + entrypoint
@@ -74,6 +74,7 @@ scopa/
         Game.php               # Single entity: all game state in one table + ApiResource operations
       Enum/
         GameState.php          # waiting|playing|choosing|round-end|game-over|finished
+        DeckStyle.php          # piacentine|napoletane|toscane|siciliane
         Suit.php               # Denari|Coppe|Bastoni|Spade (with letter() method)
       Dto/
         Input/
@@ -105,6 +106,8 @@ scopa/
           NextRoundProcessor.php     # POST /games/{id}/next-round
           HeartbeatProcessor.php     # POST /games/{id}/heartbeat
           LeaveGameProcessor.php     # POST /games/{id}/leave
+      Command/
+        CleanupGamesCommand.php  # app:cleanup-games — delete inactive games (>10 min)
       Message/
         HandleAITurnMessage.php
       MessageHandler/
@@ -540,8 +543,11 @@ Events that arrive while busy (`store.animating || inPostAnimDelay`) are queued 
 | Capture pause | 150ms | — |
 | Capture glow | 500ms | — |
 | Sweep to captured | 450ms, 100ms stagger | ease-in-out |
-| Sweep scale | none (same size) | ~0.69 (40/58) |
+| Sweep scale (desktop) | none (75→75, same size) | — |
+| Sweep scale (mobile) | 0.689 (58→40) | scale × fromW |
 | Deal slide | 350ms | cubic-bezier(0.22, 0.61, 0.36, 1) |
+| Deal scale (desktop) | none (75→75, same size) | — |
+| Deal scale (mobile) | 1.45 (40→58) | scale × fromW |
 | Deal stagger (hands) | 150ms | — |
 | Deal stagger (table) | 75ms | — |
 | Scopa flash | 1500ms | scopaFlash keyframe |
@@ -580,6 +586,8 @@ grid-template-rows: 1fr auto 1fr
 | Table cards height | 276px (2 rows) | flex, overflow hidden |
 | Grid gap | 24px | 16px |
 | Captured stack | 75 × 133px | 40 × 71px |
+| Deck visual | 75 × 133px (left: 12px) | 40 × 71px (left: 8px) |
+| Deck padding-left | 70px | 50px |
 | Max game width | 900px | 100vw |
 
 ### Z-Index Layers
@@ -624,13 +632,25 @@ nginx (port 5982)
 
 php (port 9000)     → PHP-FPM (FastCGI)
 messenger-worker    → Same image, runs `messenger:consume async --time-limit=3600`
+cron                → Same image, runs crond with scheduled Symfony console commands
 postgres            → Game state persistence (with healthcheck)
 mercure             → SSE hub (anonymous mode, CORS *)
 ```
 
 Nginx Dockerfile is multi-stage: builds Vue frontend with Node 22, then copies dist into nginx 1.27 image along with config. Card assets are part of the frontend build output.
 
-Docker Compose uses health checks and `depends_on` conditions to ensure proper startup order: postgres → php → messenger-worker + mercure → nginx.
+Docker Compose uses health checks and `depends_on` conditions to ensure proper startup order: postgres → php → messenger-worker + cron + mercure → nginx.
+
+#### Cron Container
+
+The `cron` service is a dedicated container for all recurring background tasks. It reuses the PHP API image and runs `crond` in the foreground. Crontab entries are installed at container startup via the `command` block.
+
+**Adding a new scheduled task**: Add a new crontab line in the `cron` service's command block in `docker-compose.yml`. All output should redirect to `/proc/1/fd/1` so it appears in `docker compose logs cron`.
+
+Current cron jobs:
+| Schedule | Command | Purpose |
+|---|---|---|
+| `* * * * *` (every minute) | `app:cleanup-games` | Delete games inactive for >10 minutes |
 
 ## Hard Constraints
 
@@ -659,6 +679,10 @@ These constraints MUST be respected after EVERY change. Verify all of them befor
 17. **Deal animation on every entry** — deal animation runs on first game load, re-deal mid-round, and new round (not just Mercure events)
 18. **GPU-composited motion** — `flyTo()` uses `transform: translate() scale()` instead of animating `left`/`top` for smooth 60fps
 19. **FLIP rearrangement on commitState** — after commitState, surviving table cards and hand cards animate smoothly from old positions to new via `snapshotByIdentity()`→`flipRearrange()`. Uses card identity (`value-suit`) not index, so cards that shift indices still animate correctly.
+20. **Deck visual NEVER overlaps table cards** — on mobile, deck visual is 40×71px at `left: 8px` (extends to 48px), table grid `padding-left: 50px` ensures 2px clearance. On desktop, deck is 75×133px at `left: 12px` (extends to 87px), `padding-left: 70px` ensures clearance with the deck's `position: absolute` keeping it out of flow.
+21. **Sweep animation shrinks to EXACT captured deck size** — `flyTo()` scale is relative to the source card (`scale * fromW`), NOT the target rect. On mobile: cards (58px) shrink to captured deck (40px) via `scale ≈ 0.689`. On desktop: no scale needed (both 75px). The final visual size MUST match the captured deck dimensions exactly.
+22. **Deal animation scales clones to match target card size** — when deck visual is smaller than card slots (mobile: 40px deck → 58px cards), deal clones grow via `dealScale = targetW / deckW`. On desktop (same size), no scale is applied. Clone MUST arrive at the exact size of the target card slot.
+23. **Desktop dimensions NEVER affected by mobile fixes** — all mobile-specific sizing is inside `@media (max-width: 600px)` blocks. Animation scale calculations use runtime DOM measurements, so they are automatically correct on both breakpoints. Any change to mobile dimensions MUST verify desktop is unchanged.
 
 ## Security
 

@@ -53,7 +53,7 @@ final class PlayCardProcessor implements ProcessorInterface
         try {
             $this->entityManager->flush();
         } catch (OptimisticLockException) {
-            throw new ConflictHttpException('Conflict, please retry');
+            throw new ConflictHttpException('error.conflict');
         }
 
         $gameId = (string) $game->getId();

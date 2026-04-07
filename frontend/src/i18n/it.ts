@@ -23,6 +23,7 @@ export default {
 
   // Game
   'game.exit': 'Esci dalla partita',
+  'game.exitConfirm': 'Sei sicuro di voler abbandonare la partita?',
   'game.pts': 'pts',
   'game.scope': 'scope',
 
@@ -70,8 +71,9 @@ export default {
   'deck.toscane': 'Toscane',
   'deck.siciliane': 'Siciliane',
 
-  // API errors
-  'api.conflict': 'Conflitto: riprova',
+  // API/backend error keys
+  'error.conflict': 'Conflitto: riprova',
+  'error.gameNameTaken': 'Esiste già una partita con questo nome. Scegline un altro.',
   'api.accessDenied': 'Accesso negato: token non valido',
   'api.error': 'Errore API {status}: {text}',
 } as const satisfies Record<string, string>

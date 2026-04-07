@@ -180,6 +180,43 @@ grep -n "round-end\|game-over" frontend/src/components/screens/GameScreen.vue | 
 grep -n 'deckCount.*displayState\|isRedeal' frontend/src/components/screens/GameScreen.vue
 ```
 
+#### Mobile Animation & Deck Sizing Checks
+
+```bash
+# M1. Deck visual uses smaller size on mobile (40×71, not 58×103)
+grep -A5 '\.deck-visual .card-back' frontend/src/css/style.css | grep -E 'width|height'
+# PASS if width: 40px and height: 71px found inside @media (max-width: 600px) block
+
+# M2. Deck visual position on mobile is left: 8px (not 12px)
+grep -A2 '\.deck-visual' frontend/src/css/style.css | grep 'left: 8px'
+# PASS if found inside @media (max-width: 600px) block
+
+# M3. flyTo scale is relative to source (fromW), not target (to.width)
+grep 'scale.*fromW\|scale.*fromH' frontend/src/components/screens/GameScreen.vue
+# PASS if toW = scale * fromW (not scale * to.width)
+
+# M4. Deal animation passes dealScale to flyTo
+grep -c 'flyTo(clone, target, DEAL_MS, SLIDE_EASE, dealScale)' frontend/src/components/screens/GameScreen.vue
+# PASS if count is 3 (table + my hand + opponent hand)
+
+# M5. dealScale computed from target vs deck dimensions
+grep 'dealScale.*firstTarget.*width.*dr.*width\|firstTarget.*width.*\/.*dr.*width' frontend/src/components/screens/GameScreen.vue
+# PASS if dealScale = targetW / deckW
+
+# M6. Desktop card dimensions unchanged (75×133 default, no mobile override leaking)
+grep -B1 'width: 75px' frontend/src/css/cards.css | head -4
+# PASS if .card and .card-back default to 75px width
+
+# M7. Mobile captured stack unchanged at 40×71
+grep -A2 '\.captured-stack' frontend/src/css/style.css | grep '40px'
+# PASS if captured-stack width is 40px in mobile section
+
+# M8. Desktop deck visual unchanged (inherits .card-back default 75×133)
+# Verify no desktop-specific deck-visual .card-back override exists outside media query
+grep -B5 '\.deck-visual .card-back' frontend/src/css/style.css | grep -v '@media'
+# PASS if no desktop override of deck-visual .card-back found
+```
+
 #### Event Pipeline & Race Condition Checks
 
 These checks verify fixes for specific bugs that caused game hangs, lost events, and wrong Mercure subscriptions. Run after ANY change to GameScreen.vue, useMercure.ts, or gameStore.ts.
@@ -321,6 +358,16 @@ These are manual/visual tests to verify when doing significant changes. Report w
 - Round-end overlay shown ONLY after the last turn-result animation completes (not during animation)
 - Game-over overlay shown ONLY after the last turn-result animation completes (not during animation)
 
+### Mobile Animation & Sizing Tests
+- Deck visual (40×71) does NOT overlap table cards on mobile (deck extends to 48px, grid starts at 50px)
+- Sweep animation: cards shrink to exactly 40×71 (captured deck size), NOT smaller
+- Deal animation: card-back clones grow from 40×71 (deck) to 58×103 (card slot) on mobile
+- Desktop sweep: no scale applied (card and captured deck are both 75×133)
+- Desktop deal: no scale applied (deck and card slots are both 75×133)
+- Desktop card dimensions unchanged after mobile fixes (75×133 default)
+- Mobile deck visual position is left: 8px (not overlapping 50px padding-left)
+- All animation clones arrive at exact target size (no visual pop/jump on reveal)
+
 ### Layout Stability Tests
 - Player names NEVER move regardless of hand card count (0, 1, 2, or 3 cards)
 - Turn indicator NEVER causes layout shift (toggled via visibility, not v-if)
@@ -349,6 +396,7 @@ Always report results in this structure:
 - Layout: X/8 pass
 - Stability: X/9 pass
 - Animation: X/28 pass
+- Mobile: X/8 pass
 - Failures: (list specific failures if any)
 
 ### Summary

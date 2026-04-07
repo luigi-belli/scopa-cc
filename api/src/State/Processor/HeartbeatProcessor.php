@@ -51,7 +51,7 @@ final class HeartbeatProcessor implements ProcessorInterface
         try {
             $this->entityManager->flush();
         } catch (OptimisticLockException) {
-            throw new ConflictHttpException('Conflict, please retry');
+            throw new ConflictHttpException('error.conflict');
         }
 
         return null;

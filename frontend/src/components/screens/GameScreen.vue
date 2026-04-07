@@ -310,9 +310,9 @@ function flyTo(el: HTMLElement, to: DOMRect, dur: number, ease: string, scale?: 
   const fromT = parseFloat(el.style.top)
   const fromW = parseFloat(el.style.width)
   const fromH = parseFloat(el.style.height)
-  // scale: if provided, shrink/grow to target * scale; if absent, keep original size
-  const toW = scale != null ? scale * to.width : fromW
-  const toH = scale != null ? scale * to.height : fromH
+  // scale: if provided, shrink/grow to scale × source size; if absent, keep original size
+  const toW = scale != null ? scale * fromW : fromW
+  const toH = scale != null ? scale * fromH : fromH
   // Centre the (possibly resized) clone on the target's centre
   const dx = to.left + (to.width - toW) / 2 - fromL
   const dy = to.top  + (to.height - toH) / 2 - fromT
@@ -949,6 +949,11 @@ async function runDealAnimation(newState: GameState) {
 
   const deals: Promise<void>[] = []
   let i = 0
+  // Deal grow scale: when deck visual is smaller than card slots (mobile),
+  // clones must grow during flight. ratio > 1 means grow, ~1 means no scale needed.
+  const firstTarget = allEls[0]?.getBoundingClientRect()
+  const dealScale = firstTarget && dr.width > 0 && Math.abs(firstTarget.width / dr.width - 1) > 0.01
+    ? firstTarget.width / dr.width : undefined
 
   /** Imperatively update deck count DOM as each card-back departs.
    *  Uses direct DOM manipulation instead of reactive updates to avoid
@@ -976,42 +981,32 @@ async function runDealAnimation(newState: GameState) {
     const d = i++ * DEAL_TBL_LAG
     deals.push(sleep(d).then(() => {
       tickDeckDOM()
-      return flyTo(clone, target, DEAL_MS, SLIDE_EASE).then(() => {
+      return flyTo(clone, target, DEAL_MS, SLIDE_EASE, dealScale).then(() => {
         el.style.opacity = '1'   // override reactive opacity:0
         if (clone.parentNode) clone.remove()
       })
     }))
   })
 
-  // My hand
-  myEls.forEach(el => {
-    const target = el.getBoundingClientRect()
-    const clone = mkBack(dr)
-    aLayer().appendChild(clone)
-    const d = i++ * DEAL_HND_LAG
-    deals.push(sleep(d).then(() => {
-      tickDeckDOM()
-      return flyTo(clone, target, DEAL_MS, SLIDE_EASE).then(() => {
-        el.style.opacity = '1'
-        if (clone.parentNode) clone.remove()
-      })
-    }))
-  })
-
-  // Opponent hand
-  oppEls.forEach(el => {
-    const target = el.getBoundingClientRect()
-    const clone = mkBack(dr)
-    aLayer().appendChild(clone)
-    const d = i++ * DEAL_HND_LAG
-    deals.push(sleep(d).then(() => {
-      tickDeckDOM()
-      return flyTo(clone, target, DEAL_MS, SLIDE_EASE).then(() => {
-        el.style.opacity = '1'
-        if (clone.parentNode) clone.remove()
-      })
-    }))
-  })
+  // Hand cards: interleave opponent and player cards (one at a time, alternating)
+  const maxHand = Math.max(myEls.length, oppEls.length)
+  for (let h = 0; h < maxHand; h++) {
+    // Opponent card first, then my card (traditional dealing order: non-self first)
+    for (const el of [oppEls[h], myEls[h]]) {
+      if (!el) continue
+      const target = el.getBoundingClientRect()
+      const clone = mkBack(dr)
+      aLayer().appendChild(clone)
+      const d = i++ * DEAL_HND_LAG
+      deals.push(sleep(d).then(() => {
+        tickDeckDOM()
+        return flyTo(clone, target, DEAL_MS, SLIDE_EASE, dealScale).then(() => {
+          el.style.opacity = '1'
+          if (clone.parentNode) clone.remove()
+        })
+      }))
+    }
+  }
 
   await Promise.all(deals)
   clearLayer()
@@ -1093,6 +1088,7 @@ function handleBackToLobby() {
 }
 
 function handleExit() {
+  if (!confirm(t('game.exitConfirm'))) return
   api.leaveGame(props.gameId).catch(() => {})
   store.$reset()
   router.push({ name: 'lobby' })

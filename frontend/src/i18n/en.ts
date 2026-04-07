@@ -23,6 +23,7 @@ export default {
 
   // Game
   'game.exit': 'Leave game',
+  'game.exitConfirm': 'Are you sure you want to leave the game?',
   'game.pts': 'pts',
   'game.scope': 'scope',
 
@@ -70,8 +71,9 @@ export default {
   'deck.toscane': 'Toscane',
   'deck.siciliane': 'Siciliane',
 
-  // API errors
-  'api.conflict': 'Conflict: please retry',
+  // API/backend error keys
+  'error.conflict': 'Conflict: please retry',
+  'error.gameNameTaken': 'A game with this name already exists. Please choose a different name.',
   'api.accessDenied': 'Access denied: invalid token',
   'api.error': 'API error {status}: {text}',
 } as const satisfies Record<string, string>

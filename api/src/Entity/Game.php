@@ -16,6 +16,7 @@ use App\Dto\Output\CreateGameOutput;
 use App\Dto\Output\GameLookupOutput;
 use App\Dto\Output\GameStateOutput;
 use App\Dto\Output\JoinGameOutput;
+use App\Enum\DeckStyle;
 use App\Enum\GameState;
 use App\State\Processor\CreateGameProcessor;
 use App\State\Processor\HeartbeatProcessor;
@@ -186,8 +187,8 @@ class Game
     #[ORM\Column(type: 'json', options: ['jsonb' => true])]
     private array $roundHistory = [];
 
-    #[ORM\Column(type: 'string', length: 20)]
-    private string $deckStyle = 'piacentine';
+    #[ORM\Column(type: 'string', length: 20, enumType: DeckStyle::class)]
+    private DeckStyle $deckStyle = DeckStyle::Piacentine;
 
     #[ORM\Column(type: 'boolean')]
     private bool $singlePlayer = false;
@@ -519,12 +520,12 @@ class Game
         return $this;
     }
 
-    public function getDeckStyle(): string
+    public function getDeckStyle(): DeckStyle
     {
         return $this->deckStyle;
     }
 
-    public function setDeckStyle(string $style): self
+    public function setDeckStyle(DeckStyle $style): self
     {
         $this->deckStyle = $style;
         return $this;

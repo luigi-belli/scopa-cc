@@ -26,7 +26,7 @@ final class GameLookupProvider implements ProviderInterface
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): array
     {
         $request = $this->requestStack->getCurrentRequest();
-        $name = trim((string) $request?->query->get('name', ''));
+        $name = mb_strtolower(trim((string) $request?->query->get('name', '')));
 
         if ($name === '') {
             return [];

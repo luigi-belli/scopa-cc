@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Dto\Input;
 
+use App\Enum\DeckStyle;
 use Symfony\Component\Validator\Constraints as Assert;
 
 final class CreateGameInput
@@ -17,6 +18,5 @@ final class CreateGameInput
 
     public bool $singlePlayer = false;
 
-    #[Assert\Choice(choices: ['piacentine', 'napoletane', 'toscane', 'siciliane'])]
-    public string $deckStyle = 'piacentine';
+    public DeckStyle $deckStyle = DeckStyle::Piacentine;
 }

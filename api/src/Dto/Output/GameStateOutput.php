@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Dto\Output;
 
+use App\Enum\DeckStyle;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 use App\ValueObject\RoundHistoryEntry;
@@ -34,7 +35,7 @@ final readonly class GameStateOutput
         public bool $isMyTurn,
         public ?array $pendingChoice = null,
         public array $roundHistory = [],
-        public string $deckStyle = 'piacentine',
+        public DeckStyle $deckStyle = DeckStyle::Piacentine,
         public ?array $turnResult = null,
     ) {}
 }
