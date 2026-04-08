@@ -7,7 +7,7 @@
       <div class="player-info">
         <span class="player-name">{{ gs?.opponentName }}</span>
         <span class="score-badge">{{ gs?.opponentTotalScore }} {{ t('game.pts') }}</span>
-        <span class="scopa-badge" v-if="(gs?.opponentScope ?? 0) > 0">{{ gs?.opponentScope }} {{ t('game.scope') }}</span>
+        <span class="scopa-badge" v-if="isScopa && (gs?.opponentScope ?? 0) > 0">{{ gs?.opponentScope }} {{ t('game.scope') }}</span>
       </div>
       <TurnIndicator
         :isMyTurn="false"
@@ -38,6 +38,12 @@
         :deckStyle="currentDeckStyle"
         :count="shownDeckCount"
         ref="deckVisualRef"
+      />
+      <CardComponent
+        v-if="isBriscola && gs?.briscolaCard"
+        :card="gs.briscolaCard"
+        :deckStyle="currentDeckStyle"
+        class="briscola-trump-card"
       />
       <div class="table-center" :class="{ 'no-deck': shownDeckCount === 0 }" ref="tableCenterEl">
         <CardComponent
@@ -80,7 +86,7 @@
       <div class="player-info">
         <span class="player-name">{{ gs?.myName }}</span>
         <span class="score-badge">{{ gs?.myTotalScore }} {{ t('game.pts') }}</span>
-        <span class="scopa-badge" v-if="(gs?.myScope ?? 0) > 0">{{ gs?.myScope }} {{ t('game.scope') }}</span>
+        <span class="scopa-badge" v-if="isScopa && (gs?.myScope ?? 0) > 0">{{ gs?.myScope }} {{ t('game.scope') }}</span>
       </div>
     </div>
 
@@ -89,14 +95,14 @@
 
     <!-- Overlays -->
     <CaptureChoiceOverlay
-      v-if="showCaptureChoice && gs?.state === 'choosing' && gs.pendingChoice"
+      v-if="isScopa && showCaptureChoice && gs?.state === 'choosing' && gs.pendingChoice"
       :options="gs.pendingChoice"
       :deckStyle="currentDeckStyle"
       @select="handleSelectCapture"
     />
 
     <RoundEndOverlay
-      v-if="showRoundEnd && lastRoundScores"
+      v-if="isScopa && showRoundEnd && lastRoundScores"
       :scores="lastRoundScores"
       :myIndex="store.myIndex"
       :myName="gs?.myName ?? ''"
@@ -108,8 +114,9 @@
     />
 
     <GameOverOverlay
-      v-if="showGameOver && lastRoundScores"
+      v-if="showGameOver && (lastRoundScores || isBriscola)"
       :scores="lastRoundScores"
+      :gameType="gs?.gameType ?? 'scopa'"
       :winner="gameOverWinner"
       :myIndex="store.myIndex"
       :myName="gs?.myName ?? ''"
@@ -203,6 +210,8 @@ const inPostAnimDelay  = ref(false)
 
 const gs = computed(() => store.displayState)
 const currentDeckStyle = computed<DeckStyle>(() => (gs.value?.deckStyle as DeckStyle) || 'piacentine')
+const isBriscola = computed(() => gs.value?.gameType === 'briscola')
+const isScopa = computed(() => !isBriscola.value)
 /** Override deck count during deal animation so the deck visual stays visible
  *  until the last card-back clone flies out. null = use live gs value. */
 const dealDeckCountOverride = ref<number | null>(null)
@@ -408,6 +417,8 @@ const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
 
 function isDealState(prev: GameState | null, next: GameState): boolean {
   if (!prev) return true
+  // Briscola: no re-deal animations (single cards drawn after tricks just appear)
+  if (next.gameType === 'briscola') return false
   if (prev.myHand.length === 0 && next.myHand.length > 0) return true
   // Deck count only decreases when dealHands() runs — never during normal play
   if (next.deckCount < prev.deckCount) return true
@@ -511,9 +522,16 @@ async function handleRoundEnd(data: RoundEndData): Promise<void> {
 }
 
 async function handleGameOver(data: GameOverData): Promise<void> {
-  lastRoundScores.value = data.scores
+  lastRoundScores.value = data.scores || null
   gameOverWinner.value = data.winner
-  if (data.gameState) await animateEndOfRoundSweep(data.gameState, data.sweep)
+  if (data.gameState) {
+    // For Briscola, no sweep animation — just commit the final state
+    if (data.gameState.gameType === 'briscola') {
+      store.commitState(data.gameState)
+    } else {
+      await animateEndOfRoundSweep(data.gameState, data.sweep)
+    }
+  }
   showGameOver.value = true
   store.clearSession()
   if (data.winner === store.myIndex) nextTick(() => confettiRef.value?.start())
@@ -606,6 +624,7 @@ async function handleTurnResult(result: TurnResult) {
     if (result.type === 'place')   await animPlace(result)
     else if (result.type === 'capture') await animCapture(result)
     else if (result.type === 'choosing') await animPlace(result)
+    else if (result.type === 'trick') await animTrick(result)
   } catch (e) { console.error('Animation error:', e) }
 
   clearTimeout(safety)
@@ -885,6 +904,102 @@ async function animCapture(result: TurnResult) {
     scopaFlashRef.value?.show()
     const capRef = result.playerIndex === store.myIndex ? myCapturedRef : opponentCapturedRef
     capRef.value?.addScopa(card)
+  }
+}
+
+// ════════════════════════════════════════════════════
+// TRICK ANIMATION (Briscola)
+//
+// When the follower plays, the trick resolves:
+// 1. Follower's card flies from hand → table center (500ms)
+// 2. Pause to show both cards (150ms + glow)
+// 3. Both cards sweep to winner's captured deck (450ms)
+// ════════════════════════════════════════════════════
+
+async function animTrick(result: TurnResult) {
+  const isMe = result.playerIndex === store.myIndex
+  const card = result.card     // follower's card
+  const leaderCard = result.leaderCard
+  const trickWinner = result.trickWinner ?? 0
+
+  // 1. Find & hide follower's card in hand
+  let srcR: DOMRect | null = null
+  if (isMe) {
+    const hand = gs.value?.myHand ?? []
+    const idx = hand.findIndex(c => c.suit === card.suit && c.value === card.value)
+    if (idx >= 0) {
+      const el = q(`[data-card-key="my-${cardKey(card, idx)}"]`)
+      if (el) { srcR = el.getBoundingClientRect(); setStyle(el, 'visibility', 'hidden') }
+    }
+  } else {
+    const backs = qAll('.player-area.opponent .hand-row .card-back')
+    if (backs.length) {
+      const el = backs[backs.length - 1]
+      srcR = el.getBoundingClientRect()
+      setStyle(el, 'visibility', 'hidden')
+    }
+  }
+
+  // 2. Fly follower's card to table center (next slot after leader's card)
+  const dest = getSlotRect(1, srcR?.width ?? 75, srcR?.height ?? 133)
+  if (srcR && dest) {
+    const clone = isMe ? mkFace(card, srcR) : mkBack(srcR)
+    aLayer().appendChild(clone)
+    if (!isMe) {
+      setTimeout(() => {
+        const img = clone.querySelector('img')
+        if (img) img.src = cardImagePath(card, currentDeckStyle.value)
+      }, SLIDE_MS * 0.4)
+    }
+    await flyTo(clone, dest, SLIDE_MS, SLIDE_EASE)
+  }
+
+  // 3. Pause + glow both trick cards
+  await sleep(CAP_PAUSE)
+  const table = gs.value?.table ?? []
+  const glowEls: HTMLElement[] = []
+  table.forEach((tc, idx) => {
+    const el = q(`[data-card-key="${cardKey(tc, idx)}"]`)
+    if (el) { el.classList.add('captured-glow'); glowEls.push(el) }
+  })
+  await sleep(GLOW_MS)
+  glowEls.forEach(el => el.classList.remove('captured-glow'))
+
+  // 4. Snapshot positions, hide table cards
+  const sweepItems: { card: Card; rect: DOMRect }[] = []
+  // Leader card (already on table from a previous place animation)
+  if (leaderCard) {
+    const lIdx = table.findIndex(t => t.suit === leaderCard.suit && t.value === leaderCard.value)
+    if (lIdx >= 0) {
+      const el = q(`[data-card-key="${cardKey(leaderCard, lIdx)}"]`)
+      if (el) {
+        sweepItems.push({ card: leaderCard, rect: el.getBoundingClientRect() })
+        setStyle(el, 'visibility', 'hidden')
+      }
+    }
+  }
+  // Follower card (use the dest position from the clone)
+  if (dest) {
+    sweepItems.push({ card, rect: dest })
+  }
+
+  // 5. Sweep to winner's captured deck
+  const capR = capturedR(trickWinner)
+  if (capR && sweepItems.length > 0) {
+    const scale = sweepScale(sweepItems[0].rect.width, capR)
+    const ps: Promise<void>[] = []
+    sweepItems.forEach((si, i) => {
+      const cl = mkFace(si.card, si.rect)
+      aLayer().appendChild(cl)
+      ps.push(
+        sleep(i * SWEEP_LAG).then(() =>
+          flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
+            if (cl.parentNode) cl.remove()
+          })
+        )
+      )
+    })
+    await Promise.all(ps)
   }
 }
 

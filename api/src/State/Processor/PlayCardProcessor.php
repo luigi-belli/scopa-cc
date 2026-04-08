@@ -10,7 +10,7 @@ use App\Dto\Input\PlayCardInput;
 use App\Dto\Output\GameStateOutput;
 use App\Enum\GameState;
 use App\Message\HandleAITurnMessage;
-use App\Service\GameEngine;
+use App\Service\GameEngineFactory;
 use App\Service\MercurePublisher;
 use App\Service\PlayerAuthenticator;
 use App\ValueObject\TurnResultType;
@@ -26,7 +26,7 @@ final class PlayCardProcessor implements ProcessorInterface
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly PlayerAuthenticator $authenticator,
-        private readonly GameEngine $gameEngine,
+        private readonly GameEngineFactory $engineFactory,
         private readonly MercurePublisher $mercurePublisher,
         private readonly MessageBusInterface $messageBus,
     ) {}
@@ -48,7 +48,8 @@ final class PlayCardProcessor implements ProcessorInterface
             throw new BadRequestHttpException('It is not your turn');
         }
 
-        $result = $this->gameEngine->playCard($game, $playerIndex, $data->cardIndex);
+        $engine = $this->engineFactory->forGame($game);
+        $result = $engine->playCard($game, $playerIndex, $data->cardIndex);
 
         try {
             $this->entityManager->flush();
@@ -66,15 +67,15 @@ final class PlayCardProcessor implements ProcessorInterface
                 'captured' => [],
                 'scopa' => false,
             ]);
-            $this->mercurePublisher->publishGameState($gameId, $game, $this->gameEngine);
+            $this->mercurePublisher->publishGameState($gameId, $game, $engine);
         } else {
-            $this->mercurePublisher->publishTurnOutcome($gameId, $game, $this->gameEngine, $result);
+            $this->mercurePublisher->publishTurnOutcome($gameId, $game, $engine, $result);
 
             if ($game->isSinglePlayer() && $game->getState() === GameState::Playing && $game->getCurrentPlayer() === 1) {
                 $this->messageBus->dispatch(new HandleAITurnMessage($gameId));
             }
         }
 
-        return $this->gameEngine->getStateForPlayer($game, $playerIndex);
+        return $engine->getStateForPlayer($game, $playerIndex);
     }
 }

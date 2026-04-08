@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Dto\Output;
 
 use App\Enum\DeckStyle;
+use App\Enum\GameType;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
+use App\ValueObject\LastTrick;
 use App\ValueObject\RoundHistoryEntry;
 
 final readonly class GameStateOutput
@@ -38,5 +40,38 @@ final readonly class GameStateOutput
         public DeckStyle $deckStyle = DeckStyle::Piacentine,
         public ?array $turnResult = null,
         public ?string $mercureToken = null,
+        public GameType $gameType = GameType::Scopa,
+        public ?Card $briscolaCard = null,
+        public ?LastTrick $lastTrick = null,
     ) {}
+
+    public function withMercureToken(string $mercureToken): self
+    {
+        return new self(
+            state: $this->state,
+            currentPlayer: $this->currentPlayer,
+            myIndex: $this->myIndex,
+            myName: $this->myName,
+            opponentName: $this->opponentName,
+            myHand: $this->myHand,
+            myCapturedCount: $this->myCapturedCount,
+            myScope: $this->myScope,
+            myTotalScore: $this->myTotalScore,
+            opponentHandCount: $this->opponentHandCount,
+            opponentCapturedCount: $this->opponentCapturedCount,
+            opponentScope: $this->opponentScope,
+            opponentTotalScore: $this->opponentTotalScore,
+            table: $this->table,
+            deckCount: $this->deckCount,
+            isMyTurn: $this->isMyTurn,
+            pendingChoice: $this->pendingChoice,
+            roundHistory: $this->roundHistory,
+            deckStyle: $this->deckStyle,
+            turnResult: $this->turnResult,
+            mercureToken: $mercureToken,
+            gameType: $this->gameType,
+            briscolaCard: $this->briscolaCard,
+            lastTrick: $this->lastTrick,
+        );
+    }
 }

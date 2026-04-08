@@ -1,7 +1,10 @@
 export default {
   // Lobby
-  'lobby.title': 'Scopa',
-  'lobby.subtitle': 'The Italian card game',
+  'lobby.title': 'Italian Cards',
+  'lobby.subtitle': 'Italian card games',
+  'lobby.gameType': 'Game',
+  'lobby.gameType.scopa': 'Scopa',
+  'lobby.gameType.briscola': 'Briscola',
   'lobby.playerName': 'Your name',
   'lobby.playerNamePlaceholder': 'Enter your name',
   'lobby.gameName': 'Game name',
@@ -74,6 +77,15 @@ export default {
   'deck.napoletane': 'Napoletane',
   'deck.toscane': 'Toscane',
   'deck.siciliane': 'Siciliane',
+
+  // Briscola
+  'briscola.trump': 'Trump',
+  'briscola.points': 'points',
+  'briscola.trickWon': 'Trick won!',
+  'briscola.trickLost': 'Trick lost',
+  'briscola.draw': 'Draw! 60 - 60',
+  'briscola.score.points': 'Card points',
+  'briscola.lastTrick': 'Last trick',
 
   // API/backend error keys
   'error.conflict': 'Conflict: please retry',

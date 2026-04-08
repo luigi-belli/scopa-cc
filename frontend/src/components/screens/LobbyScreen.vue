@@ -33,6 +33,20 @@
         </div>
 
         <div class="form-group">
+          <label>{{ t('lobby.gameType') }}</label>
+          <div class="language-selector">
+            <button
+              class="lang-btn" :class="{ selected: gameType === 'scopa' }"
+              @click="gameType = 'scopa'"
+            >{{ t('lobby.gameType.scopa') }}</button>
+            <button
+              class="lang-btn" :class="{ selected: gameType === 'briscola' }"
+              @click="gameType = 'briscola'"
+            >{{ t('lobby.gameType.briscola') }}</button>
+          </div>
+        </div>
+
+        <div class="form-group">
           <label>{{ t('lobby.deckStyle') }}</label>
           <DeckSelector />
         </div>
@@ -78,6 +92,7 @@ import { setMercureCookie } from '@/composables/useMercure'
 import { useGameStore } from '@/stores/gameStore'
 import { useI18n } from '@/i18n'
 import DeckSelector from '@/components/lobby/DeckSelector.vue'
+import type { GameType } from '@/types/game'
 
 const router = useRouter()
 const api = useApi()
@@ -87,6 +102,7 @@ const { t, locale, setLocale } = useI18n()
 
 const playerName = ref('')
 const gameName = ref('')
+const gameType = ref<GameType>('scopa')
 const error = ref('')
 
 onMounted(() => {
@@ -124,7 +140,8 @@ async function createGame() {
       playerName.value.trim(),
       gameName.value.trim(),
       false,
-      selectedDeck.value
+      selectedDeck.value,
+      gameType.value
     )
     store.setGame(result.gameId, result.playerToken, 0)
     if (result.mercureToken) setMercureCookie(result.mercureToken)
@@ -160,7 +177,8 @@ async function startSinglePlayer() {
       playerName.value.trim(),
       null,
       true,
-      selectedDeck.value
+      selectedDeck.value,
+      gameType.value
     )
     store.setGame(result.gameId, result.playerToken, 0)
     if (result.mercureToken) setMercureCookie(result.mercureToken)

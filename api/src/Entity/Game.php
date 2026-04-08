@@ -18,6 +18,7 @@ use App\Dto\Output\GameStateOutput;
 use App\Dto\Output\JoinGameOutput;
 use App\Enum\DeckStyle;
 use App\Enum\GameState;
+use App\Enum\GameType;
 use App\State\Processor\CreateGameProcessor;
 use App\State\Processor\HeartbeatProcessor;
 use App\State\Processor\JoinGameProcessor;
@@ -27,7 +28,9 @@ use App\State\Processor\PlayCardProcessor;
 use App\State\Processor\SelectCaptureProcessor;
 use App\State\Provider\GameLookupProvider;
 use App\State\Provider\GameStateProvider;
+use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
+use App\ValueObject\LastTrick;
 use App\ValueObject\PendingPlay;
 use App\ValueObject\RoundHistoryEntry;
 use Doctrine\ORM\Mapping as ORM;
@@ -192,6 +195,20 @@ class Game
 
     #[ORM\Column(type: 'boolean')]
     private bool $singlePlayer = false;
+
+    #[ORM\Column(type: 'string', length: 20, enumType: GameType::class)]
+    private GameType $gameType = GameType::Scopa;
+
+    /** @var array{suit: string, value: int}|null */
+    #[ORM\Column(type: 'json', nullable: true, options: ['jsonb' => true])]
+    private ?array $briscolaCard = null;
+
+    /** @var array{leaderCard: array{suit: string, value: int}, followerCard: array{suit: string, value: int}, winnerIndex: int}|null */
+    #[ORM\Column(type: 'json', nullable: true, options: ['jsonb' => true])]
+    private ?array $lastTrick = null;
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $trickLeader = null;
 
     #[ORM\Version]
     #[ORM\Column(type: 'integer')]
@@ -539,6 +556,56 @@ class Game
     public function setSinglePlayer(bool $single): self
     {
         $this->singlePlayer = $single;
+        return $this;
+    }
+
+    public function getGameType(): GameType
+    {
+        return $this->gameType;
+    }
+
+    public function setGameType(GameType $gameType): self
+    {
+        $this->gameType = $gameType;
+        return $this;
+    }
+
+    public function getBriscolaCard(): ?Card
+    {
+        if ($this->briscolaCard === null) {
+            return null;
+        }
+        return Card::fromArray($this->briscolaCard);
+    }
+
+    public function setBriscolaCard(?Card $card): self
+    {
+        $this->briscolaCard = $card?->jsonSerialize();
+        return $this;
+    }
+
+    public function getLastTrick(): ?LastTrick
+    {
+        if ($this->lastTrick === null) {
+            return null;
+        }
+        return LastTrick::fromArray($this->lastTrick);
+    }
+
+    public function setLastTrick(?LastTrick $trick): self
+    {
+        $this->lastTrick = $trick?->jsonSerialize();
+        return $this;
+    }
+
+    public function getTrickLeader(): ?int
+    {
+        return $this->trickLeader;
+    }
+
+    public function setTrickLeader(?int $leader): self
+    {
+        $this->trickLeader = $leader;
         return $this;
     }
 

@@ -11,7 +11,7 @@ use App\Dto\Output\CreateGameOutput;
 use App\Entity\Game;
 use App\Enum\GameState;
 use App\Message\HandleAITurnMessage;
-use App\Service\GameEngine;
+use App\Service\GameEngineFactory;
 use App\Service\MercureTokenService;
 use App\Service\PlayerTokenService;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
@@ -27,7 +27,7 @@ final class CreateGameProcessor implements ProcessorInterface
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly PlayerTokenService $tokenService,
-        private readonly GameEngine $gameEngine,
+        private readonly GameEngineFactory $engineFactory,
         private readonly MessageBusInterface $messageBus,
         private readonly MercureTokenService $mercureTokenService,
     ) {}
@@ -51,14 +51,17 @@ final class CreateGameProcessor implements ProcessorInterface
         $game->setDeckStyle($data->deckStyle);
         $game->setLastHeartbeat1(new \DateTimeImmutable());
 
+        $game->setGameType($data->gameType);
+
         if ($data->singlePlayer) {
             $game->setSinglePlayer(true);
             $game->setPlayer2Name('Claude');
             $game->setPlayer2Token($this->tokenService->generateToken());
             $game->setLastHeartbeat2(new \DateTimeImmutable());
 
-            $this->gameEngine->initializeGame($game);
-            $this->gameEngine->startRound($game);
+            $engine = $this->engineFactory->forGame($game);
+            $engine->initializeGame($game);
+            $engine->startGame($game);
         } else {
             if ($data->gameName === null || trim($data->gameName) === '') {
                 throw new BadRequestHttpException('Game name is required for multiplayer');
@@ -93,7 +96,8 @@ final class CreateGameProcessor implements ProcessorInterface
 
         $gameState = null;
         if ($data->singlePlayer) {
-            $gameState = $this->gameEngine->getStateForPlayer($game, 0);
+            $engine = $this->engineFactory->forGame($game);
+            $gameState = $engine->getStateForPlayer($game, 0);
         }
 
         $gameId = (string) $game->getId();
@@ -102,6 +106,7 @@ final class CreateGameProcessor implements ProcessorInterface
             gameId: $gameId,
             playerToken: $token,
             state: $game->getState()->value,
+            gameType: $game->getGameType(),
             gameState: $gameState,
             mercureToken: $this->mercureTokenService->generateSubscriberToken($gameId, 0),
         );

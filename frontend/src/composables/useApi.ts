@@ -5,6 +5,7 @@ import type {
   JoinGameResponse,
   GameLookupResult,
   GameState,
+  GameType,
 } from '@/types/game'
 
 export class ApiError extends Error {
@@ -15,7 +16,7 @@ export class ApiError extends Error {
 }
 
 interface Api {
-  createGame(playerName: string, gameName: string | null, singlePlayer: boolean, deckStyle: string): Promise<CreateGameResponse>
+  createGame(playerName: string, gameName: string | null, singlePlayer: boolean, deckStyle: string, gameType: GameType): Promise<CreateGameResponse>
   lookupGame(name: string): Promise<GameLookupResult[]>
   joinGame(gameId: string, playerName: string): Promise<JoinGameResponse>
   getState(gameId: string): Promise<GameState>
@@ -82,11 +83,12 @@ export function useApi(): Api {
     playerName: string,
     gameName: string | null,
     singlePlayer: boolean,
-    deckStyle: string
+    deckStyle: string,
+    gameType: GameType = 'scopa'
   ): Promise<CreateGameResponse> {
     return request<CreateGameResponse>('/games', {
       method: 'POST',
-      body: JSON.stringify({ playerName, gameName, singlePlayer, deckStyle }),
+      body: JSON.stringify({ playerName, gameName, singlePlayer, deckStyle, gameType }),
     })
   }
 

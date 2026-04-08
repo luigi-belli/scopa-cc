@@ -1,8 +1,8 @@
-# Scopa - Italian Card Game
+# Italian Card Games (Scopa & Briscola)
 
 ## Overview
 
-Web-based two-player Scopa card game with real-time multiplayer and single-player AI mode. Uses traditional Italian regional card images on a green casino-table background. Built with API Platform (PHP/Symfony), Vue 3 + TypeScript, PostgreSQL, and Mercure SSE for real-time.
+Web-based two-player Italian card games with real-time multiplayer and single-player AI mode. Supports **Scopa** (table-capture) and **Briscola** (trick-taking). Uses traditional Italian regional card images on a green casino-table background. Built with API Platform (PHP/Symfony), Vue 3 + TypeScript, PostgreSQL, and Mercure SSE for real-time. The architecture supports adding new card games cleanly via the strategy pattern.
 
 ## Tech Stack
 
@@ -67,31 +67,40 @@ scopa/
         test/
           framework.yaml       # Test-specific framework config
     migrations/
-      Version20260405000001.php  # games table (26 columns)
+      Version20260405000001.php  # games table (initial Scopa schema)
+      Version20260408000001.php  # Add multi-game: game_type, briscola_card, last_trick, trick_leader
     src/
       Kernel.php
       Entity/
         Game.php               # Single entity: all game state in one table + ApiResource operations
       Enum/
+        GameType.php           # scopa|briscola
         GameState.php          # waiting|playing|choosing|round-end|game-over|finished
         DeckStyle.php          # piacentine|napoletane|toscane|siciliane
         Suit.php               # Denari|Coppe|Bastoni|Spade (with letter() method)
       Dto/
         Input/
-          CreateGameInput.php  # playerName, gameName?, singlePlayer, deckStyle
+          CreateGameInput.php  # playerName, gameName?, singlePlayer, deckStyle, gameType
           JoinGameInput.php    # playerName
           PlayCardInput.php    # cardIndex
           SelectCaptureInput.php # optionIndex
         Output/
-          CreateGameOutput.php # gameId, playerToken, state, gameState?
+          CreateGameOutput.php # gameId, playerToken, state, gameType, gameState?
           JoinGameOutput.php   # gameId, playerToken, gameState
-          GameStateOutput.php  # Full player-specific game state (20 fields)
-          GameLookupOutput.php # id, name, state
+          GameStateOutput.php  # Full player-specific game state (23 fields, incl. gameType, briscolaCard, lastTrick)
+          GameLookupOutput.php # id, name, state, gameType
       Service/
-        GameEngine.php         # Core game logic
+        GameEngine.php         # Interface: initializeGame, startGame, playCard, getStateForPlayer, selectCapture, nextRound
+        GameEngineFactory.php  # Resolves GameEngine implementation by GameType
+        ScopaEngine.php        # Scopa: table-capture logic, multi-round
+        BriscolaEngine.php     # Briscola: trick-taking logic, single game, trump suit
         DeckService.php        # Deck creation, Fisher-Yates shuffle
-        ScoringService.php     # 5-category round scoring
-        AIService.php          # AI move evaluation
+        AIService.php          # Interface: evaluateMove, autoSelectCapture
+        AIServiceFactory.php   # Resolves AIService implementation by GameType
+        ScopaAIService.php     # Scopa AI: multi-factor capture/placement scoring
+        BriscolaAIService.php  # Briscola AI: trump management, trick evaluation
+        ScopaScoringService.php # Scopa 5-category round scoring
+        BriscolaScoringService.php # Briscola card point values and strength ranking
         MercurePublisher.php   # Publishes SSE events via Symfony Mercure HubInterface
         PlayerTokenService.php # Token generation, name sanitization
       State/
@@ -188,55 +197,17 @@ scopa/
     default.conf               # Reverse proxy: SPA, /api/, /.well-known/mercure
 ```
 
-## Game Rules (Traditional Scopa)
+## Game Rules
 
-### The Deck
+This application supports multiple Italian card games. Full rules for each game are in dedicated files:
+
+- **[Scopa Rules](docs/scopa-rules.md)** — Table-capture game, multi-round to 11 points
+- **[Briscola Rules](docs/briscola-rules.md)** — Trick-taking game with trump suit, single game to 61+ points
+
+### Shared Card Deck
 - **40 cards** in 4 suits: **Denari** (coins), **Coppe** (cups), **Bastoni** (clubs), **Spade** (swords)
 - Values 1-10 per suit (8=Fante/Jack, 9=Cavallo/Knight, 10=Re/King)
 - Card image naming: `{value}{suit_letter}.{ext}` where suit letters are: `d`=Denari, `c`=Coppe, `b`=Bastoni, `s`=Spade
-
-### Deal
-- 4 cards dealt face-up to the table
-- 3 cards dealt to each player
-- When both players' hands are empty and the deck has cards, deal 3 more to each (no new table cards)
-- The non-dealer goes first; dealer alternates each round
-
-### Turn Flow
-1. Player plays one card from their hand
-2. **Capture priority rule**: If the played card's value matches any single table card, **must capture that card** (cannot choose a multi-card sum instead)
-3. If multiple single-card matches exist, player chooses which one to capture
-4. If no single-card match but a combination of table cards sums to the played value, capture those cards
-5. If multiple sum combinations exist, player chooses which set
-6. If no captures possible, card is placed on the table
-7. **Scopa**: If a capture clears all cards from the table, that's a scopa (worth 1 point). Does NOT count on the very last play of a round.
-8. **End of round**: When all cards are played and deck is empty, the last player to capture gets remaining table cards (not a scopa)
-
-### Scoring (per round)
-| Category | Rule |
-|---|---|
-| **Carte** | Most total captured cards (1 point, 0 if tied) |
-| **Denari** | Most Denari-suit cards captured (1 point, 0 if tied) |
-| **Sette Bello** | Captured the 7 of Denari (always 1 point to holder) |
-| **Primiera** | Highest sum of best primiera-value card per suit (1 point) |
-| **Scope** | 1 point per scopa made during the round |
-
-### Primiera Values
-| Card Value | Primiera Points |
-|---|---|
-| 7 | 21 |
-| 6 | 18 |
-| 1 (Asso) | 16 |
-| 5 | 15 |
-| 4 | 14 |
-| 3 | 13 |
-| 2 | 12 |
-| 8, 9, 10 | 10 |
-
-Must have all 4 suits to compete. If one player has all 4 and the other doesn't, the one with all 4 wins. If neither has all 4, no point awarded.
-
-### Winning
-- Game to **11 points** across multiple rounds
-- If both reach 11+ with the same score, play continues until clear lead
 
 ## Playing Modes
 
@@ -321,6 +292,10 @@ Single `games` table. Players embedded inline (always exactly 2). Card arrays st
 | `round_history` | JSONB | Array of `{scores, totals}` per completed round |
 | `deck_style` | VARCHAR(20) | Selected deck style, default 'piacentine' |
 | `single_player` | BOOLEAN | True for single-player games vs AI |
+| `game_type` | VARCHAR(20) | Enum: scopa, briscola (default 'scopa') |
+| `briscola_card` | JSONB | Nullable, the revealed trump card `{suit, value}` (Briscola only) |
+| `last_trick` | JSONB | Nullable, last resolved trick `{leaderCard, followerCard, winnerIndex}` (Briscola only) |
+| `trick_leader` | INT | Nullable, who leads the current trick (Briscola only) |
 | `version` | INT | Doctrine `@Version` for optimistic locking |
 | `last_heartbeat1` | TIMESTAMP | Last heartbeat from player 1, nullable |
 | `last_heartbeat2` | TIMESTAMP | Last heartbeat from player 2, nullable |
@@ -377,23 +352,42 @@ Publishing uses **Symfony Mercure Bundle's `HubInterface`** (not raw curl). The 
 
 JWT auth: Mercure bundle mints HS256 JWTs using the shared secret from `MERCURE_JWT_SECRET` env var. Anonymous mode enabled on Mercure hub for subscribers.
 
-### Game Engine (GameEngine.php)
+### Multi-Game Architecture (Strategy Pattern)
 
-Key methods: `initializeGame()`, `startRound()`, `dealHands()`, `findCaptures()`, `findSubsetsWithSum()`, `playCard()`, `selectCapture()`, `endRound()`, `nextRound()`, `getStateForPlayer()`.
+The backend uses a **strategy pattern** to support multiple card games:
 
-Capture logic: single-card matches take priority over sum combinations. Subset-sum via recursive backtracking (`findSubsetsWithSum` → `backtrack()`). The `backtrack()` method requires `count($current) >= 2` for sum matches (must be at least 2 table cards).
+- **`GameEngine`** (interface): Defines the contract — `initializeGame()`, `startGame()`, `playCard()`, `getStateForPlayer()`, `selectCapture()`, `nextRound()`
+- **`GameEngineFactory`**: Resolves `ScopaEngine` or `BriscolaEngine` based on `Game::getGameType()`
+- **`AIService`** (interface): Defines `evaluateMove()` and `autoSelectCapture()`
+- **`AIServiceFactory`**: Resolves `ScopaAIService` or `BriscolaAIService` based on game type
+
+All processors and providers inject `GameEngineFactory` (not a specific engine). The factory resolves the correct engine from `$game->getGameType()`.
+
+**Adding a new game**: Create `NewGameEngine implements GameEngine`, `NewGameAIService implements AIService`, `NewGameScoringService`, add enum case to `GameType`, register in both factories.
 
 Race condition prevention: Doctrine `@Version` optimistic locking on the Game entity. Each processor wraps `$entityManager->flush()` in a try/catch for `OptimisticLockException`, throwing `ConflictHttpException` (HTTP 409) on conflict.
 
-### AI (AIService.php)
+### Scopa Engine (ScopaEngine.php)
 
-Evaluates every legal play with multi-factor scoring:
-- Capture: +10/card, +15/denari, +100 sette bello, +0.5×primiera, +12/seven, +6/six, +80 scopa, +3/multi-card
-- Placement: -0.8×primiera, -120 sette bello, -20 denari, -25 sevens, -30 easy scopa, -15 matching, +5 face cards
+Key methods: `initializeGame()`, `startGame()`, `dealHands()`, `findCaptures()`, `playCard()`, `selectCapture()`, `nextRound()`, `getStateForPlayer()`.
 
-Key methods: `evaluateMove(Game, aiIndex)` returns `{cardIndex, optionIndex}`. `autoSelectCapture(Game)` returns the best option index when AI faces a capture choice.
+Capture logic: single-card matches take priority over sum combinations. Subset-sum via recursive backtracking. Multi-round game to 11 points. See `docs/scopa-rules.md` for full rules.
 
-Async via Symfony Messenger: `HandleAITurnMessage` dispatched after player move. Handler (`HandleAITurnHandler`) sleeps 1.5s, then plays. If AI needs to choose capture, it auto-selects immediately. If AI's turn again after re-deal, dispatches another message.
+### Briscola Engine (BriscolaEngine.php)
+
+Key methods: `initializeGame()`, `startGame()`, `playCard()`, `getStateForPlayer()`.
+
+Trick-taking logic: leader plays to table, follower plays to resolve trick. Trump suit determined by briscola card. 20 tricks per game, 120 total points. Winner draws first after each trick. See `docs/briscola-rules.md` for full rules.
+
+**Does NOT support** `selectCapture()` or `nextRound()` — throws `\LogicException` (state guards prevent these from being called).
+
+### AI
+
+**Scopa AI** (`ScopaAIService`): Multi-factor scoring for captures and placements. Weights for card value, denari suit, sette bello, primiera, scopa potential.
+
+**Briscola AI** (`BriscolaAIService`): Separate strategies for leading vs following. Manages trump cards, avoids giving away high-point cards, captures valuable tricks.
+
+Async via Symfony Messenger: `HandleAITurnMessage` dispatched after player move. Handler (`HandleAITurnHandler`) uses factories to resolve the correct engine and AI service. Sleeps 1.5s, then plays.
 
 ### Game State Structure (GameStateOutput)
 ```json
@@ -417,7 +411,10 @@ Async via Symfony Messenger: `HandleAITurnMessage` dispatched after player move.
   "pendingChoice": null,
   "roundHistory": [],
   "deckStyle": "piacentine",
-  "turnResult": null
+  "turnResult": null,
+  "gameType": "scopa",
+  "briscolaCard": null,
+  "lastTrick": null
 }
 ```
 
@@ -426,7 +423,7 @@ Async via Symfony Messenger: `HandleAITurnMessage` dispatched after player move.
 All API endpoints use explicit DTOs for request deserialization and response serialization:
 
 **Input DTOs** (Symfony Validator constraints):
-- `CreateGameInput`: `playerName` (NotBlank, max 30), `gameName` (nullable, max 60), `singlePlayer` (bool), `deckStyle` (Choice: piacentine/napoletane/toscane/siciliane)
+- `CreateGameInput`: `playerName` (NotBlank, max 30), `gameName` (nullable, max 60), `singlePlayer` (bool), `deckStyle` (Choice: piacentine/napoletane/toscane/siciliane), `gameType` (enum: scopa/briscola, default scopa)
 - `JoinGameInput`: `playerName` (NotBlank, max 30)
 - `PlayCardInput`: `cardIndex` (NotNull, >=0)
 - `SelectCaptureInput`: `optionIndex` (NotNull, >=0)

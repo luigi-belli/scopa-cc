@@ -6,18 +6,18 @@ namespace App\Tests\Unit\Service;
 
 use App\Entity\Game;
 use App\Enum\Suit;
-use App\Service\ScoringService;
+use App\Service\ScopaScoringService;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 use PHPUnit\Framework\TestCase;
 
 class ScoringServiceTest extends TestCase
 {
-    private ScoringService $service;
+    private ScopaScoringService $service;
 
     protected function setUp(): void
     {
-        $this->service = new ScoringService();
+        $this->service = new ScopaScoringService();
     }
 
     private function createGameWithCaptures(CardCollection $p1Captured, CardCollection $p2Captured): Game
