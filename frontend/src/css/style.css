@@ -520,6 +520,12 @@ body {
   padding-left: 0;
 }
 
+/* Briscola: single centered slot for the current trick card */
+.table-center.briscola-table {
+  grid-template-columns: 75px;
+  grid-template-rows: 133px;
+}
+
 /* Table card slots get smooth transition for reflow after capture */
 .table-center > * {
   justify-self: center;
@@ -974,6 +980,11 @@ body {
     grid-template-columns: repeat(5, 58px);
     grid-template-rows: repeat(2, 103px);
     padding-left: 50px;
+  }
+
+  .table-center.briscola-table {
+    grid-template-columns: 58px;
+    grid-template-rows: 103px;
   }
 
   .captured-stack {
