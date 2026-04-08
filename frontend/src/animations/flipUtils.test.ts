@@ -35,6 +35,7 @@ describe('computeSlotRect', () => {
     gap: 6,
     padLeft: 70,
     rowCount: 2,
+    colCount: 5,
   }
 
   // Container: 900px wide, 340px tall, at origin
@@ -83,6 +84,7 @@ describe('computeSlotRect', () => {
       gap: 6,
       padLeft: 50,
       rowCount: 2,
+      colCount: 5,
     }
 
     const rect = computeSlotRect(0, 58, 103, mobileContainer, mobileGrid)
@@ -107,6 +109,7 @@ describe('computeSlotRect', () => {
       gap: 6,
       padLeft: gridPadLeft,
       rowCount: 2,
+      colCount: 5,
     }
     const slot0 = computeSlotRect(0, 58, 103, mobileContainer, mobileGrid)
 
@@ -126,6 +129,26 @@ describe('computeSlotRect', () => {
 
     // On desktop, first slot starts well past the deck due to centering
     expect(slot0.left).toBeGreaterThan(deckRight)
+  })
+
+  it('places briscola single slot centered in container', () => {
+    const briscolaGrid: SlotGridParams = {
+      colW: 75,
+      rowH: 133,
+      gap: 6,
+      padLeft: 70,
+      rowCount: 1,
+      colCount: 1,
+    }
+    const rect = computeSlotRect(0, CARD_W, CARD_H, containerRect, briscolaGrid)
+
+    // Single column: gridW = 75, centered in (900 - 70) = 830 available width
+    const expectedGridW = 75
+    const expectedLeft = 70 + (900 - 70 - expectedGridW) / 2
+    expect(rect.left).toBeCloseTo(expectedLeft)
+    // Vertically centered
+    const expectedTop = (340 - 133) / 2
+    expect(rect.top).toBeCloseTo(expectedTop)
   })
 
   it('is a pure function -- same inputs always give same outputs', () => {

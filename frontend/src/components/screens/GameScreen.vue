@@ -40,13 +40,13 @@
         ref="deckVisualRef"
       />
       <CardComponent
-        v-if="isBriscola && gs?.briscolaCard"
+        v-if="isBriscola && gs?.briscolaCard && shownDeckCount > 0"
         :card="gs.briscolaCard"
         :deckStyle="currentDeckStyle"
         class="briscola-trump-card"
         :style="store.dealHidingBriscola ? { opacity: '0' } : {}"
       />
-      <div class="table-center" :class="{ 'no-deck': shownDeckCount === 0 }" ref="tableCenterEl">
+      <div class="table-center" :class="{ 'no-deck': shownDeckCount === 0, 'briscola-table': isBriscola }" ref="tableCenterEl">
         <CardComponent
           v-for="(card, idx) in (gs?.table ?? [])"
           :key="cardKey(card, idx)"
@@ -246,8 +246,8 @@ function capturedR(pi: number): DOMRect | null {
 
 // ─── Table slot position helper ───
 
-/** Compute the bounding rect for slot `index` in the 2×5 table grid.
- *  Uses the grid container's position + grid geometry. */
+/** Compute the bounding rect for slot `index` in the table grid.
+ *  Reads grid geometry from computed style (works for both Scopa 2×5 and Briscola 1×1). */
 function getSlotRect(index: number, cardW: number, cardH: number): DOMRect | null {
   const tc = tableCenterEl.value
   if (!tc) return null
@@ -261,7 +261,7 @@ function getSlotRect(index: number, cardW: number, cardH: number): DOMRect | nul
   const gap = parseFloat(style.gap) || 6
   const padLeft = parseFloat(style.paddingLeft) || 0
 
-  const grid: SlotGridParams = { colW, rowH, gap, padLeft, rowCount: rows.length }
+  const grid: SlotGridParams = { colW, rowH, gap, padLeft, rowCount: rows.length, colCount: cols.length }
   return computeSlotRect(index, cardW, cardH, tcR, grid)
 }
 

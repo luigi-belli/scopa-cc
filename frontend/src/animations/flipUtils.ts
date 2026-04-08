@@ -143,9 +143,9 @@ export function animateClone(
   })
 }
 
-/** Table grid dimensions: 2 rows x 5 columns (matches CSS grid-template in .table-center) */
-const TABLE_COLS = 5
-const TABLE_MAX_ROWS = 2
+/** Default table grid dimensions: 2 rows x 5 columns (Scopa layout) */
+const DEFAULT_TABLE_COLS = 5
+const DEFAULT_MAX_ROWS = 2
 
 /** Parameters describing the table grid geometry, read from CSS computed style. */
 export interface SlotGridParams {
@@ -159,9 +159,11 @@ export interface SlotGridParams {
   padLeft: number
   /** Number of rows currently in the grid template */
   rowCount: number
+  /** Number of columns in the grid template */
+  colCount: number
 }
 
-/** Compute the bounding rect for slot `index` in the 2x5 table grid.
+/** Compute the bounding rect for slot `index` in the table grid.
  *  Pure geometry -- no DOM access needed. */
 export function computeSlotRect(
   index: number,
@@ -171,14 +173,16 @@ export function computeSlotRect(
   grid: SlotGridParams
 ): DOMRect {
   const { colW, rowH, gap, padLeft, rowCount } = grid
+  const cols = grid.colCount || DEFAULT_TABLE_COLS
+  const maxRows = Math.min(rowCount, DEFAULT_MAX_ROWS)
 
-  const gridW = TABLE_COLS * colW + (TABLE_COLS - 1) * gap
-  const gridH = (rowCount >= TABLE_MAX_ROWS ? TABLE_MAX_ROWS * rowH + gap : rowH)
+  const gridW = cols * colW + (cols - 1) * gap
+  const gridH = (maxRows >= DEFAULT_MAX_ROWS ? DEFAULT_MAX_ROWS * rowH + gap : rowH)
   const contentLeft = containerRect.left + padLeft + (containerRect.width - padLeft - gridW) / 2
   const contentTop  = containerRect.top + (containerRect.height - gridH) / 2
 
-  const col = index % TABLE_COLS
-  const row = Math.floor(index / TABLE_COLS)
+  const col = index % cols
+  const row = Math.floor(index / cols)
   const left = contentLeft + col * (colW + gap) + (colW - cardW) / 2
   const top  = contentTop  + row * (rowH + gap) + (rowH - cardH) / 2
 
