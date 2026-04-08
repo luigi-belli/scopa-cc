@@ -52,6 +52,7 @@ Test suites are configured in `api/phpunit.xml` with `APP_ENV=test`.
 | `GameEngineTest` | initializeGame, startRound, dealHands, findCaptures (single match, multiple singles, single-card priority over sums, sum match, multiple sums, no match), playCard (place, auto-capture, choosing, scopa, last-play-no-scopa), selectCapture, endRound (last capturer gets remaining), getStateForPlayer, re-deal when hands empty, no duplicate cards on table after place, no duplicate cards after capture (captured card must not remain on table), deck integrity (all 40 cards accounted for across deck+table+hands+captured at all times), table cards unique after multiple plays |
 | `ScoringServiceTest` | carte (more/tied), denari (more/tied), setteBello (player 1/2), primiera (normal, one missing suit, both missing suit, value mapping), scope count, full round scoring |
 | `AIServiceTest` | evaluateMove (prefers capture, prefers sette bello, prefers scopa, prefers more cards), autoSelectCapture |
+| `BriscolaEngineTest` | initializeGame, startGame, briscolaCardIsLastInDeck, leaderPlacesOnTable, followerResolvesTrick, trumpBeatsNonTrump, differentNonTrumpSuitsLeaderWins, drawAfterTrick, briscolaCardRetainedWhenDeckEmpty, trumpSuitRecognizedAfterDeckExhausted, gameOverAfterAllTricks, cardIntegrity, getStateForPlayer, selectCaptureThrows, nextRoundThrows, pointScoring, countPoints, cardStrength |
 | `PlayerTokenServiceTest` | generateToken (64-char hex, uniqueness), sanitizeName (trim, control chars, length) |
 
 **Integration tests**: Directory `api/tests/Integration/` exists (structure ready, tests to be added).
@@ -180,6 +181,67 @@ grep -n "round-end\|game-over" frontend/src/components/screens/GameScreen.vue | 
 grep -n 'deckCount.*displayState\|isRedeal' frontend/src/components/screens/GameScreen.vue
 ```
 
+#### No-Final-State-Before-Animation Invariant Checks
+
+These checks enforce the HARD RULE: final state must NEVER be visible before the animation completes.
+
+```bash
+# NFSBA1. Briscola card has dealHidingBriscola opacity binding in template
+grep -n 'dealHidingBriscola' frontend/src/components/screens/GameScreen.vue
+# PASS if briscola card template has :style="store.dealHidingBriscola ? { opacity: '0' } : {}"
+
+# NFSBA2. dealHidingBriscola flag exists in store
+grep -n 'dealHidingBriscola' frontend/src/stores/gameStore.ts
+# PASS if ref, $reset, and return all include dealHidingBriscola
+
+# NFSBA3. dealHidingBriscola set to true during initial Briscola deal
+grep -n 'dealHidingBriscola = true' frontend/src/components/screens/GameScreen.vue
+# PASS if set inside runDealAnimation when isNewRound && briscola
+
+# NFSBA4. dealHidingBriscola cleared in all runDealAnimation exit paths
+grep -n 'dealHidingBriscola = false' frontend/src/components/screens/GameScreen.vue
+# PASS if cleared in: early return, normal end, and briscola reveal block
+
+# NFSBA5. dealHiding ALWAYS set for ALL re-deal types (including Briscola partial)
+# In handleTurnResult, dealHiding must be set unconditionally for isRedeal
+grep -n -B1 -A3 'store.dealHiding = true' frontend/src/components/screens/GameScreen.vue | head -20
+# PASS if dealHiding=true is set without isBriscolaPartial guard in handleTurnResult
+# AND set unconditionally in runDealAnimation (not guarded by !isBriscolaPartialDeal)
+
+# NFSBA6. Briscola partial deal only animates new cards (slice from prev length)
+grep -n 'slice(prevMyHandLen)\|slice(prevOppCount)' frontend/src/components/screens/GameScreen.vue
+# PASS if both slices are present in the isBriscolaPartialDeal block
+
+# NFSBA7. Briscola partial deal reveals OLD cards in handleTurnResult BEFORE FLIP
+# Old cards must be revealed BEFORE flipRearrange, not after, to avoid disappearing during FLIP
+grep -n "redealCtx" frontend/src/components/screens/GameScreen.vue | grep -v "interface\|DealContext\|prevMyHand\|prevDeckCount\|let redealCtx\|isBriscolaPartial\|runDealAnimation"
+# PASS if there is a block that reveals old cards using redealCtx BEFORE flipRearrange in handleTurnResult
+
+# NFSBA7b. Old cards also revealed in runDealAnimation (idempotent, covers non-handleTurnResult paths)
+grep -n "old card.*reveal\|old.*reveal" frontend/src/components/screens/GameScreen.vue
+# PASS if old cards revealed with el.style.opacity = '1' in both handleTurnResult and runDealAnimation
+
+# NFSBA8. nextTick between clearing dealHiding and clearing imperative opacity
+# Without this, Vue's stale reactive opacity:0 flashes when imperative opacity:1 is removed
+grep -n -A2 'dealHiding = false' frontend/src/components/screens/GameScreen.vue | grep 'nextTick'
+# PASS if await nextTick() appears between dealHiding=false and allEls.forEach opacity clear
+
+# NFSBA8b. Briscola card reveal happens AFTER all deal animations complete (after Promise.all)
+grep -n -A3 'Reveal briscola' frontend/src/components/screens/GameScreen.vue
+# PASS if briscola reveal block appears after await Promise.all(deals)
+
+# NFSBA10. dealHiding cleared BEFORE briscola reveal (prevents Vue re-render flash)
+# When dealHidingBriscola changes, Vue re-renders and re-applies reactive styles.
+# If dealHiding is still true at that point, Vue re-applies opacity:0 on hand cards,
+# overriding the imperative opacity:1 set during the deal animation — causing a flash.
+grep -n 'dealHiding = false\|dealHidingTable = false\|Reveal briscola' frontend/src/components/screens/GameScreen.vue
+# PASS if dealHiding=false and dealHidingTable=false appear BEFORE the briscola reveal block
+
+# NFSBA9. isDealState does NOT skip Briscola (allows partial deal detection)
+grep -n "gameType === 'briscola'" frontend/src/components/screens/GameScreen.vue | grep -v '//'
+# PASS if isDealState does NOT have an early return false for briscola
+```
+
 #### Mobile Animation & Deck Sizing Checks
 
 ```bash
@@ -282,6 +344,10 @@ grep -n 'preDealDeckCount.*=' frontend/src/components/screens/GameScreen.vue | g
 grep -n 'useMercure\|connect(' frontend/src/components/screens/WaitingScreen.vue
 # PASS if useMercure has no numeric playerIndex arg, and connect(0) is called
 
+# RC13. WaitingScreen does NOT commitState — uses pendingState like LobbyScreen
+grep -n 'commitState\|pendingState' frontend/src/components/screens/WaitingScreen.vue
+# PASS if pendingState is used (not commitState) so GameScreen can run deal animation
+
 # RC10. Session persistence: restoreSession called before API fetch in onMounted
 grep -n 'restoreSession\|getState\|connect' frontend/src/components/screens/GameScreen.vue | grep -A2 'onMounted' || \
 grep -n 'restoreSession' frontend/src/components/screens/GameScreen.vue
@@ -313,6 +379,8 @@ These are manual/visual tests to verify when doing significant changes. Report w
 - Disconnect banner
 - Page refresh (token in localStorage)
 - Tied at 11 (game continues)
+- Briscola trump suit recognized after deck exhausted — a low trump card must beat a high non-trump card even when the deck is empty
+- Briscola card (briscolaCard field) must NOT be cleared when deck empties — it persists for the entire game
 - Messenger worker restart: verify stuck messages (delivered_at set but not completed) are reset by entrypoint.sh on container startup
 
 ### Race Condition & Event Pipeline Scenarios
@@ -350,9 +418,17 @@ These are manual/visual tests to verify when doing significant changes. Report w
 - Deal animation: card-back clones fly from deck to each card position (table + both hands)
 - LobbyScreen does NOT commitState -- stores state in pendingState, GameScreen deal-animates it
 - No card flash on initial load (displayState is null until deal animation commits it)
+- No card flash after deal animation completes — nextTick between clearing dealHiding and clearing imperative opacity prevents stale reactive opacity:0 from showing
 - Deck visual NEVER flickers or disappears during deal animation — stays visible from pre-deal count, decrements per card dealt, only goes empty when last card leaves
 - Deck visual stays visible during re-deal (mid-round when both hands empty) — dealDeckCountOverride is set before finishAnimation commits post-deal state
 - Deck visual correct on new round deal — preDealDeckCount computed from newState.deckCount + dealtCardCount (not from stale displayState.deckCount which is 0)
+- Briscola card NOT visible before initial deal animation completes — hidden via dealHidingBriscola, fades in after all hand cards dealt
+- Briscola initial deal: hand cards do NOT flicker after deal animation completes — dealHiding cleared before briscola card reveal to prevent Vue re-render from re-applying reactive opacity:0
+- Briscola partial deal (after trick): existing hand cards stay visible, only 1 new card per player animates from deck
+- Briscola partial deal: dealHiding IS set (all cards hidden), then old cards revealed BEFORE FLIP in handleTurnResult — prevents old cards disappearing during FLIP animation
+- Briscola partial deal: old cards also revealed in runDealAnimation (idempotent, covers maybeCommitOrDeal path)
+- Briscola partial deal: new card NEVER visible before deal animation reaches it (dealHiding hides it from commitState onward)
+- Briscola partial deal: deck count override accounts for only the newly drawn cards (not full hand)
 - Scopa marker: when scopa is scored, the capturing card appears face-up rotated 90 degrees in the captured deck
 - Scopa markers cleared at the start of each new round
 - Round-end overlay shown ONLY after the last turn-result animation completes (not during animation)

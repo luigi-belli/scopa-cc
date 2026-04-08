@@ -44,6 +44,7 @@
         :card="gs.briscolaCard"
         :deckStyle="currentDeckStyle"
         class="briscola-trump-card"
+        :style="store.dealHidingBriscola ? { opacity: '0' } : {}"
       />
       <div class="table-center" :class="{ 'no-deck': shownDeckCount === 0 }" ref="tableCenterEl">
         <CardComponent
@@ -417,8 +418,6 @@ const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
 
 function isDealState(prev: GameState | null, next: GameState): boolean {
   if (!prev) return true
-  // Briscola: no re-deal animations (single cards drawn after tricks just appear)
-  if (next.gameType === 'briscola') return false
   if (prev.myHand.length === 0 && next.myHand.length > 0) return true
   // Deck count only decreases when dealHands() runs — never during normal play
   if (next.deckCount < prev.deckCount) return true
@@ -659,12 +658,24 @@ async function handleTurnResult(result: TurnResult) {
   const pending = store.pendingState
   const isRedeal = !!(pending && store.displayState && pending.deckCount < store.displayState.deckCount)
 
-  // Pre-set dealHiding so new hand cards render with opacity:0 (no flash).
-  // Freeze deck visual at pre-deal count so it doesn't vanish when finishAnimation
-  // commits the post-deal state (where deckCount may be 0).
+  // Pre-set dealHiding so ALL hand cards render with opacity:0 (no flash).
+  // This MUST be set for ALL re-deal types including Briscola partial deals —
+  // otherwise the newly drawn card flashes visible before the deal animation hides it.
+  // For Briscola partial deals, runDealAnimation immediately reveals old cards after layout.
+  // Capture pre-commit hand info for Briscola partial deal detection
+  // (finishAnimation will overwrite displayState, so we must save this now).
+  let redealCtx: DealContext | undefined
   if (isRedeal) {
     store.dealHiding = true
     dealDeckCountOverride.value = store.displayState!.deckCount
+    const isBriscolaPartial = pending!.gameType === 'briscola'
+      && store.displayState!.myHand.length > 0
+    if (isBriscolaPartial) {
+      redealCtx = {
+        prevMyHand: [...store.displayState!.myHand],
+        prevDeckCount: store.displayState!.deckCount,
+      }
+    }
   }
 
   // 5. *** HARD INVARIANT: commitState ONLY here, after ALL animation ***
@@ -684,11 +695,32 @@ async function handleTurnResult(result: TurnResult) {
   // Now safe to restore styles — Vue has already removed animated-away elements,
   // so restoring visibility on them is a no-op. Surviving elements get cleaned up.
   restoreStyles()
+
+  // For Briscola partial deals: dealHiding hid ALL cards (including existing ones).
+  // Reveal old cards NOW — before FLIP — so they stay visible during the FLIP animation.
+  // The new card stays hidden (opacity 0) and will be animated from deck in runDealAnimation.
+  if (redealCtx) {
+    const prevSet = new Set(redealCtx.prevMyHand.map(c => `${c.suit}-${c.value}`))
+    const myHand = gs.value?.myHand ?? []
+    myHand.forEach((card, idx) => {
+      if (prevSet.has(`${card.suit}-${card.value}`)) {
+        const el = q(`[data-card-key="my-${cardKey(card, idx)}"]`)
+        if (el) el.style.opacity = '1'
+      }
+    })
+    // Reveal all but the last opponent card (the drawn one)
+    const oppCount = gs.value?.opponentHandCount ?? 0
+    for (let n = 1; n < oppCount; n++) {
+      const el = q(`[data-card-key="opp-${n}"]`)
+      if (el) el.style.opacity = '1'
+    }
+  }
+
   await flipRearrange(beforeRects)
 
   // 6. If re-deal detected, run deal animation instead of normal post-anim flow
   if (isRedeal && pending) {
-    await runDealAnimation(pending)
+    await runDealAnimation(pending, redealCtx)
     return  // deal animation calls processQueue when done
   }
 
@@ -1015,14 +1047,39 @@ async function animTrick(result: TurnResult) {
 // - First game load (no previous state)
 // - Re-deal when both hands empty mid-round
 // - New round after nextRound
+// - Briscola partial deal (after trick: 1 card per player)
+//
+// For Briscola partial deals, the caller (handleTurnResult) passes a
+// DealContext with the pre-commit hand info, since finishAnimation() has
+// already overwritten displayState by the time we get here.
 // ════════════════════════════════════════════════════
 
-async function runDealAnimation(newState: GameState) {
+/** Pre-commit state info for Briscola partial deals */
+interface DealContext {
+  prevMyHand: Card[]
+  prevDeckCount: number
+}
+
+async function runDealAnimation(newState: GameState, ctx?: DealContext) {
   store.animating = true
 
   const prevTblLen = store.displayState?.table.length ?? 0
   // New round = table has more cards than before (or first load when displayState is null)
   const isNewRound = !store.displayState || newState.table.length > prevTblLen
+
+  // Briscola partial deal: after a trick, each player draws 1 card (not a full re-deal).
+  // Detection uses DealContext (pre-commit state) when available, falling back to
+  // displayState comparison for non-handleTurnResult paths (e.g. maybeCommitOrDeal).
+  const isBriscolaPartialDeal = !isNewRound && newState.gameType === 'briscola' && (
+    ctx
+      ? ctx.prevDeckCount > newState.deckCount  // deck decreased = cards were drawn
+      : (store.displayState?.deckCount ?? 0) > newState.deckCount
+  )
+
+  // Build set of old card identities for finding new cards
+  const prevMyHandSet = isBriscolaPartialDeal
+    ? new Set((ctx?.prevMyHand ?? store.displayState?.myHand ?? []).map(c => `${c.suit}-${c.value}`))
+    : null
 
   // Clear scopa markers on new round
   if (isNewRound) {
@@ -1030,34 +1087,69 @@ async function runDealAnimation(newState: GameState) {
     opponentCapturedRef.value?.clearScopa()
   }
 
-  // 1. Set hiding flags so Vue renders cards with opacity:0
+  // 1. Set hiding flags so Vue renders ALL hand cards with opacity:0.
+  // For Briscola partial deals, old cards are revealed immediately after layout (step 2).
+  // This MUST hide everything first to prevent new cards flashing visible.
   store.dealHiding = true
   store.dealHidingTable = isNewRound
+  // Hide briscola card during initial deal (revealed after animation)
+  if (isNewRound && newState.gameType === 'briscola') {
+    store.dealHidingBriscola = true
+  }
   // Freeze deck visual at pre-deal count so it doesn't vanish before animation.
   // Compute pre-deal count by adding back the cards that were dealt
   // (server's deckCount is already post-deal). If the override was already set
   // (re-deal path sets it before finishAnimation to prevent flicker), keep it.
-  const dealtCardCount = (isNewRound ? newState.table.length : 0)
-    + newState.myHand.length + newState.opponentHandCount
+  const prevDeckCount = ctx?.prevDeckCount ?? store.displayState?.deckCount ?? 40
+  const newCardsDealt = isBriscolaPartialDeal
+    ? prevDeckCount - newState.deckCount
+    : (isNewRound ? newState.table.length : 0) + newState.myHand.length + newState.opponentHandCount
   const preDealDeckCount = dealDeckCountOverride.value
-    ?? (newState.deckCount + dealtCardCount)
+    ?? (newState.deckCount + newCardsDealt)
   dealDeckCountOverride.value = preDealDeckCount
-  // Commit state — cards render with opacity:0 via reactive :style bindings
+  // Commit state — new cards render with opacity:0 via reactive :style bindings
+  // (for partial deal, existing cards remain visible since dealHiding is false)
   store.commitState(newState)
   await nextTick()
   // Wait for browser to lay out the elements (needed for getBoundingClientRect)
   await new Promise<void>(r => requestAnimationFrame(() => r()))
 
-  // 2. Collect all elements to animate
+  // 2. Collect elements to animate
   const tblEls = isNewRound ? qAll('.table-center [data-card-key]') : []
-  const myEls  = qAll('.player-area.me .hand-row [data-card-key^="my-"]')
-  const oppEls = qAll('.player-area.opponent .hand-row [data-card-key^="opp-"]')
+  let myEls: HTMLElement[]
+  let oppEls: HTMLElement[]
+
+  if (isBriscolaPartialDeal && prevMyHandSet) {
+    // All cards are hidden via dealHiding. Identify old vs new cards, then
+    // immediately reveal old cards so only new ones stay hidden for animation.
+    const allMyEls = qAll('.player-area.me .hand-row [data-card-key^="my-"]')
+    const allOppEls = qAll('.player-area.opponent .hand-row [data-card-key^="opp-"]')
+    myEls = []
+    allMyEls.forEach((el, idx) => {
+      const card = newState.myHand[idx]
+      if (card && !prevMyHandSet.has(`${card.suit}-${card.value}`)) {
+        myEls.push(el)  // new card — stays hidden, will animate from deck
+      } else {
+        el.style.opacity = '1'  // old card — reveal immediately
+      }
+    })
+    // Opponent cards are all backs — can't identify by card identity.
+    // In Briscola, each player draws exactly 1 card after a trick.
+    // Reveal all but the last opponent card (the newly drawn one).
+    oppEls = allOppEls.length > 0 ? [allOppEls[allOppEls.length - 1]] : []
+    allOppEls.forEach((el, idx) => {
+      if (idx < allOppEls.length - 1) el.style.opacity = '1'  // old — reveal
+    })
+  } else {
+    myEls  = qAll('.player-area.me .hand-row [data-card-key^="my-"]')
+    oppEls = qAll('.player-area.opponent .hand-row [data-card-key^="opp-"]')
+  }
   const allEls = [...tblEls, ...myEls, ...oppEls]
 
   // 3. Deck position
   const dr = deckR()
   if (!dr || dr.width === 0 || allEls.length === 0) {
-    store.dealHiding = false; store.dealHidingTable = false
+    store.dealHiding = false; store.dealHidingTable = false; store.dealHidingBriscola = false
     dealDeckCountOverride.value = null
     store.animating = false
     processQueue()
@@ -1127,6 +1219,7 @@ async function runDealAnimation(newState: GameState) {
 
   await Promise.all(deals)
   clearLayer()
+
   // Restore imperative deck DOM changes before Vue takes over
   const deckEl = deckVisualRef.value?.deckEl
   if (deckEl) {
@@ -1136,11 +1229,36 @@ async function runDealAnimation(newState: GameState) {
   }
   // Clear deck count override — let reactive value take over
   dealDeckCountOverride.value = null
-  // Clear hiding flags — Vue will remove :style opacity bindings
+  // Clear hiding flags and wait for Vue to apply them BEFORE clearing imperative
+  // opacity. Without this nextTick, clearing imperative opacity would expose Vue's
+  // stale reactive opacity:0 (from dealHiding=true) for one frame, causing a flash.
+  // IMPORTANT: This must happen BEFORE the briscola reveal below, because that
+  // reveal changes reactive state (dealHidingBriscola) which triggers a Vue re-render.
+  // That re-render would re-apply the reactive opacity:0 from dealHiding, overriding
+  // the imperative opacity:1 set during the deal animation — causing a flash.
   store.dealHiding = false
   store.dealHidingTable = false
-  // Remove imperative opacity overrides now that reactive bindings are clear
+  await nextTick()
+  // Now Vue has removed the reactive opacity:0 bindings — safe to clear imperative overrides
   allEls.forEach(el => { el.style.opacity = '' })
+
+  // Reveal briscola card after hand cards are visible (smooth fade-in)
+  if (store.dealHidingBriscola) {
+    const briscolaEl = q('.briscola-trump-card')
+    if (briscolaEl) {
+      briscolaEl.style.opacity = '0'
+      store.dealHidingBriscola = false
+      await nextTick()
+      briscolaEl.style.transition = 'opacity 300ms ease-in'
+      briscolaEl.style.opacity = '1'
+      await sleep(300)
+      briscolaEl.style.transition = ''
+      briscolaEl.style.opacity = ''
+    } else {
+      store.dealHidingBriscola = false
+    }
+  }
+
   store.animating = false
   processQueue()
 }

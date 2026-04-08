@@ -26,7 +26,8 @@ const { t } = useI18n()
 
 const { connect, disconnect } = useMercure(props.gameId, {
   onGameState(data) {
-    store.commitState(data)
+    // Don't commitState here — let GameScreen run the deal animation
+    store.pendingState = data
     router.push({ name: 'game', params: { gameId: props.gameId } })
   },
 })
