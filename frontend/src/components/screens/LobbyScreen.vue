@@ -19,24 +19,6 @@
         </div>
 
         <div class="form-group">
-          <label for="game-name">{{ t('lobby.gameName') }}</label>
-          <input
-            id="game-name"
-            v-model="gameName"
-            type="text"
-            :placeholder="t('lobby.gameNamePlaceholder')"
-            maxlength="60"
-            autocomplete="off"
-            @keydown.enter="createGame"
-          >
-        </div>
-
-        <div class="form-group">
-          <label>{{ t('lobby.deckStyle') }}</label>
-          <DeckSelector />
-        </div>
-
-        <div class="form-group">
           <label>{{ t('lobby.language') }}</label>
           <div class="language-selector">
             <button
@@ -50,12 +32,32 @@
           </div>
         </div>
 
+        <div class="form-group">
+          <label>{{ t('lobby.deckStyle') }}</label>
+          <DeckSelector />
+        </div>
+
+        <div class="lobby-divider"><span>{{ t('lobby.twoPlayers') }}</span></div>
+
+        <div class="form-group">
+          <label for="game-name">{{ t('lobby.gameName') }}</label>
+          <input
+            id="game-name"
+            v-model="gameName"
+            type="text"
+            :placeholder="t('lobby.gameNamePlaceholder')"
+            maxlength="60"
+            autocomplete="off"
+            @keydown.enter="createGame"
+          >
+        </div>
+
         <div class="lobby-buttons">
           <button class="btn btn-primary" @click="createGame">{{ t('lobby.newGame') }}</button>
           <button class="btn btn-secondary" @click="joinGame">{{ t('lobby.join') }}</button>
         </div>
 
-        <div class="lobby-divider"><span>{{ t('lobby.or') }}</span></div>
+        <div class="lobby-divider"><span>{{ t('lobby.onePlayer') }}</span></div>
 
         <button class="btn btn-single" @click="startSinglePlayer">
           {{ t('lobby.playClaude') }}

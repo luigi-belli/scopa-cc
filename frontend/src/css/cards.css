@@ -36,9 +36,11 @@
   cursor: pointer;
 }
 
-.card.playable:hover {
-  transform: translateY(-14px);
-  z-index: 10;
+@media (hover: hover) {
+  .card.playable:hover {
+    transform: translateY(-14px);
+    z-index: 10;
+  }
 }
 
 /* Card glow effect */
