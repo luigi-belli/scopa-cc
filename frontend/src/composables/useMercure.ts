@@ -1,6 +1,10 @@
 import { ref, onUnmounted, type Ref } from 'vue'
 import type { GameState, TurnResult, RoundEndData, GameOverData } from '@/types/game'
 
+export function setMercureCookie(token: string): void {
+  document.cookie = `mercureAuthorization=${token}; path=/.well-known/mercure; SameSite=Strict`
+}
+
 export interface MercureHandlers {
   onGameState?: (data: GameState) => void | Promise<void>
   onTurnResult?: (data: TurnResult) => void | Promise<void>
@@ -44,35 +48,40 @@ export function useMercure(
       connected.value = false
     }
 
+    function parseEvent(event: MessageEvent): unknown {
+      try {
+        const payload = JSON.parse(event.data)
+        return payload.data ?? payload
+      } catch {
+        console.error('Failed to parse SSE event data')
+        return null
+      }
+    }
+
     // Listen for typed events
     eventSource.addEventListener('game-state', (event: MessageEvent) => {
-      const payload = JSON.parse(event.data)
-      const data = payload.data ?? payload
-      handlers.onGameState?.(data)
+      const data = parseEvent(event)
+      if (data) handlers.onGameState?.(data as GameState)
     })
 
     eventSource.addEventListener('turn-result', (event: MessageEvent) => {
-      const payload = JSON.parse(event.data)
-      const data = payload.data ?? payload
-      handlers.onTurnResult?.(data)
+      const data = parseEvent(event)
+      if (data) handlers.onTurnResult?.(data as TurnResult)
     })
 
     eventSource.addEventListener('choose-capture', (event: MessageEvent) => {
-      const payload = JSON.parse(event.data)
-      const data = payload.data ?? payload
-      handlers.onChooseCapture?.(data)
+      const data = parseEvent(event)
+      if (data) handlers.onChooseCapture?.(data)
     })
 
     eventSource.addEventListener('round-end', (event: MessageEvent) => {
-      const payload = JSON.parse(event.data)
-      const data = payload.data ?? payload
-      handlers.onRoundEnd?.(data)
+      const data = parseEvent(event)
+      if (data) handlers.onRoundEnd?.(data as RoundEndData)
     })
 
     eventSource.addEventListener('game-over', (event: MessageEvent) => {
-      const payload = JSON.parse(event.data)
-      const data = payload.data ?? payload
-      handlers.onGameOver?.(data)
+      const data = parseEvent(event)
+      if (data) handlers.onGameOver?.(data as GameOverData)
     })
 
     eventSource.addEventListener('opponent-disconnected', () => {

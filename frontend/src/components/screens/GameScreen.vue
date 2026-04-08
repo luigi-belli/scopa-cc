@@ -103,6 +103,7 @@
       :opponentName="gs?.opponentName ?? ''"
       :myTotalScore="gs?.myTotalScore ?? 0"
       :opponentTotalScore="gs?.opponentTotalScore ?? 0"
+      :deckStyle="currentDeckStyle"
       @nextRound="handleNextRound"
     />
 
@@ -115,6 +116,7 @@
       :opponentName="gs?.opponentName ?? ''"
       :myTotalScore="gs?.myTotalScore ?? 0"
       :opponentTotalScore="gs?.opponentTotalScore ?? 0"
+      :deckStyle="currentDeckStyle"
       @backToLobby="handleBackToLobby"
     />
 
@@ -130,7 +132,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/gameStore'
 import { useApi } from '@/composables/useApi'
-import { useMercure } from '@/composables/useMercure'
+import { useMercure, setMercureCookie } from '@/composables/useMercure'
 import { useI18n } from '@/i18n'
 import type { Card, DeckStyle } from '@/types/card'
 import { cardImagePath, cardBackPath } from '@/types/card'
@@ -256,7 +258,7 @@ function getSlotRect(index: number, cardW: number, cardH: number): DOMRect | nul
 // ─── Animation-layer helpers ───
 
 function aLayer(): HTMLElement { return animLayerEl.value! }
-function clearLayer() { const l = animLayerEl.value; if (l) l.innerHTML = '' }
+function clearLayer() { const l = animLayerEl.value; if (l) l.replaceChildren() }
 
 /** Track every element we imperatively style so we can undo it before commitState */
 const styledEls: { el: HTMLElement; prop: string; old: string }[] = []
@@ -1118,6 +1120,7 @@ onMounted(async () => {
       state = await api.getState(props.gameId)
       // Sync myIndex from server state (in case localStorage was stale)
       store.myIndex = state.myIndex
+      if (state.mercureToken) setMercureCookie(state.mercureToken)
     } catch (e) {
       console.error('Failed to load game state:', e)
       store.$reset()

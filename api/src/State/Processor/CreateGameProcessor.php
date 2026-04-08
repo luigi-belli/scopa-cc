@@ -12,6 +12,7 @@ use App\Entity\Game;
 use App\Enum\GameState;
 use App\Message\HandleAITurnMessage;
 use App\Service\GameEngine;
+use App\Service\MercureTokenService;
 use App\Service\PlayerTokenService;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -28,6 +29,7 @@ final class CreateGameProcessor implements ProcessorInterface
         private readonly PlayerTokenService $tokenService,
         private readonly GameEngine $gameEngine,
         private readonly MessageBusInterface $messageBus,
+        private readonly MercureTokenService $mercureTokenService,
     ) {}
 
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): CreateGameOutput
@@ -94,11 +96,14 @@ final class CreateGameProcessor implements ProcessorInterface
             $gameState = $this->gameEngine->getStateForPlayer($game, 0);
         }
 
+        $gameId = (string) $game->getId();
+
         return new CreateGameOutput(
-            gameId: (string) $game->getId(),
+            gameId: $gameId,
             playerToken: $token,
             state: $game->getState()->value,
             gameState: $gameState,
+            mercureToken: $this->mercureTokenService->generateSubscriberToken($gameId, 0),
         );
     }
 }

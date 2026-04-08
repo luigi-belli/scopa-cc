@@ -22,6 +22,7 @@ export interface GameState {
   pendingChoice: Card[][] | null
   roundHistory: RoundHistoryEntry[]
   deckStyle: string
+  mercureToken?: string | null
 }
 
 export interface TurnResult {
@@ -43,6 +44,9 @@ export interface RoundScores {
   denariCount: number
   primieraValue: number | null
   hasSetteBello: boolean
+  carteCards: Card[]
+  denariCards: Card[]
+  primieraCards: Card[]
 }
 
 export interface RoundHistoryEntry {
@@ -73,12 +77,14 @@ export interface CreateGameResponse {
   playerToken: string
   state: string
   gameState: GameState | null
+  mercureToken: string | null
 }
 
 export interface JoinGameResponse {
   gameId: string
   playerToken: string
   gameState: GameState
+  mercureToken: string | null
 }
 
 export interface GameLookupResult {
@@ -86,3 +92,5 @@ export interface GameLookupResult {
   name: string
   state: string
 }
+
+export type ScoreCategory = 'carte' | 'denari' | 'primiera'

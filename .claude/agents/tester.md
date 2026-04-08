@@ -376,6 +376,54 @@ These are manual/visual tests to verify when doing significant changes. Report w
 - Hand cards are centred relative to the table area, not offset by captured deck
 - No scrolling required to see any game element at any point in the game
 
+#### Security Checks
+
+Run these checks after ANY security-related change. These verify security hardening measures.
+
+```bash
+# SEC1. Nginx security headers present
+grep 'X-Frame-Options' nginx/default.conf
+grep 'X-Content-Type-Options' nginx/default.conf
+grep 'Referrer-Policy' nginx/default.conf
+grep 'Content-Security-Policy' nginx/default.conf
+# PASS if all four headers are present
+
+# SEC2. Mercure anonymous mode disabled
+grep 'MERCURE_EXTRA_DIRECTIVES' docker-compose.yml | grep -v 'anonymous'
+# PASS if MERCURE_EXTRA_DIRECTIVES does NOT contain "anonymous"
+
+# SEC3. Mercure subscriber JWT generated and passed to frontend
+grep 'mercureToken' api/src/Dto/Output/GameStateOutput.php
+grep 'mercureToken' api/src/Dto/Output/CreateGameOutput.php
+grep 'mercureToken' api/src/Dto/Output/JoinGameOutput.php
+grep 'MercureTokenService' api/src/State/Provider/GameStateProvider.php
+grep 'MercureTokenService' api/src/State/Processor/CreateGameProcessor.php
+grep 'MercureTokenService' api/src/State/Processor/JoinGameProcessor.php
+# PASS if all files reference mercureToken/MercureTokenService
+
+# SEC4. Frontend sets mercureAuthorization cookie
+grep 'mercureAuthorization' frontend/src/composables/useMercure.ts
+grep 'setMercureCookie' frontend/src/components/screens/LobbyScreen.vue
+grep 'setMercureCookie' frontend/src/components/screens/GameScreen.vue
+# PASS if cookie is set in useMercure and called from LobbyScreen + GameScreen
+
+# SEC5. SSE JSON.parse wrapped in try/catch
+grep -A3 'parseEvent' frontend/src/composables/useMercure.ts | grep 'catch'
+# PASS if try/catch present around JSON.parse
+
+# SEC6. API error detail keys are whitelisted
+grep 'KNOWN_KEYS' frontend/src/composables/useApi.ts
+# PASS if whitelist array exists and is checked before using body.detail
+
+# SEC7. No innerHTML usage in animation code
+grep 'innerHTML' frontend/src/components/screens/GameScreen.vue
+# PASS if no matches (should use replaceChildren instead)
+
+# SEC8. GameLookupProvider limits name query param length
+grep 'mb_substr' api/src/State/Provider/GameLookupProvider.php
+# PASS if mb_substr is used to truncate name
+```
+
 ## Reporting Format
 
 Always report results in this structure:
@@ -397,6 +445,7 @@ Always report results in this structure:
 - Stability: X/9 pass
 - Animation: X/28 pass
 - Mobile: X/8 pass
+- Security: X/8 pass
 - Failures: (list specific failures if any)
 
 ### Summary

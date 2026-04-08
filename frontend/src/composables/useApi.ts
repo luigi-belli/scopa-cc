@@ -55,7 +55,8 @@ export function useApi(): Api {
       let key = 'error.conflict'
       try {
         const body = await response.json()
-        if (body?.detail) key = body.detail
+        const KNOWN_KEYS: readonly string[] = ['error.conflict', 'error.gameNameTaken'] as const
+        if (body?.detail && KNOWN_KEYS.includes(body.detail)) key = body.detail
       } catch { /* ignore parse errors */ }
       throw new ApiError(t(key), 409)
     }

@@ -1,10 +1,73 @@
 <template>
-  <div class="score-table" v-html="tableHtml"></div>
+  <div class="score-table">
+    <table>
+      <tr>
+        <th></th>
+        <th>{{ myName }}</th>
+        <th>{{ opponentName }}</th>
+      </tr>
+      <tr class="score-row-clickable" @click="$emit('rowClick', 'carte')">
+        <td>{{ t('score.carte') }}</td>
+        <td :class="{ 'winner-cell': my.carte > opp.carte }">
+          {{ my.carteCount }}{{ my.carte > 0 ? ' \u2022' : '' }}
+        </td>
+        <td :class="{ 'winner-cell': opp.carte > my.carte }">
+          {{ opp.carteCount }}{{ opp.carte > 0 ? ' \u2022' : '' }}
+        </td>
+      </tr>
+      <tr class="score-row-clickable" @click="$emit('rowClick', 'denari')">
+        <td>{{ t('score.denari') }}</td>
+        <td :class="{ 'winner-cell': my.denari > opp.denari }">
+          {{ my.denariCount }}{{ my.denari > 0 ? ' \u2022' : '' }}
+        </td>
+        <td :class="{ 'winner-cell': opp.denari > my.denari }">
+          {{ opp.denariCount }}{{ opp.denari > 0 ? ' \u2022' : '' }}
+        </td>
+      </tr>
+      <tr>
+        <td>{{ t('score.setteBello') }}</td>
+        <td :class="{ 'winner-cell': my.hasSetteBello }">
+          {{ my.hasSetteBello ? '\u2713' : '\u2717' }}
+        </td>
+        <td :class="{ 'winner-cell': opp.hasSetteBello }">
+          {{ opp.hasSetteBello ? '\u2713' : '\u2717' }}
+        </td>
+      </tr>
+      <tr class="score-row-clickable" @click="$emit('rowClick', 'primiera')">
+        <td>{{ t('score.primiera') }}</td>
+        <td :class="{ 'winner-cell': my.primiera > opp.primiera }">
+          {{ my.primieraValue != null ? my.primieraValue : '\u2014' }}{{ my.primiera > 0 ? ' \u2022' : '' }}
+        </td>
+        <td :class="{ 'winner-cell': opp.primiera > my.primiera }">
+          {{ opp.primieraValue != null ? opp.primieraValue : '\u2014' }}{{ opp.primiera > 0 ? ' \u2022' : '' }}
+        </td>
+      </tr>
+      <tr>
+        <td>{{ t('score.scope') }}</td>
+        <td :class="{ 'winner-cell': my.scope > opp.scope }">
+          {{ my.scope }}{{ my.scope > 0 ? ' \u2022' : '' }}
+        </td>
+        <td :class="{ 'winner-cell': opp.scope > my.scope }">
+          {{ opp.scope }}{{ opp.scope > 0 ? ' \u2022' : '' }}
+        </td>
+      </tr>
+      <tr class="total-row">
+        <td>{{ t('score.roundTotal') }}</td>
+        <td>{{ myTotal }}</td>
+        <td>{{ oppTotal }}</td>
+      </tr>
+      <tr v-if="globalScores" class="total-row">
+        <td>{{ t('score.total') }}</td>
+        <td>{{ globalScores.my }}</td>
+        <td>{{ globalScores.opp }}</td>
+      </tr>
+    </table>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { RoundScores } from '@/types/game'
+import type { RoundScores, ScoreCategory } from '@/types/game'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
@@ -15,55 +78,14 @@ const props = defineProps<{
   globalScores?: { my: number; opp: number }
 }>()
 
+defineEmits<{
+  rowClick: [category: ScoreCategory]
+}>()
+
 const { t } = useI18n()
 
-function esc(s: string | number): string {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-/** Row showing actual values with winner highlight and point indicator */
-function row(label: string, v1: string, v2: string, p1: number, p2: number): string {
-  const c1 = p1 > p2 ? 'winner-cell' : ''
-  const c2 = p2 > p1 ? 'winner-cell' : ''
-  const dot1 = p1 > 0 ? ' •' : ''
-  const dot2 = p2 > 0 ? ' •' : ''
-  return `<tr><td>${esc(label)}</td><td class="${c1}">${esc(v1)}${dot1}</td><td class="${c2}">${esc(v2)}${dot2}</td></tr>`
-}
-
-const tableHtml = computed(() => {
-  const oppIndex = 1 - props.myIndex
-  const my = props.scores[props.myIndex]
-  const opp = props.scores[oppIndex]
-
-  const carteRow = row(t('score.carte'), `${my.carteCount}`, `${opp.carteCount}`, my.carte, opp.carte)
-  const denariRow = row(t('score.denari'), `${my.denariCount}`, `${opp.denariCount}`, my.denari, opp.denari)
-
-  const sbC1 = my.hasSetteBello ? 'winner-cell' : ''
-  const sbC2 = opp.hasSetteBello ? 'winner-cell' : ''
-  const sbRow = `<tr><td>${esc(t('score.setteBello'))}</td><td class="${sbC1}">${my.hasSetteBello ? '✓' : '✗'}</td><td class="${sbC2}">${opp.hasSetteBello ? '✓' : '✗'}</td></tr>`
-
-  const myPrim = my.primieraValue != null ? `${my.primieraValue}` : '—'
-  const oppPrim = opp.primieraValue != null ? `${opp.primieraValue}` : '—'
-  const primRow = row(t('score.primiera'), myPrim, oppPrim, my.primiera, opp.primiera)
-
-  const scopeRow = row(t('score.scope'), `${my.scope}`, `${opp.scope}`, my.scope, opp.scope)
-
-  const myTotal = my.carte + my.denari + my.setteBello + my.primiera + my.scope
-  const oppTotal = opp.carte + opp.denari + opp.setteBello + opp.primiera + opp.scope
-
-  const globalRow = props.globalScores
-    ? `<tr class="total-row"><td>${esc(t('score.total'))}</td><td>${esc(props.globalScores.my)}</td><td>${esc(props.globalScores.opp)}</td></tr>`
-    : ''
-
-  return `<table>
-    <tr><th></th><th>${esc(props.myName)}</th><th>${esc(props.opponentName)}</th></tr>
-    ${carteRow}
-    ${denariRow}
-    ${sbRow}
-    ${primRow}
-    ${scopeRow}
-    <tr class="total-row"><td>${esc(t('score.roundTotal'))}</td><td>${esc(myTotal)}</td><td>${esc(oppTotal)}</td></tr>
-    ${globalRow}
-  </table>`
-})
+const my = computed(() => props.scores[props.myIndex])
+const opp = computed(() => props.scores[1 - props.myIndex])
+const myTotal = computed(() => my.value.carte + my.value.denari + my.value.setteBello + my.value.primiera + my.value.scope)
+const oppTotal = computed(() => opp.value.carte + opp.value.denari + opp.value.setteBello + opp.value.primiera + opp.value.scope)
 </script>

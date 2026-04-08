@@ -29,3 +29,9 @@ export function cardBackPath(deckStyle: DeckStyle): string {
   const ext = DECK_EXT[deckStyle]
   return `/assets/cards/${deckStyle}/bg.${ext}`
 }
+
+export const PRIMIERA_VALUES: Record<number, number> = {
+  7: 21, 6: 18, 1: 16, 5: 15,
+  4: 14, 3: 13, 2: 12,
+  8: 10, 9: 10, 10: 10,
+}

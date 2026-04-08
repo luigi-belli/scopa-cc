@@ -8,17 +8,31 @@
         :myName="myName"
         :opponentName="opponentName"
         :globalScores="{ my: myTotalScore, opp: opponentTotalScore }"
+        @rowClick="selectedCategory = $event"
       />
       <button class="btn btn-primary" @click="$emit('nextRound')">
         {{ t('round.next') }}
       </button>
     </div>
+    <ScoreDetailDialog
+      v-if="selectedCategory"
+      :category="selectedCategory"
+      :scores="scores"
+      :myIndex="myIndex"
+      :myName="myName"
+      :opponentName="opponentName"
+      :deckStyle="deckStyle"
+      @close="selectedCategory = null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { RoundScores } from '@/types/game'
+import { ref } from 'vue'
+import type { RoundScores, ScoreCategory } from '@/types/game'
+import type { DeckStyle } from '@/types/card'
 import ScoreTable from './ScoreTable.vue'
+import ScoreDetailDialog from './ScoreDetailDialog.vue'
 import { useI18n } from '@/i18n'
 
 defineProps<{
@@ -28,6 +42,7 @@ defineProps<{
   opponentName: string
   myTotalScore: number
   opponentTotalScore: number
+  deckStyle: DeckStyle
 }>()
 
 defineEmits<{
@@ -35,4 +50,6 @@ defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+const selectedCategory = ref<ScoreCategory | null>(null)
 </script>

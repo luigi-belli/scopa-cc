@@ -10,5 +10,6 @@ final readonly class JoinGameOutput
         public string $gameId,
         public string $playerToken,
         public GameStateOutput $gameState,
+        public ?string $mercureToken = null,
     ) {}
 }

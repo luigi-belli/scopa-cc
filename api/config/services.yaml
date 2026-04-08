@@ -12,3 +12,7 @@ services:
             - '../src/DependencyInjection/'
             - '../src/Entity/'
             - '../src/Kernel.php'
+
+    App\Service\MercureTokenService:
+        arguments:
+            $mercureSecret: '%mercure_jwt_secret%'

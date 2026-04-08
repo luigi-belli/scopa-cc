@@ -58,6 +58,9 @@ export default {
   'effect.scopa': 'SCOPA!',
   'effect.disconnect': 'L\'avversario si è disconnesso. Hai vinto!',
 
+  // Dialog
+  'dialog.close': 'Chiudi',
+
   // Cards
   'card.back': 'Retro della carta',
   'card.alt': '{value} di {suit}',

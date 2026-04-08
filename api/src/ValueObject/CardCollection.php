@@ -113,6 +113,14 @@ final readonly class CardCollection implements \JsonSerializable, \Countable, \I
         return ['removed' => new self($removed), 'remaining' => new self($remaining)];
     }
 
+    public function filterBySuit(Suit $suit): self
+    {
+        return new self(array_values(array_filter(
+            $this->cards,
+            static fn(Card $card): bool => $card->suit === $suit,
+        )));
+    }
+
     public function countBySuit(Suit $suit): int
     {
         $count = 0;

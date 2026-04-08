@@ -258,4 +258,66 @@ class ScoringServiceTest extends TestCase
         $this->assertEquals(4, $scores->player1->total());
         $this->assertEquals(1, $scores->player2->total());
     }
+
+    public function testCarteCards_ContainsAllCaptured(): void
+    {
+        $p1Cards = [new Card(Suit::Denari, 1), new Card(Suit::Coppe, 3)];
+        $p2Cards = [new Card(Suit::Bastoni, 5)];
+
+        $game = $this->createGameWithCaptures(new CardCollection($p1Cards), new CardCollection($p2Cards));
+        $scores = $this->service->scoreRound($game);
+
+        $this->assertCount(2, $scores->player1->carteCards);
+        $this->assertCount(1, $scores->player2->carteCards);
+        $this->assertSame(Suit::Denari, $scores->player1->carteCards->get(0)->suit);
+        $this->assertSame(1, $scores->player1->carteCards->get(0)->value);
+    }
+
+    public function testDenariCards_ContainsOnlyDenari(): void
+    {
+        $p1 = new CardCollection([
+            new Card(Suit::Denari, 1),
+            new Card(Suit::Coppe, 3),
+            new Card(Suit::Denari, 7),
+        ]);
+        $p2 = new CardCollection([new Card(Suit::Bastoni, 5)]);
+
+        $game = $this->createGameWithCaptures($p1, $p2);
+        $scores = $this->service->scoreRound($game);
+
+        $this->assertCount(2, $scores->player1->denariCards);
+        $this->assertSame(1, $scores->player1->denariCards->get(0)->value);
+        $this->assertSame(7, $scores->player1->denariCards->get(1)->value);
+        $this->assertCount(0, $scores->player2->denariCards);
+    }
+
+    public function testPrimieraCards_ContainsBestPerSuit(): void
+    {
+        $p1 = new CardCollection([
+            new Card(Suit::Denari, 7),
+            new Card(Suit::Denari, 3),
+            new Card(Suit::Coppe, 6),
+            new Card(Suit::Bastoni, 1),
+            new Card(Suit::Spade, 4),
+        ]);
+        $p2 = new CardCollection([new Card(Suit::Coppe, 7)]);
+
+        $game = $this->createGameWithCaptures($p1, $p2);
+        $scores = $this->service->scoreRound($game);
+
+        // Player 1 has all 4 suits, best per suit: 7d(21), 6c(18), 1b(16), 4s(14)
+        $this->assertCount(4, $scores->player1->primieraCards);
+
+        $primieraValues = [];
+        foreach ($scores->player1->primieraCards as $card) {
+            $primieraValues[$card->suit->value] = $card->value;
+        }
+        $this->assertSame(7, $primieraValues['Denari']);
+        $this->assertSame(6, $primieraValues['Coppe']);
+        $this->assertSame(1, $primieraValues['Bastoni']);
+        $this->assertSame(4, $primieraValues['Spade']);
+
+        // Player 2 has only 1 suit
+        $this->assertCount(1, $scores->player2->primieraCards);
+    }
 }

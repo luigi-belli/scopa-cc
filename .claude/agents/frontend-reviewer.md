@@ -174,6 +174,38 @@ When reviewing, follow this order:
 X issues found, Y fixed, Z need discussion
 ```
 
+## Hard Constraints
+
+These constraints MUST be respected after EVERY change. Verify all of them before committing.
+
+### Layout Constraints
+1. **Playing area NEVER changes size** — fixed height (340px desktop, calc(50vh) mobile), `overflow: hidden`
+2. **Playing area NEVER moves** — CSS grid `auto` row, position depends only on viewport height
+3. **Playing area NEVER shrinks when deck empties** — deck is `position: absolute`, fades to `opacity: 0`, table-center `padding-left` transitions smoothly
+4. **Turn indicator NEVER overlapped and NEVER causes layout shift** — fixed `height: 24px` slot in player-area sub-grid, toggled via `visibility:hidden` (not `v-if`), always occupies space
+5. **Player names NEVER move** — fixed `height: 28px`, in a dedicated grid row within `.player-area` sub-grid, position depends only on viewport height
+6. **Captured decks NEVER shift** — pinned in fixed grid column within `.hand-strip` (3-column grid: `75px 1fr 75px`). Mine at column 3 (right of hand), opponent at column 1 (left of hand). Hand cards centred in column 2.
+7. **Hand-to-table gap** — 24px desktop, 16px mobile (clearance for 14px card hover lift + padding)
+8. **Card hover NOT clipped** — no `overflow: hidden` on `.player-area`
+8b. **Table cards in fixed 2×5 grid** — `.table-center` is `display: grid; grid-template-columns: repeat(5, 75px); grid-template-rows: repeat(2, 133px)`. Cards fill contiguous slots. ≤5 cards → one row centred; >5 → two rows centred. Place animation targets the next empty slot. After capture, remaining cards reflow into contiguous slots via FLIP.
+
+### Animation Constraints
+9. **State committed ONLY after animation ends** — `store.commitState()`/`store.finishAnimation()` called at the very end of every animation function. NO EXCEPTIONS. All mid-animation DOM changes are imperative.
+10. **Captured deck updates ONLY after sweep** — cards hidden with visibility:hidden during sweep, state committed after sweep clones reach captured deck
+11. **Card animation visible full path** — all moving cards use clones in `#animation-layer` (z-index 50, position fixed), never animated inside `overflow: hidden` table-area
+12. **Deal animation blocks events** — `store.animating = true` during deal, incoming events stashed and processed after deal completes
+13. **No visual flash on deal** — `dealHiding`/`dealHidingTable` flags render cards with `opacity: 0`, revealed one-by-one by animation
+14. **Vue-managed DOM NEVER modified by animation code** — no `appendChild`/`remove` on `.table-center` or `.hand-row`. Only `visibility:hidden` via tracked `setStyle()`. All tracked styles restored via `restoreStyles()` BEFORE commitState.
+15. **No stale clones after animation** — `clearLayer()` called after every animation, before commitState
+16. **Post-animation delay blocks events** — `inPostAnimDelay` flag keeps events queued during the 600ms post-animation gap, preventing visual jumps
+17. **Deal animation on every entry** — deal animation runs on first game load, re-deal mid-round, and new round (not just Mercure events)
+18. **GPU-composited motion** — `flyTo()` uses `transform: translate() scale()` instead of animating `left`/`top` for smooth 60fps
+19. **FLIP rearrangement on commitState** — after commitState, surviving table cards and hand cards animate smoothly from old positions to new via `snapshotByIdentity()`→`flipRearrange()`. Uses card identity (`value-suit`) not index, so cards that shift indices still animate correctly.
+20. **Deck visual NEVER overlaps table cards** — on mobile, deck visual is 40×71px at `left: 8px` (extends to 48px), table grid `padding-left: 50px` ensures 2px clearance. On desktop, deck is 75×133px at `left: 12px` (extends to 87px), `padding-left: 70px` ensures clearance with the deck's `position: absolute` keeping it out of flow.
+21. **Sweep animation shrinks to EXACT captured deck size** — `flyTo()` scale is relative to the source card (`scale * fromW`), NOT the target rect. On mobile: cards (58px) shrink to captured deck (40px) via `scale ≈ 0.689`. On desktop: no scale needed (both 75px). The final visual size MUST match the captured deck dimensions exactly.
+22. **Deal animation scales clones to match target card size** — when deck visual is smaller than card slots (mobile: 40px deck → 58px cards), deal clones grow via `dealScale = targetW / deckW`. On desktop (same size), no scale is applied. Clone MUST arrive at the exact size of the target card slot.
+23. **Desktop dimensions NEVER affected by mobile fixes** — all mobile-specific sizing is inside `@media (max-width: 600px)` blocks. Animation scale calculations use runtime DOM measurements, so they are automatically correct on both breakpoints. Any change to mobile dimensions MUST verify desktop is unchanged.
+
 ## Critical Rules
 
 - **NEVER change animation behavior** — the timing, ordering, imperative DOM manipulation, and commitState flow are all intentional. Do NOT refactor animations to use Vue transitions or reactive state. The imperative animation system exists because Vue's reactivity would cause visual flicker.

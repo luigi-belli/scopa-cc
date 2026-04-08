@@ -11,5 +11,6 @@ final readonly class CreateGameOutput
         public string $playerToken,
         public string $state,
         public ?GameStateOutput $gameState = null,
+        public ?string $mercureToken = null,
     ) {}
 }

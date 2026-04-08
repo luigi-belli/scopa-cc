@@ -67,7 +67,7 @@ services:
       SERVER_NAME: ":80"
       MERCURE_PUBLISHER_JWT_KEY: "!ChangeThisMercureHubJWTSecretKey!ForScopa2026!"
       MERCURE_SUBSCRIBER_JWT_KEY: "!ChangeThisMercureHubJWTSecretKey!ForScopa2026!"
-      MERCURE_EXTRA_DIRECTIVES: "anonymous"
+      MERCURE_EXTRA_DIRECTIVES: ""
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 3s

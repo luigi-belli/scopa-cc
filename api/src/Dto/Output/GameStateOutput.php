@@ -37,5 +37,6 @@ final readonly class GameStateOutput
         public array $roundHistory = [],
         public DeckStyle $deckStyle = DeckStyle::Piacentine,
         public ?array $turnResult = null,
+        public ?string $mercureToken = null,
     ) {}
 }

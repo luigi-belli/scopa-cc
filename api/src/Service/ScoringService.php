@@ -6,7 +6,6 @@ namespace App\Service;
 
 use App\Entity\Game;
 use App\Enum\Suit;
-use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 use App\ValueObject\RoundScores;
 use App\ValueObject\ScoreRow;
@@ -33,9 +32,13 @@ final class ScoringService
 
         $s = [
             ['carte' => 0, 'denari' => 0, 'setteBello' => 0, 'primiera' => 0, 'scope' => 0,
-             'carteCount' => $c1, 'denariCount' => $d1, 'primieraValue' => $prim1, 'hasSetteBello' => false],
+             'carteCount' => $c1, 'denariCount' => $d1, 'primieraValue' => $prim1, 'hasSetteBello' => false,
+             'carteCards' => $p1Captured, 'denariCards' => $p1Captured->filterBySuit(Suit::Denari),
+             'primieraCards' => $this->getBestPrimieraCards($p1Captured)],
             ['carte' => 0, 'denari' => 0, 'setteBello' => 0, 'primiera' => 0, 'scope' => 0,
-             'carteCount' => $c2, 'denariCount' => $d2, 'primieraValue' => $prim2, 'hasSetteBello' => false],
+             'carteCount' => $c2, 'denariCount' => $d2, 'primieraValue' => $prim2, 'hasSetteBello' => false,
+             'carteCards' => $p2Captured, 'denariCards' => $p2Captured->filterBySuit(Suit::Denari),
+             'primieraCards' => $this->getBestPrimieraCards($p2Captured)],
         ];
 
         if ($c1 > $c2) {
@@ -84,22 +87,34 @@ final class ScoringService
         return self::PRIMIERA_VALUES[$cardValue] ?? 0;
     }
 
-    private function calculatePrimiera(CardCollection $cards): ?int
+    private function getBestPrimieraCards(CardCollection $cards): CardCollection
     {
-        /** @var array<string, int> $bestPerSuit */
+        /** @var array<string, \App\ValueObject\Card> $bestPerSuit */
         $bestPerSuit = [];
         foreach ($cards as $card) {
             $suit = $card->suit->value;
             $pVal = self::PRIMIERA_VALUES[$card->value];
-            if (!isset($bestPerSuit[$suit]) || $pVal > $bestPerSuit[$suit]) {
-                $bestPerSuit[$suit] = $pVal;
+            if (!isset($bestPerSuit[$suit]) || $pVal > self::PRIMIERA_VALUES[$bestPerSuit[$suit]->value]) {
+                $bestPerSuit[$suit] = $card;
             }
         }
 
-        if (count($bestPerSuit) < 4) {
+        return new CardCollection(array_values($bestPerSuit));
+    }
+
+    private function calculatePrimiera(CardCollection $cards): ?int
+    {
+        $best = $this->getBestPrimieraCards($cards);
+
+        if (count($best) < 4) {
             return null;
         }
 
-        return array_sum($bestPerSuit);
+        $sum = 0;
+        foreach ($best as $card) {
+            $sum += self::PRIMIERA_VALUES[$card->value];
+        }
+
+        return $sum;
     }
 }

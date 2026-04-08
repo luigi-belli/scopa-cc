@@ -74,6 +74,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { useDeckStyle } from '@/composables/useDeckStyle'
+import { setMercureCookie } from '@/composables/useMercure'
 import { useGameStore } from '@/stores/gameStore'
 import { useI18n } from '@/i18n'
 import DeckSelector from '@/components/lobby/DeckSelector.vue'
@@ -126,6 +127,7 @@ async function createGame() {
       selectedDeck.value
     )
     store.setGame(result.gameId, result.playerToken, 0)
+    if (result.mercureToken) setMercureCookie(result.mercureToken)
     router.push({ name: 'waiting', params: { gameId: result.gameId } })
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -142,6 +144,7 @@ async function joinGame() {
     }
     const result = await api.joinGame(lookup[0].id, playerName.value.trim())
     store.setGame(result.gameId, result.playerToken, 1)
+    if (result.mercureToken) setMercureCookie(result.mercureToken)
     // Don't commitState here — let GameScreen run the deal animation
     store.pendingState = result.gameState
     router.push({ name: 'game', params: { gameId: result.gameId } })
@@ -160,6 +163,7 @@ async function startSinglePlayer() {
       selectedDeck.value
     )
     store.setGame(result.gameId, result.playerToken, 0)
+    if (result.mercureToken) setMercureCookie(result.mercureToken)
     // Don't commitState here — let GameScreen run the deal animation
     if (result.gameState) {
       store.pendingState = result.gameState

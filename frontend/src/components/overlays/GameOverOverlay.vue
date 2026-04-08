@@ -8,6 +8,7 @@
         :myName="myName"
         :opponentName="opponentName"
         :globalScores="{ my: myTotalScore, opp: opponentTotalScore }"
+        @rowClick="selectedCategory = $event"
       />
       <p class="gameover-final">
         {{ t('gameover.finalScore', { my: myTotalScore, opp: opponentTotalScore }) }}
@@ -16,13 +17,25 @@
         {{ t('gameover.newGame') }}
       </button>
     </div>
+    <ScoreDetailDialog
+      v-if="selectedCategory"
+      :category="selectedCategory"
+      :scores="scores"
+      :myIndex="myIndex"
+      :myName="myName"
+      :opponentName="opponentName"
+      :deckStyle="deckStyle"
+      @close="selectedCategory = null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { RoundScores } from '@/types/game'
+import { computed, ref } from 'vue'
+import type { RoundScores, ScoreCategory } from '@/types/game'
+import type { DeckStyle } from '@/types/card'
 import ScoreTable from './ScoreTable.vue'
+import ScoreDetailDialog from './ScoreDetailDialog.vue'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
@@ -33,6 +46,7 @@ const props = defineProps<{
   opponentName: string
   myTotalScore: number
   opponentTotalScore: number
+  deckStyle: DeckStyle
 }>()
 
 defineEmits<{
@@ -42,4 +56,5 @@ defineEmits<{
 const { t } = useI18n()
 
 const iWon = computed(() => props.winner === props.myIndex)
+const selectedCategory = ref<ScoreCategory | null>(null)
 </script>

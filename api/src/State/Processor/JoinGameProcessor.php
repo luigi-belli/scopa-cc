@@ -12,6 +12,7 @@ use App\Entity\Game;
 use App\Enum\GameState;
 use App\Service\GameEngine;
 use App\Service\MercurePublisher;
+use App\Service\MercureTokenService;
 use App\Service\PlayerTokenService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
@@ -27,6 +28,7 @@ final class JoinGameProcessor implements ProcessorInterface
         private readonly PlayerTokenService $tokenService,
         private readonly GameEngine $gameEngine,
         private readonly MercurePublisher $mercurePublisher,
+        private readonly MercureTokenService $mercureTokenService,
     ) {}
 
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): JoinGameOutput
@@ -80,6 +82,7 @@ final class JoinGameProcessor implements ProcessorInterface
             gameId: $gameId,
             playerToken: $token,
             gameState: $gameState,
+            mercureToken: $this->mercureTokenService->generateSubscriberToken($gameId, 1),
         );
     }
 }

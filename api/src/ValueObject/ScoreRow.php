@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\ValueObject;
 
+/**
+ * @phpstan-type ScoreRowArray array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: int|null, hasSetteBello: bool, carteCards?: list<array{suit: string, value: int}>, denariCards?: list<array{suit: string, value: int}>, primieraCards?: list<array{suit: string, value: int}>}
+ */
 final readonly class ScoreRow implements \JsonSerializable
 {
     public function __construct(
@@ -16,9 +19,12 @@ final readonly class ScoreRow implements \JsonSerializable
         public int $denariCount = 0,
         public ?int $primieraValue = null,
         public bool $hasSetteBello = false,
+        public CardCollection $carteCards = new CardCollection(),
+        public CardCollection $denariCards = new CardCollection(),
+        public CardCollection $primieraCards = new CardCollection(),
     ) {}
 
-    /** @param array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: int|null, hasSetteBello: bool} $data */
+    /** @param ScoreRowArray $data */
     public static function fromArray(array $data): self
     {
         return new self(
@@ -31,6 +37,9 @@ final readonly class ScoreRow implements \JsonSerializable
             denariCount: $data['denariCount'],
             primieraValue: $data['primieraValue'],
             hasSetteBello: $data['hasSetteBello'],
+            carteCards: CardCollection::fromArray($data['carteCards'] ?? []),
+            denariCards: CardCollection::fromArray($data['denariCards'] ?? []),
+            primieraCards: CardCollection::fromArray($data['primieraCards'] ?? []),
         );
     }
 
@@ -39,7 +48,7 @@ final readonly class ScoreRow implements \JsonSerializable
         return $this->carte + $this->denari + $this->setteBello + $this->primiera + $this->scope;
     }
 
-    /** @return array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: int|null, hasSetteBello: bool} */
+    /** @return array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: int|null, hasSetteBello: bool, carteCards: list<array{suit: string, value: int}>, denariCards: list<array{suit: string, value: int}>, primieraCards: list<array{suit: string, value: int}>} */
     public function jsonSerialize(): array
     {
         return [
@@ -52,6 +61,9 @@ final readonly class ScoreRow implements \JsonSerializable
             'denariCount' => $this->denariCount,
             'primieraValue' => $this->primieraValue,
             'hasSetteBello' => $this->hasSetteBello,
+            'carteCards' => $this->carteCards->jsonSerialize(),
+            'denariCards' => $this->denariCards->jsonSerialize(),
+            'primieraCards' => $this->primieraCards->jsonSerialize(),
         ];
     }
 }
