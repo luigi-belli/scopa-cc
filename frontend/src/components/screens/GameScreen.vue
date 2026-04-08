@@ -782,10 +782,11 @@ async function animPlace(result: TurnResult) {
   }
   if (!srcR) return
 
-  // 2. Destination: the specific empty slot where the card will land.
-  //    The new card will be appended at index = current table length.
-  //    Compute the grid cell position for that slot.
-  const dest = getSlotRect(gs.value?.table.length ?? 0, srcR.width, srcR.height)
+  // 2. Destination: the specific slot where the card will land.
+  //    Briscola: always slot 0 (single centered slot, overlay existing card).
+  //    Scopa: next empty slot (index = current table length).
+  const slotIdx = isBriscola.value ? 0 : (gs.value?.table.length ?? 0)
+  const dest = getSlotRect(slotIdx, srcR.width, srcR.height)
   if (!dest) return
 
   // 3. Clone flies from hand → target slot
@@ -944,7 +945,7 @@ async function animCapture(result: TurnResult) {
 //
 // When the follower plays, the trick resolves:
 // 1. Follower's card flies from hand → table center (500ms)
-// 2. Pause to show both cards (150ms + glow)
+// 2. Brief pause to show both cards (150ms)
 // 3. Both cards sweep to winner's captured deck (450ms)
 // ════════════════════════════════════════════════════
 
@@ -972,8 +973,8 @@ async function animTrick(result: TurnResult) {
     }
   }
 
-  // 2. Fly follower's card to table center (next slot after leader's card)
-  const dest = getSlotRect(1, srcR?.width ?? 75, srcR?.height ?? 133)
+  // 2. Fly follower's card to table center (same slot — overlays leader's card)
+  const dest = getSlotRect(0, srcR?.width ?? 75, srcR?.height ?? 133)
   if (srcR && dest) {
     const clone = isMe ? mkFace(card, srcR) : mkBack(srcR)
     aLayer().appendChild(clone)
@@ -986,16 +987,9 @@ async function animTrick(result: TurnResult) {
     await flyTo(clone, dest, SLIDE_MS, SLIDE_EASE)
   }
 
-  // 3. Pause + glow both trick cards
+  // 3. Brief pause to show both cards
   await sleep(CAP_PAUSE)
   const table = gs.value?.table ?? []
-  const glowEls: HTMLElement[] = []
-  table.forEach((tc, idx) => {
-    const el = q(`[data-card-key="${cardKey(tc, idx)}"]`)
-    if (el) { el.classList.add('captured-glow'); glowEls.push(el) }
-  })
-  await sleep(GLOW_MS)
-  glowEls.forEach(el => el.classList.remove('captured-glow'))
 
   // 4. Snapshot positions, hide table cards
   const sweepItems: { card: Card; rect: DOMRect }[] = []
