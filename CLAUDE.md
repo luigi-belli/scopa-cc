@@ -142,10 +142,10 @@ scopa/
     public/
       favicon.svg
       assets/cards/            # Card images (4 deck styles)
-        piacentine/            # 40 files + bg (SVG placeholder content in .jpg extension)
-        napoletane/            # 40 files + bg (SVG placeholder content in .jpg extension)
-        toscane/               # 40 files + bg (SVG placeholder content in .png extension)
-        siciliane/             # 40 files + bg (SVG placeholder content in .png extension)
+        piacentine/            # 40 files + bg
+        napoletane/            # 40 files + bg
+        toscane/               # 40 files + bg
+        siciliane/             # 40 files + bg
     src/
       main.ts                  # Vue app + Pinia + Router setup
       vite-env.d.ts            # TypeScript declarations for .vue modules
@@ -237,8 +237,6 @@ Image path: `/assets/cards/{deckStyle}/{value}{suitLetter}.{ext}`
 Card back: `/assets/cards/{deckStyle}/bg.{ext}`
 
 Selection saved to `localStorage` key `scopa-deck-style`. In multiplayer, the creator's choice is used.
-
-**Note**: Current card images are SVG-based placeholders (SVG content in .jpg/.png extensions) showing value and suit name on a colored background. Replace with real card images from the GPL-licensed repos listed above for production use.
 
 ## Backend Architecture
 
