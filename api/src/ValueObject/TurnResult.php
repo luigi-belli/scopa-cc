@@ -15,6 +15,8 @@ final readonly class TurnResult implements \JsonSerializable
         public bool $scopa,
         public ?SweepData $sweep = null,
         public ?array $options = null,
+        public ?int $trickWinner = null,
+        public ?Card $leaderCard = null,
     ) {}
 
     /** @return array<string, mixed> */
@@ -37,6 +39,14 @@ final readonly class TurnResult implements \JsonSerializable
                 ),
                 $this->options,
             );
+        }
+
+        if ($this->trickWinner !== null) {
+            $data['trickWinner'] = $this->trickWinner;
+        }
+
+        if ($this->leaderCard !== null) {
+            $data['leaderCard'] = $this->leaderCard->jsonSerialize();
         }
 
         return $data;

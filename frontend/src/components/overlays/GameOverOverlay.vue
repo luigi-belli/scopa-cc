@@ -1,8 +1,12 @@
 <template>
   <div class="overlay overlay-enter">
-    <div class="overlay-content gameover-content" :class="iWon ? 'winner' : 'loser'">
-      <h2>{{ iWon ? t('gameover.won') : t('gameover.lost') }}</h2>
+    <div class="overlay-content gameover-content" :class="iWon ? 'winner' : (isDraw ? '' : 'loser')">
+      <h2 v-if="isDraw">{{ t('briscola.draw') }}</h2>
+      <h2 v-else>{{ iWon ? t('gameover.won') : t('gameover.lost') }}</h2>
+
+      <!-- Scopa: detailed score table -->
       <ScoreTable
+        v-if="gameType === 'scopa' && scores"
         :scores="scores"
         :myIndex="myIndex"
         :myName="myName"
@@ -10,6 +14,19 @@
         :globalScores="{ my: myTotalScore, opp: opponentTotalScore }"
         @rowClick="selectedCategory = $event"
       />
+
+      <!-- Briscola: simple point display -->
+      <div v-if="gameType === 'briscola'" class="briscola-score-summary">
+        <div class="briscola-score-row">
+          <span class="player-label">{{ myName }}</span>
+          <span class="score-value">{{ myTotalScore }} {{ t('briscola.points') }}</span>
+        </div>
+        <div class="briscola-score-row">
+          <span class="player-label">{{ opponentName }}</span>
+          <span class="score-value">{{ opponentTotalScore }} {{ t('briscola.points') }}</span>
+        </div>
+      </div>
+
       <p class="gameover-final">
         {{ t('gameover.finalScore', { my: myTotalScore, opp: opponentTotalScore }) }}
       </p>
@@ -18,7 +35,7 @@
       </button>
     </div>
     <ScoreDetailDialog
-      v-if="selectedCategory"
+      v-if="gameType === 'scopa' && selectedCategory && scores"
       :category="selectedCategory"
       :scores="scores"
       :myIndex="myIndex"
@@ -32,14 +49,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { RoundScores, ScoreCategory } from '@/types/game'
+import type { RoundScores, ScoreCategory, GameType } from '@/types/game'
 import type { DeckStyle } from '@/types/card'
 import ScoreTable from './ScoreTable.vue'
 import ScoreDetailDialog from './ScoreDetailDialog.vue'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
-  scores: [RoundScores, RoundScores]
+  scores: [RoundScores, RoundScores] | null
   winner: number
   myIndex: number
   myName: string
@@ -47,6 +64,7 @@ const props = defineProps<{
   myTotalScore: number
   opponentTotalScore: number
   deckStyle: DeckStyle
+  gameType: GameType
 }>()
 
 defineEmits<{
@@ -56,5 +74,6 @@ defineEmits<{
 const { t } = useI18n()
 
 const iWon = computed(() => props.winner === props.myIndex)
+const isDraw = computed(() => props.gameType === 'briscola' && props.myTotalScore === props.opponentTotalScore)
 const selectedCategory = ref<ScoreCategory | null>(null)
 </script>

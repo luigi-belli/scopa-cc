@@ -92,7 +92,7 @@ final class MercurePublisher
         ], static fn($v) => $v !== null));
     }
 
-    public function publishGameOver(string $gameId, Game $game, GameEngine $engine, RoundScores $scores, ?SweepData $sweep = null): void
+    public function publishGameOver(string $gameId, Game $game, GameEngine $engine, ?RoundScores $scores, ?SweepData $sweep = null): void
     {
         $state0 = $engine->getStateForPlayer($game, 0);
         $state1 = $engine->getStateForPlayer($game, 1);
@@ -101,13 +101,13 @@ final class MercurePublisher
         $sweepData = $sweep?->jsonSerialize();
 
         $this->publishToPlayer($gameId, 0, 'game-over', array_filter([
-            'scores' => $scores->jsonSerialize(),
+            'scores' => $scores?->jsonSerialize(),
             'winner' => $winner,
             'gameState' => $this->stateToArray($state0),
             'sweep' => $sweepData,
         ], static fn($v) => $v !== null));
         $this->publishToPlayer($gameId, 1, 'game-over', array_filter([
-            'scores' => $scores->jsonSerialize(),
+            'scores' => $scores?->jsonSerialize(),
             'winner' => $winner,
             'gameState' => $this->stateToArray($state1),
             'sweep' => $sweepData,
@@ -123,7 +123,7 @@ final class MercurePublisher
             $lastEntry = end($lastHistory);
             $scores = $lastEntry instanceof RoundHistoryEntry ? $lastEntry->scores : null;
             $sweep = $turnResult->sweep;
-            if ($scores !== null && $game->getState() === GameState::GameOver) {
+            if ($game->getState() === GameState::GameOver) {
                 $this->publishGameOver($gameId, $game, $engine, $scores, $sweep);
             } elseif ($scores !== null) {
                 $this->publishRoundEnd($gameId, $game, $engine, $scores, $sweep);
@@ -175,6 +175,9 @@ final class MercurePublisher
                 $state->roundHistory,
             ),
             'deckStyle' => $state->deckStyle->value,
+            'gameType' => $state->gameType->value,
+            'briscolaCard' => $state->briscolaCard?->jsonSerialize(),
+            'lastTrick' => $state->lastTrick?->jsonSerialize(),
         ];
     }
 }

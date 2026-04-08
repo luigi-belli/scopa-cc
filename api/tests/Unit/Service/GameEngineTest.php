@@ -8,8 +8,8 @@ use App\Entity\Game;
 use App\Enum\GameState;
 use App\Enum\Suit;
 use App\Service\DeckService;
-use App\Service\GameEngine;
-use App\Service\ScoringService;
+use App\Service\ScopaEngine;
+use App\Service\ScopaScoringService;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 use App\ValueObject\PendingPlay;
@@ -18,11 +18,11 @@ use PHPUnit\Framework\TestCase;
 
 class GameEngineTest extends TestCase
 {
-    private GameEngine $engine;
+    private ScopaEngine $engine;
 
     protected function setUp(): void
     {
-        $this->engine = new GameEngine(new DeckService(), new ScoringService());
+        $this->engine = new ScopaEngine(new DeckService(), new ScopaScoringService());
     }
 
     private function createStartedGame(): Game
@@ -34,7 +34,7 @@ class GameEngineTest extends TestCase
         $game->setPlayer2Token('token2');
         $game->setDealerIndex(0);
         $this->engine->initializeGame($game);
-        $this->engine->startRound($game);
+        $this->engine->startGame($game);
         return $game;
     }
 

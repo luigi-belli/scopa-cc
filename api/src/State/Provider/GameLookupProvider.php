@@ -45,6 +45,7 @@ final class GameLookupProvider implements ProviderInterface
             id: (string) $game->getId(),
             name: $game->getName() ?? '',
             state: $game->getState()->value,
+            gameType: $game->getGameType(),
         )];
     }
 }

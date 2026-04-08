@@ -10,7 +10,7 @@ use App\Dto\Input\SelectCaptureInput;
 use App\Dto\Output\GameStateOutput;
 use App\Enum\GameState;
 use App\Message\HandleAITurnMessage;
-use App\Service\GameEngine;
+use App\Service\GameEngineFactory;
 use App\Service\MercurePublisher;
 use App\Service\PlayerAuthenticator;
 use Doctrine\ORM\EntityManagerInterface;
@@ -25,7 +25,7 @@ final class SelectCaptureProcessor implements ProcessorInterface
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly PlayerAuthenticator $authenticator,
-        private readonly GameEngine $gameEngine,
+        private readonly GameEngineFactory $engineFactory,
         private readonly MercurePublisher $mercurePublisher,
         private readonly MessageBusInterface $messageBus,
     ) {}
@@ -48,7 +48,8 @@ final class SelectCaptureProcessor implements ProcessorInterface
             throw new BadRequestHttpException('No pending capture for this player');
         }
 
-        $result = $this->gameEngine->selectCapture($game, $data->optionIndex);
+        $engine = $this->engineFactory->forGame($game);
+        $result = $engine->selectCapture($game, $data->optionIndex);
 
         try {
             $this->entityManager->flush();
@@ -58,12 +59,12 @@ final class SelectCaptureProcessor implements ProcessorInterface
 
         $gameId = (string) $game->getId();
 
-        $this->mercurePublisher->publishTurnOutcome($gameId, $game, $this->gameEngine, $result);
+        $this->mercurePublisher->publishTurnOutcome($gameId, $game, $engine, $result);
 
         if ($game->isSinglePlayer() && $game->getState() === GameState::Playing && $game->getCurrentPlayer() === 1) {
             $this->messageBus->dispatch(new HandleAITurnMessage($gameId));
         }
 
-        return $this->gameEngine->getStateForPlayer($game, $playerIndex);
+        return $engine->getStateForPlayer($game, $playerIndex);
     }
 }

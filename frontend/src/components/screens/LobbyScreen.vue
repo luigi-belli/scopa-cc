@@ -2,7 +2,6 @@
   <div class="screen active">
     <div class="lobby-container">
       <h1 class="game-title">{{ t('lobby.title') }}</h1>
-      <p class="subtitle">{{ t('lobby.subtitle') }}</p>
 
       <div class="lobby-form">
         <div class="form-group">
@@ -14,7 +13,7 @@
             :placeholder="t('lobby.playerNamePlaceholder')"
             maxlength="30"
             autocomplete="off"
-            @input="saveName"
+            @input="savePreferences"
           >
         </div>
 
@@ -29,6 +28,20 @@
               class="lang-btn" :class="{ selected: locale === 'en' }"
               @click="setLocale('en')"
             >🇬🇧 English</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>{{ t('lobby.gameType') }}</label>
+          <div class="language-selector">
+            <button
+              class="lang-btn" :class="{ selected: gameType === 'scopa' }"
+              @click="gameType = 'scopa'; savePreferences()"
+            >{{ t('lobby.gameType.scopa') }}</button>
+            <button
+              class="lang-btn" :class="{ selected: gameType === 'briscola' }"
+              @click="gameType = 'briscola'; savePreferences()"
+            >{{ t('lobby.gameType.briscola') }}</button>
           </div>
         </div>
 
@@ -48,6 +61,7 @@
             :placeholder="t('lobby.gameNamePlaceholder')"
             maxlength="60"
             autocomplete="off"
+            @input="savePreferences"
             @keydown.enter="createGame"
           >
         </div>
@@ -78,6 +92,7 @@ import { setMercureCookie } from '@/composables/useMercure'
 import { useGameStore } from '@/stores/gameStore'
 import { useI18n } from '@/i18n'
 import DeckSelector from '@/components/lobby/DeckSelector.vue'
+import type { GameType } from '@/types/game'
 
 const router = useRouter()
 const api = useApi()
@@ -87,6 +102,7 @@ const { t, locale, setLocale } = useI18n()
 
 const playerName = ref('')
 const gameName = ref('')
+const gameType = ref<GameType>('scopa')
 const error = ref('')
 
 onMounted(() => {
@@ -96,12 +112,18 @@ onMounted(() => {
     return
   }
   store.$reset()
-  const saved = localStorage.getItem('scopa-player-name')
-  if (saved) playerName.value = saved
+  const savedName = localStorage.getItem('scopa-player-name')
+  if (savedName) playerName.value = savedName
+  const savedGameName = localStorage.getItem('scopa-game-name')
+  if (savedGameName) gameName.value = savedGameName
+  const savedGameType = localStorage.getItem('scopa-game-type')
+  if (savedGameType === 'scopa' || savedGameType === 'briscola') gameType.value = savedGameType
 })
 
-function saveName() {
+function savePreferences() {
   localStorage.setItem('scopa-player-name', playerName.value.trim())
+  localStorage.setItem('scopa-game-name', gameName.value.trim())
+  localStorage.setItem('scopa-game-type', gameType.value)
 }
 
 function validate(requireGameName = true): boolean {
@@ -124,7 +146,8 @@ async function createGame() {
       playerName.value.trim(),
       gameName.value.trim(),
       false,
-      selectedDeck.value
+      selectedDeck.value,
+      gameType.value
     )
     store.setGame(result.gameId, result.playerToken, 0)
     if (result.mercureToken) setMercureCookie(result.mercureToken)
@@ -160,7 +183,8 @@ async function startSinglePlayer() {
       playerName.value.trim(),
       null,
       true,
-      selectedDeck.value
+      selectedDeck.value,
+      gameType.value
     )
     store.setGame(result.gameId, result.playerToken, 0)
     if (result.mercureToken) setMercureCookie(result.mercureToken)

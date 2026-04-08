@@ -9,7 +9,7 @@ use ApiPlatform\State\ProcessorInterface;
 use App\Dto\Output\GameStateOutput;
 use App\Enum\GameState;
 use App\Message\HandleAITurnMessage;
-use App\Service\GameEngine;
+use App\Service\GameEngineFactory;
 use App\Service\MercurePublisher;
 use App\Service\PlayerAuthenticator;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,7 +24,7 @@ final class NextRoundProcessor implements ProcessorInterface
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly PlayerAuthenticator $authenticator,
-        private readonly GameEngine $gameEngine,
+        private readonly GameEngineFactory $engineFactory,
         private readonly MercurePublisher $mercurePublisher,
         private readonly MessageBusInterface $messageBus,
     ) {}
@@ -38,7 +38,8 @@ final class NextRoundProcessor implements ProcessorInterface
             throw new BadRequestHttpException('Game is not in round-end state');
         }
 
-        $this->gameEngine->nextRound($game);
+        $engine = $this->engineFactory->forGame($game);
+        $engine->nextRound($game);
 
         try {
             $this->entityManager->flush();
@@ -47,13 +48,13 @@ final class NextRoundProcessor implements ProcessorInterface
         }
 
         $gameId = (string) $game->getId();
-        $this->mercurePublisher->publishGameState($gameId, $game, $this->gameEngine);
+        $this->mercurePublisher->publishGameState($gameId, $game, $engine);
 
         // If single player and AI goes first, dispatch
         if ($game->isSinglePlayer() && $game->getCurrentPlayer() === 1) {
             $this->messageBus->dispatch(new HandleAITurnMessage($gameId));
         }
 
-        return $this->gameEngine->getStateForPlayer($game, $playerIndex);
+        return $engine->getStateForPlayer($game, $playerIndex);
     }
 }

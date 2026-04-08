@@ -190,11 +190,18 @@ These constraints MUST be respected after EVERY change. Verify all of them befor
 8b. **Table cards in fixed 2×5 grid** — `.table-center` is `display: grid; grid-template-columns: repeat(5, 75px); grid-template-rows: repeat(2, 133px)`. Cards fill contiguous slots. ≤5 cards → one row centred; >5 → two rows centred. Place animation targets the next empty slot. After capture, remaining cards reflow into contiguous slots via FLIP.
 
 ### Animation Constraints
+
+**HARD RULE — NO FINAL STATE BEFORE ANIMATION COMPLETES:**
+The user must NEVER see the final/new state before the animation that transitions to it has finished. The visual flow is always: **previous state displayed → animation plays → final state revealed**. This applies to ALL game elements without exception: cards in hand, table cards, scores, deck count, briscola card, captured counts, turn indicator, trick results. Any element that appears, disappears, or changes value must do so ONLY after the corresponding animation completes. Violating this (e.g., a card appearing in hand before deal animation, briscola card visible before initial deal finishes, scores updating before sweep completes) is a **critical bug** that must be flagged and fixed.
+
 9. **State committed ONLY after animation ends** — `store.commitState()`/`store.finishAnimation()` called at the very end of every animation function. NO EXCEPTIONS. All mid-animation DOM changes are imperative.
 10. **Captured deck updates ONLY after sweep** — cards hidden with visibility:hidden during sweep, state committed after sweep clones reach captured deck
 11. **Card animation visible full path** — all moving cards use clones in `#animation-layer` (z-index 50, position fixed), never animated inside `overflow: hidden` table-area
 12. **Deal animation blocks events** — `store.animating = true` during deal, incoming events stashed and processed after deal completes
-13. **No visual flash on deal** — `dealHiding`/`dealHidingTable` flags render cards with `opacity: 0`, revealed one-by-one by animation
+13. **No visual flash on deal** — `dealHiding`/`dealHidingTable`/`dealHidingBriscola` flags render cards with `opacity: 0`, revealed one-by-one by animation
+13b. **Briscola card hidden during initial deal** — `dealHidingBriscola` flag keeps briscola card at `opacity: 0` until all hand cards are dealt, then fades it in
+13c. **Briscola partial deal only animates NEW cards** — after a trick, `dealHiding` IS set (ALL cards hidden to prevent new card flash), then old cards are immediately revealed after layout. Only the newly drawn card(s) animate from deck. New cards identified by card identity (suit-value) against pre-trick hand.
+13d. **nextTick between clearing dealHiding and clearing imperative opacity** — in `runDealAnimation` cleanup, `dealHiding = false` must be followed by `await nextTick()` BEFORE `allEls.forEach(el => el.style.opacity = '')`. Without this, clearing the imperative `opacity: 1` exposes Vue's stale reactive `opacity: 0` for one frame, causing a flash.
 14. **Vue-managed DOM NEVER modified by animation code** — no `appendChild`/`remove` on `.table-center` or `.hand-row`. Only `visibility:hidden` via tracked `setStyle()`. All tracked styles restored via `restoreStyles()` BEFORE commitState.
 15. **No stale clones after animation** — `clearLayer()` called after every animation, before commitState
 16. **Post-animation delay blocks events** — `inPostAnimDelay` flag keeps events queued during the 600ms post-animation gap, preventing visual jumps

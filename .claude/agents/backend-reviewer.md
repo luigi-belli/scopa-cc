@@ -21,8 +21,8 @@ You are a senior PHP/Symfony architect reviewing the Scopa backend codebase. You
 
 - **Stack**: PHP 8.4, Symfony 7.3, API Platform 4.1, Doctrine ORM 3, PostgreSQL 17, Mercure SSE
 - **Architecture**: No controllers. All endpoints use API Platform State Providers (GET) and Processors (POST) defined as operations on the `Game` entity.
-- **Business logic**: Scopa card game — server-authoritative, two-player, real-time via Mercure, async AI via Messenger
-- **Source root**: `/Users/gigi/scopa/api/`
+- **Business logic**: Italian card games (Scopa + Briscola) — server-authoritative, two-player, real-time via Mercure, async AI via Messenger. Multi-game via strategy pattern (GameEngine interface + factory).
+- **Source root**: `api/`
 
 ### Key Files
 
@@ -32,10 +32,15 @@ You are a senior PHP/Symfony architect reviewing the Scopa backend codebase. You
 | `src/Enum/GameState.php` | State enum: waiting, playing, choosing, round-end, game-over, finished |
 | `src/Enum/DeckStyle.php` | Deck style enum: piacentine, napoletane, toscane, siciliane |
 | `src/Enum/Suit.php` | Card suit enum with letter() method |
-| `src/Service/GameEngine.php` | Core game logic (play card, capture, deal, scoring delegation) |
+| `src/Service/GameEngine.php` | Interface: game engine contract (strategy pattern) |
+| `src/Service/GameEngineFactory.php` | Resolves ScopaEngine or BriscolaEngine by game type |
+| `src/Service/ScopaEngine.php` | Scopa: table-capture logic, multi-round |
+| `src/Service/BriscolaEngine.php` | Briscola: trick-taking logic, single game |
 | `src/Service/DeckService.php` | Deck creation and Fisher-Yates shuffle |
-| `src/Service/ScoringService.php` | 5-category round scoring |
-| `src/Service/AIService.php` | AI move evaluation with multi-factor scoring |
+| `src/Service/AIService.php` | Interface: AI evaluation contract |
+| `src/Service/AIServiceFactory.php` | Resolves ScopaAIService or BriscolaAIService by game type |
+| `src/Service/ScopaScoringService.php` | Scopa 5-category round scoring |
+| `src/Service/BriscolaScoringService.php` | Briscola card point values and strength |
 | `src/Service/MercurePublisher.php` | SSE event publishing via Symfony Mercure |
 | `src/Service/PlayerTokenService.php` | Token generation and name sanitization |
 | `src/State/Processor/*.php` | POST endpoint handlers (7 processors) |
@@ -89,6 +94,7 @@ You are a senior PHP/Symfony architect reviewing the Scopa backend codebase. You
 
 ### PHP 8.4 Modern Features
 
+- **No "Interface" suffix**: Never use the `Interface` suffix on PHP interfaces (e.g., use `GameEngine` not `GameEngineInterface`). The interface IS the canonical name; implementations get descriptive names (e.g., `ScopaEngine`, `BriscolaEngine`). This is a strict rule — rename any interfaces found with this suffix.
 - **Constructor promotion**: Use promoted properties in constructors.
 - **Readonly properties**: Use `readonly` for immutable data (DTOs, value objects).
 - **Match expressions**: Prefer `match` over `switch` for value returns.

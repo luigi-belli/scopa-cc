@@ -35,3 +35,9 @@ export const PRIMIERA_VALUES: Record<number, number> = {
   4: 14, 3: 13, 2: 12,
   8: 10, 9: 10, 10: 10,
 }
+
+/** Briscola card point values (Ace=11, Three=10, King=4, Knight=3, Jack=2, rest=0). */
+export const BRISCOLA_CARD_POINTS: Record<number, number> = {
+  1: 11, 3: 10, 10: 4, 9: 3, 8: 2,
+  2: 0, 4: 0, 5: 0, 6: 0, 7: 0,
+}

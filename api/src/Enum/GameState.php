@@ -8,8 +8,8 @@ enum GameState: string
 {
     case Waiting = 'waiting';
     case Playing = 'playing';
-    case Choosing = 'choosing';
-    case RoundEnd = 'round-end';
+    case Choosing = 'choosing';       // Scopa: player must choose capture option
+    case RoundEnd = 'round-end';     // Scopa: round finished, showing scores
     case GameOver = 'game-over';
     case Finished = 'finished';
 

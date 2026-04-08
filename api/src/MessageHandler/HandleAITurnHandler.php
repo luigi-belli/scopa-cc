@@ -7,8 +7,8 @@ namespace App\MessageHandler;
 use App\Entity\Game;
 use App\Enum\GameState;
 use App\Message\HandleAITurnMessage;
-use App\Service\AIService;
-use App\Service\GameEngine;
+use App\Service\AIServiceFactory;
+use App\Service\GameEngineFactory;
 use App\Service\MercurePublisher;
 use App\ValueObject\TurnResultType;
 use Doctrine\ORM\EntityManagerInterface;
@@ -25,8 +25,8 @@ final class HandleAITurnHandler
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
-        private readonly GameEngine $gameEngine,
-        private readonly AIService $aiService,
+        private readonly GameEngineFactory $engineFactory,
+        private readonly AIServiceFactory $aiFactory,
         private readonly MercurePublisher $mercurePublisher,
         private readonly MessageBusInterface $messageBus,
         private readonly LoggerInterface $logger,
@@ -50,14 +50,16 @@ final class HandleAITurnHandler
         }
 
         $gameId = (string) $game->getId();
+        $engine = $this->engineFactory->forGame($game);
+        $aiService = $this->aiFactory->forGame($game);
 
-        $move = $this->aiService->evaluateMove($game, self::AI_PLAYER_INDEX);
+        $move = $aiService->evaluateMove($game, self::AI_PLAYER_INDEX);
 
-        $result = $this->gameEngine->playCard($game, self::AI_PLAYER_INDEX, $move->cardIndex);
+        $result = $engine->playCard($game, self::AI_PLAYER_INDEX, $move->cardIndex);
 
         if ($result->type === TurnResultType::Choosing) {
-            $optionIndex = $this->aiService->autoSelectCapture($game);
-            $result = $this->gameEngine->selectCapture($game, $optionIndex);
+            $optionIndex = $aiService->autoSelectCapture($game);
+            $result = $engine->selectCapture($game, $optionIndex);
         }
 
         try {
@@ -68,7 +70,7 @@ final class HandleAITurnHandler
             return;
         }
 
-        $this->mercurePublisher->publishTurnOutcome($gameId, $game, $this->gameEngine, $result);
+        $this->mercurePublisher->publishTurnOutcome($gameId, $game, $engine, $result);
 
         if ($game->getState() === GameState::Playing && $game->getCurrentPlayer() === self::AI_PLAYER_INDEX) {
             $this->messageBus->dispatch(new HandleAITurnMessage($gameId));

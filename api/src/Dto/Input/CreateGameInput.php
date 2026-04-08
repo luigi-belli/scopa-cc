@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Dto\Input;
 
 use App\Enum\DeckStyle;
+use App\Enum\GameType;
 use Symfony\Component\Validator\Constraints as Assert;
 
 final class CreateGameInput
@@ -19,4 +20,6 @@ final class CreateGameInput
     public bool $singlePlayer = false;
 
     public DeckStyle $deckStyle = DeckStyle::Piacentine;
+
+    public GameType $gameType = GameType::Scopa;
 }

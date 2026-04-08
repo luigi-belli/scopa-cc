@@ -1,7 +1,9 @@
 export default {
   // Lobby
-  'lobby.title': 'Scopa',
-  'lobby.subtitle': 'Il gioco di carte italiano',
+  'lobby.title': 'Carte',
+  'lobby.gameType': 'Gioco',
+  'lobby.gameType.scopa': 'Scopa',
+  'lobby.gameType.briscola': 'Briscola',
   'lobby.playerName': 'Il tuo nome',
   'lobby.playerNamePlaceholder': 'Inserisci il tuo nome',
   'lobby.gameName': 'Nome della partita',
@@ -74,6 +76,15 @@ export default {
   'deck.napoletane': 'Napoletane',
   'deck.toscane': 'Toscane',
   'deck.siciliane': 'Siciliane',
+
+  // Briscola
+  'briscola.trump': 'Briscola',
+  'briscola.points': 'punti',
+  'briscola.trickWon': 'Presa vinta!',
+  'briscola.trickLost': 'Presa persa',
+  'briscola.draw': 'Pareggio! 60 - 60',
+  'briscola.score.points': 'Punti carte',
+  'briscola.lastTrick': 'Ultima presa',
 
   // API/backend error keys
   'error.conflict': 'Conflitto: riprova',

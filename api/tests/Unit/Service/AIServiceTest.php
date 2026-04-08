@@ -7,10 +7,10 @@ namespace App\Tests\Unit\Service;
 use App\Entity\Game;
 use App\Enum\GameState;
 use App\Enum\Suit;
-use App\Service\AIService;
 use App\Service\DeckService;
-use App\Service\GameEngine;
-use App\Service\ScoringService;
+use App\Service\ScopaAIService;
+use App\Service\ScopaEngine;
+use App\Service\ScopaScoringService;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 use App\ValueObject\PendingPlay;
@@ -18,14 +18,14 @@ use PHPUnit\Framework\TestCase;
 
 class AIServiceTest extends TestCase
 {
-    private AIService $ai;
-    private GameEngine $engine;
+    private ScopaAIService $ai;
+    private ScopaEngine $engine;
 
     protected function setUp(): void
     {
-        $scoringService = new ScoringService();
-        $this->engine = new GameEngine(new DeckService(), $scoringService);
-        $this->ai = new AIService($this->engine, $scoringService);
+        $scoringService = new ScopaScoringService();
+        $this->engine = new ScopaEngine(new DeckService(), $scoringService);
+        $this->ai = new ScopaAIService($this->engine, $scoringService);
     }
 
     private function createGame(CardCollection $aiHand, CardCollection $table): Game

@@ -8,5 +8,6 @@ enum TurnResultType: string
 {
     case Place = 'place';
     case Capture = 'capture';
-    case Choosing = 'choosing';
+    case Choosing = 'choosing';   // Scopa: multiple capture options
+    case Trick = 'trick';         // Briscola: trick resolved
 }

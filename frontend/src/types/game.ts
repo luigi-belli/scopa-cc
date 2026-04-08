@@ -1,5 +1,7 @@
 import type { Card } from './card'
 
+export type GameType = 'scopa' | 'briscola'
+
 export type GameStateValue = 'waiting' | 'playing' | 'choosing' | 'round-end' | 'game-over' | 'finished'
 
 export interface GameState {
@@ -23,15 +25,26 @@ export interface GameState {
   roundHistory: RoundHistoryEntry[]
   deckStyle: string
   mercureToken?: string | null
+  gameType: GameType
+  briscolaCard: Card | null
+  lastTrick: TrickData | null
+}
+
+export interface TrickData {
+  leaderCard: Card
+  followerCard: Card
+  winnerIndex: number
 }
 
 export interface TurnResult {
-  type: 'place' | 'capture' | 'choosing'
+  type: 'place' | 'capture' | 'choosing' | 'trick'
   card: Card
   playerIndex: number
   captured: Card[]
   scopa: boolean
   options?: Card[][]
+  trickWinner?: number
+  leaderCard?: Card
 }
 
 export interface RoundScores {
@@ -66,7 +79,7 @@ export interface RoundEndData {
 }
 
 export interface GameOverData {
-  scores: [RoundScores, RoundScores]
+  scores?: [RoundScores, RoundScores]
   winner: number
   gameState: GameState
   sweep?: SweepData
@@ -76,6 +89,7 @@ export interface CreateGameResponse {
   gameId: string
   playerToken: string
   state: string
+  gameType: GameType
   gameState: GameState | null
   mercureToken: string | null
 }
@@ -91,6 +105,7 @@ export interface GameLookupResult {
   id: string
   name: string
   state: string
+  gameType: GameType
 }
 
 export type ScoreCategory = 'carte' | 'denari' | 'primiera'

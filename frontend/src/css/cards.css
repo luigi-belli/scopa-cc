@@ -102,6 +102,23 @@
   height: 100%;
 }
 
+/* Briscola trump card — rotated 90° peeking out from the right side of the deck */
+.briscola-trump-card {
+  position: absolute;
+  left: 42px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+  transform-origin: center center;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.95;
+}
+@media (max-width: 600px) {
+  .briscola-trump-card {
+    left: 22px;
+  }
+}
+
 /* Mobile */
 @media (max-width: 600px) {
   .card,

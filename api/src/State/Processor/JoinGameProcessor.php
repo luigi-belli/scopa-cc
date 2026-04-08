@@ -10,7 +10,7 @@ use App\Dto\Input\JoinGameInput;
 use App\Dto\Output\JoinGameOutput;
 use App\Entity\Game;
 use App\Enum\GameState;
-use App\Service\GameEngine;
+use App\Service\GameEngineFactory;
 use App\Service\MercurePublisher;
 use App\Service\MercureTokenService;
 use App\Service\PlayerTokenService;
@@ -26,7 +26,7 @@ final class JoinGameProcessor implements ProcessorInterface
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly PlayerTokenService $tokenService,
-        private readonly GameEngine $gameEngine,
+        private readonly GameEngineFactory $engineFactory,
         private readonly MercurePublisher $mercurePublisher,
         private readonly MercureTokenService $mercureTokenService,
     ) {}
@@ -62,8 +62,9 @@ final class JoinGameProcessor implements ProcessorInterface
         $game->setPlayer2Token($token);
         $game->setLastHeartbeat2(new \DateTimeImmutable());
 
-        $this->gameEngine->initializeGame($game);
-        $this->gameEngine->startRound($game);
+        $engine = $this->engineFactory->forGame($game);
+        $engine->initializeGame($game);
+        $engine->startGame($game);
 
         try {
             $this->entityManager->flush();
@@ -74,9 +75,9 @@ final class JoinGameProcessor implements ProcessorInterface
         $gameId = (string) $game->getId();
 
         // Publish game state to player 1 (waiting player)
-        $this->mercurePublisher->publishGameState($gameId, $game, $this->gameEngine);
+        $this->mercurePublisher->publishGameState($gameId, $game, $engine);
 
-        $gameState = $this->gameEngine->getStateForPlayer($game, 1);
+        $gameState = $engine->getStateForPlayer($game, 1);
 
         return new JoinGameOutput(
             gameId: $gameId,
