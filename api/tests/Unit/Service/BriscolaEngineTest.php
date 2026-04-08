@@ -192,7 +192,7 @@ class BriscolaEngineTest extends TestCase
         $this->assertCount(2, $game->getDeck());
     }
 
-    public function testBriscolaCardClearedWhenDeckEmpty(): void
+    public function testBriscolaCardRetainedWhenDeckEmpty(): void
     {
         $game = new Game();
         $game->setGameType(GameType::Briscola);
@@ -215,7 +215,33 @@ class BriscolaEngineTest extends TestCase
         $this->engine->playCard($game, 1, 0);
 
         $this->assertCount(0, $game->getDeck());
-        $this->assertNull($game->getBriscolaCard()); // Briscola cleared after drawn
+        $this->assertNotNull($game->getBriscolaCard()); // Briscola must persist for trick resolution
+        $this->assertEquals(Suit::Spade, $game->getBriscolaCard()->suit);
+    }
+
+    public function testTrumpSuitRecognizedAfterDeckExhausted(): void
+    {
+        $game = new Game();
+        $game->setGameType(GameType::Briscola);
+        $game->setState(GameState::Playing);
+        $game->setCurrentPlayer(1);
+        $game->setTrickLeader(0);
+        $briscolaCard = new Card(Suit::Spade, 3);
+        $game->setBriscolaCard($briscolaCard);
+        // Deck empty — last cards already drawn
+        $game->setDeck(new CardCollection());
+        // Leader (p0) played a non-trump card
+        $game->setTableCards(new CardCollection([new Card(Suit::Denari, 1)])); // Asso di Denari (11pts)
+        $game->setPlayer1Hand(new CardCollection());
+        // Follower (p1) plays a low trump card — should WIN because trump beats non-trump
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Spade, 2)])); // 2 di Spade (trump)
+        $game->setPlayer1Captured(new CardCollection());
+        $game->setPlayer2Captured(new CardCollection());
+
+        $result = $this->engine->playCard($game, 1, 0);
+
+        // Player 1 (follower) must win the trick with trump, even with deck empty
+        $this->assertEquals(1, $result->trickWinner);
     }
 
     public function testGameOverAfterAllTricks(): void
@@ -225,7 +251,7 @@ class BriscolaEngineTest extends TestCase
         $game->setState(GameState::Playing);
         $game->setCurrentPlayer(1);
         $game->setTrickLeader(0);
-        $game->setBriscolaCard(null); // Deck already exhausted
+        $game->setBriscolaCard(new Card(Suit::Spade, 3)); // Must persist even with empty deck
         $game->setTableCards(new CardCollection([new Card(Suit::Denari, 2)]));
         $game->setPlayer1Hand(new CardCollection());
         $game->setPlayer2Hand(new CardCollection([new Card(Suit::Denari, 5)]));

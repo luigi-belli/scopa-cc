@@ -1,7 +1,6 @@
 export default {
   // Lobby
-  'lobby.title': 'Italian Cards',
-  'lobby.subtitle': 'Italian card games',
+  'lobby.title': 'Carte',
   'lobby.gameType': 'Game',
   'lobby.gameType.scopa': 'Scopa',
   'lobby.gameType.briscola': 'Briscola',

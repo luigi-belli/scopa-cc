@@ -461,7 +461,7 @@ Two-layer state model to prevent animation flicker:
 - **`stashState(state)`**: Updates serverState + pendingState only. Display unchanged.
 - **`finishAnimation()`**: Commits pendingState to displayState, sets animating=false.
 
-Additional store state: `gameId`, `playerToken`, `myIndex`, `animating` flag, `pendingTurnResult`, `pendingEvents` (event queue), `dealHiding`/`dealHidingTable` flags.
+Additional store state: `gameId`, `playerToken`, `myIndex`, `animating` flag, `pendingTurnResult`, `pendingEvents` (event queue), `dealHiding`/`dealHidingTable`/`dealHidingBriscola` flags.
 
 Session methods: `setGame()` (persists to localStorage), `restoreSession()` (reads from localStorage), `clearSession()` (removes localStorage entry), `$reset()` (clears all state + session).
 
@@ -474,93 +474,7 @@ Three routes configured via Vue Router:
 
 ### Animation System
 
-**INVARIANT: `store.commitState()` is called ONLY AFTER all animations finish. NO EXCEPTIONS.**
-
-All DOM changes during animation are imperative (`el.remove()`, `el.style`, `document.createElement`, `appendChild`). Vue re-renders via `commitState` only at the very end. This ensures scores, turn indicator, captured decks, deck count, and opponent hand count never update before the visual animation completes.
-
-#### Event Flow
-```
-Mercure turn-result  → handleTurnResult(data)         [sets animating=true]
-Mercure game-state   → stashState(newState)            [buffers, no render]
-                     → runPlaceAnimation/runCaptureAnimation
-                     → finishAnimation() at end        [Vue re-renders]
-                     → sleep(600ms) afterAnimation delay
-                     → commit any stashed pendingState  [if arrived during delay]
-                     → processQueue()                  [handle queued events]
-```
-
-Events that arrive while busy (`store.animating || inPostAnimDelay`) are queued via `store.queueEvent()` and processed after animation via `processQueue()` → `store.shiftEvent()`.
-
-**Event queuing rules:**
-- `turn-result`, `round-end`, `game-over`: always queued when busy
-- `game-state`: **stashed** if the queue is empty (for the current animation's `finishAnimation`), **queued** if there are already queued events (preserves ordering for multiple turns)
-- `canPlay` blocks during BOTH `animating` and `inPostAnimDelay` to prevent plays during the 600ms gap
-
-**processQueue chaining:**
-- After `turn-result`: `handleTurnResult` runs animation, which calls `processQueue` at the end
-- Before `turn-result` from queue: peeks at next event; if `game-state`, pre-stashes it so `finishAnimation` can commit the correct intermediate state
-- After `game-state` (non-deal): commits state, then **chains** to `processQueue` for remaining events
-- After `round-end`/`game-over`: shows overlay, chains to `processQueue`
-- `runDealAnimation` early return (no deck rect): calls `processQueue` to avoid stuck events
-
-#### Place Animation
-1. Hide source card in hand (`visibility: hidden`)
-2. Snapshot table + hand positions
-3. Imperatively create card element on table (hidden, `opacity: 0`)
-4. Imperatively remove played card from hand
-5. FLIP existing table + hand cards to new positions
-6. Clone animates from hand to table in animation layer (500ms)
-7. Reveal real card, remove clone
-8. **commitState** — scores, turn indicator, etc. update
-
-#### Capture Animation
-1. Hide source card, create clone in animation layer
-2. Clone slides to landing card on table (500ms)
-3. Pause (150ms), glow captured cards (500ms)
-4. Snapshot positions, imperatively remove captured cards + played card
-5. FLIP remaining cards
-6. Sweep clones to captured deck (450ms, 100ms stagger)
-7. **commitState** — captured deck count, scores, etc. update
-
-#### Deal Animation
-1. `dealHiding` + `dealHidingTable` flags set to true
-2. commitState — Vue renders cards with `opacity: 0` (via `:style` binding)
-3. `store.animating = true` — blocks all incoming events
-4. Card-back wrappers animate from deck to each card position (350ms, 150ms stagger)
-5. Each wrapper arrival reveals the real card (`opacity: 1`)
-6. After all cards dealt, clear flags, set `animating = false`
-7. Process any pending events that arrived during the deal
-
-#### Animation Timings
-| Animation | Duration | Easing |
-|---|---|---|
-| Place/capture slide | 500ms | cubic-bezier(0.22, 0.61, 0.36, 1) |
-| Table FLIP | 500ms | ease-out |
-| Hand FLIP | 400ms | ease-out |
-| Capture pause | 150ms | — |
-| Capture glow | 500ms | — |
-| Sweep to captured | 450ms, 100ms stagger | ease-in-out |
-| Sweep scale (desktop) | none (75→75, same size) | — |
-| Sweep scale (mobile) | 0.689 (58→40) | scale × fromW |
-| Deal slide | 350ms | cubic-bezier(0.22, 0.61, 0.36, 1) |
-| Deal scale (desktop) | none (75→75, same size) | — |
-| Deal scale (mobile) | 1.45 (40→58) | scale × fromW |
-| Deal stagger (hands) | 150ms | — |
-| Deal stagger (table) | 75ms | — |
-| Scopa flash | 1500ms | scopaFlash keyframe |
-| afterAnimation delay | 600ms default | — |
-| Safety timeout | 10000ms | — |
-
-#### FLIP Utilities (flipUtils.ts)
-
-Helper functions for the animation system:
-- `snapshotPositions(container, selector)` — Records DOMRect positions keyed by `data-card-key`
-- `animateFLIP(before, after, container, selector, duration, easing)` — Calculates deltas and animates using Web Animations API
-- `createCardClone(card, rect, deckStyle)` — Creates a fixed-position DOM element with card face image
-- `createCardBackClone(rect, deckStyle)` — Same but for card backs (deal animation)
-- `animateClone(clone, from, to, duration, easing, scale?)` — Animates clone between two DOMRects
-- `cardKey(card, index?)` — Generates stable key string for FLIP tracking
-- `sleep(ms)` — Promise-based delay
+Full animation documentation: **[Animation System](docs/animation-system.md)** — Event flow, place/capture/deal animations, timings, FLIP utilities, and the critical invariants around `commitState` and hiding flags.
 
 ### Game Layout (CSS Grid)
 

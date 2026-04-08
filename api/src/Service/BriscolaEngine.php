@@ -246,11 +246,8 @@ final class BriscolaEngine implements GameEngine
         }
 
         $game->setDeck($deck);
-
-        // If deck is now empty, clear the briscola display (it was just drawn as last card)
-        if (count($deck) === 0) {
-            $game->setBriscolaCard(null);
-        }
+        // NOTE: Do NOT clear briscolaCard when deck empties. The briscola suit must
+        // remain known for the rest of the game to resolve tricks correctly.
     }
 
     private function isGameOver(Game $game): bool

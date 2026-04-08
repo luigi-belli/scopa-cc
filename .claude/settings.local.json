@@ -15,7 +15,8 @@
       "Bash(python3 -c ':*)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.pagat.com)",
-      "WebFetch(domain:en.wikipedia.org)"
+      "WebFetch(domain:en.wikipedia.org)",
+      "Bash(wait)"
     ]
   },
   "sandbox": {

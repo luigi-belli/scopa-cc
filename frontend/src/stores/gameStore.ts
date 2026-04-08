@@ -24,6 +24,7 @@ export const useGameStore = defineStore('game', () => {
   // Deal animation flags
   const dealHiding = ref(false)
   const dealHidingTable = ref(false)
+  const dealHidingBriscola = ref(false)
 
   function commitState(state: GameState) {
     displayState.value = state
@@ -97,6 +98,7 @@ export const useGameStore = defineStore('game', () => {
     pendingEvents.value = []
     dealHiding.value = false
     dealHidingTable.value = false
+    dealHidingBriscola.value = false
   }
 
   return {
@@ -111,6 +113,7 @@ export const useGameStore = defineStore('game', () => {
     pendingEvents,
     dealHiding,
     dealHidingTable,
+    dealHidingBriscola,
     commitState,
     stashState,
     finishAnimation,

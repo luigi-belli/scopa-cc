@@ -2,7 +2,6 @@
   <div class="screen active">
     <div class="lobby-container">
       <h1 class="game-title">{{ t('lobby.title') }}</h1>
-      <p class="subtitle">{{ t('lobby.subtitle') }}</p>
 
       <div class="lobby-form">
         <div class="form-group">
@@ -14,7 +13,7 @@
             :placeholder="t('lobby.playerNamePlaceholder')"
             maxlength="30"
             autocomplete="off"
-            @input="saveName"
+            @input="savePreferences"
           >
         </div>
 
@@ -37,11 +36,11 @@
           <div class="language-selector">
             <button
               class="lang-btn" :class="{ selected: gameType === 'scopa' }"
-              @click="gameType = 'scopa'"
+              @click="gameType = 'scopa'; savePreferences()"
             >{{ t('lobby.gameType.scopa') }}</button>
             <button
               class="lang-btn" :class="{ selected: gameType === 'briscola' }"
-              @click="gameType = 'briscola'"
+              @click="gameType = 'briscola'; savePreferences()"
             >{{ t('lobby.gameType.briscola') }}</button>
           </div>
         </div>
@@ -62,6 +61,7 @@
             :placeholder="t('lobby.gameNamePlaceholder')"
             maxlength="60"
             autocomplete="off"
+            @input="savePreferences"
             @keydown.enter="createGame"
           >
         </div>
@@ -112,12 +112,18 @@ onMounted(() => {
     return
   }
   store.$reset()
-  const saved = localStorage.getItem('scopa-player-name')
-  if (saved) playerName.value = saved
+  const savedName = localStorage.getItem('scopa-player-name')
+  if (savedName) playerName.value = savedName
+  const savedGameName = localStorage.getItem('scopa-game-name')
+  if (savedGameName) gameName.value = savedGameName
+  const savedGameType = localStorage.getItem('scopa-game-type')
+  if (savedGameType === 'scopa' || savedGameType === 'briscola') gameType.value = savedGameType
 })
 
-function saveName() {
+function savePreferences() {
   localStorage.setItem('scopa-player-name', playerName.value.trim())
+  localStorage.setItem('scopa-game-name', gameName.value.trim())
+  localStorage.setItem('scopa-game-type', gameType.value)
 }
 
 function validate(requireGameName = true): boolean {
