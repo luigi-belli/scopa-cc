@@ -179,7 +179,7 @@ const DEAL_MS     = 350
 const DEAL_HND_LAG = 150
 const DEAL_TBL_LAG = 75
 const DEAL_FLIP_MS = 300
-const POST_ANIM   = 600
+const POST_ANIM   = 200
 const SAFETY_MS   = 10000
 
 const props = defineProps<{ gameId: string }>()
@@ -211,6 +211,8 @@ const gameOverCapturedCards = ref<[Card[], Card[]] | null>(null)
 /** true while inside handleTurnResult's post-animation delay — prevents
  *  incoming events from being committed before processQueue runs */
 const inPostAnimDelay  = ref(false)
+/** true while a playCard API call is in flight — prevents duplicate requests */
+const playInFlight     = ref(false)
 
 const gs = computed(() => store.displayState)
 const currentDeckStyle = computed<DeckStyle>(() => (gs.value?.deckStyle as DeckStyle) || 'piacentine')
@@ -221,7 +223,7 @@ const isScopa = computed(() => !isBriscola.value)
 const dealDeckCountOverride = ref<number | null>(null)
 const shownDeckCount = computed(() => dealDeckCountOverride.value ?? gs.value?.deckCount ?? 0)
 const canPlay = computed(() =>
-  gs.value?.isMyTurn === true && gs.value?.state === 'playing' && !store.animating && !inPostAnimDelay.value
+  gs.value?.isMyTurn === true && gs.value?.state === 'playing' && !store.animating && !playInFlight.value
 )
 
 // ─── DOM Helpers (read-only, never mutate Vue DOM) ───
@@ -1377,8 +1379,10 @@ async function processQueue() {
 
 async function handlePlayCard(cardIndex: number) {
   if (!canPlay.value) return
+  playInFlight.value = true
   try { await api.playCard(props.gameId, cardIndex) }
   catch (e: unknown) { console.error('Play card error:', e) }
+  finally { playInFlight.value = false }
 }
 async function handleSelectCapture(optionIndex: number) {
   // Dismiss the overlay BEFORE the API call so the animation is visible
