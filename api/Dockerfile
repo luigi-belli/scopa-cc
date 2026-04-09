@@ -8,8 +8,11 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install pdo_pgsql intl opcache \
     && rm -rf /var/lib/apt/lists/*
 
-# Enable FPM status page for healthcheck
-RUN echo "pm.status_path = /status" >> /usr/local/etc/php-fpm.d/zz-docker.conf
+# PHP-FPM production tuning (static pool, status page)
+COPY php-fpm-prod.conf /usr/local/etc/php-fpm.d/zzz-prod.conf
+
+# OPcache production settings (no timestamp validation, JIT enabled)
+COPY opcache-prod.ini /usr/local/etc/php/conf.d/opcache-prod.ini
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 

@@ -18,9 +18,30 @@ use Symfony\Component\Mercure\Update;
 
 final class MercurePublisher
 {
+    /** @var list<Update> */
+    private array $pendingUpdates = [];
+    private bool $deferring = false;
+
     public function __construct(
         private readonly HubInterface $hub,
     ) {}
+
+    public function startDeferring(): void
+    {
+        $this->pendingUpdates = [];
+        $this->deferring = true;
+    }
+
+    public function flushDeferred(): void
+    {
+        $updates = $this->pendingUpdates;
+        $this->pendingUpdates = [];
+        $this->deferring = false;
+
+        foreach ($updates as $update) {
+            $this->hub->publish($update);
+        }
+    }
 
     /** @param array<string, mixed> $data */
     public function publishToPlayer(string $gameId, int $playerIndex, string $eventType, array $data): void
@@ -37,7 +58,11 @@ final class MercurePublisher
             $eventType,
         );
 
-        $this->hub->publish($update);
+        if ($this->deferring) {
+            $this->pendingUpdates[] = $update;
+        } else {
+            $this->hub->publish($update);
+        }
     }
 
     /**
