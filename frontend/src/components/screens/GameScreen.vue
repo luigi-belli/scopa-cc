@@ -132,7 +132,7 @@
     <!-- Effects -->
     <ScopaFlash ref="scopaFlashRef" />
     <ConfettiCanvas ref="confettiRef" />
-    <DisconnectBanner :visible="disconnected" />
+    <DisconnectBanner :visible="disconnected" @dismiss="handleDisconnectDismiss" />
   </div>
 </template>
 
@@ -453,7 +453,12 @@ const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
     }
     await handleGameOver(data)
   },
-  onOpponentDisconnected() { disconnected.value = true; store.clearSession() },
+  onOpponentDisconnected() {
+    disconnected.value = true
+    store.clearSession()
+    clearInterval(heartbeatInterval)
+    disconnectMercure()
+  },
   async onReconnect() {
     try {
       const freshState = await api.getState(props.gameId)
@@ -1397,6 +1402,11 @@ async function handleNextRound() {
 }
 function handleBackToLobby() {
   api.leaveGame(props.gameId).catch(() => {})
+  store.$reset()
+  router.push({ name: 'lobby' })
+}
+
+function handleDisconnectDismiss() {
   store.$reset()
   router.push({ name: 'lobby' })
 }

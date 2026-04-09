@@ -63,24 +63,46 @@
   100% { opacity: 1; }
 }
 
-/* Disconnect banner */
-.disconnect-banner {
+/* Disconnect dialog */
+.disconnect-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 16px;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 500;
+  animation: overlayIn 0.3s ease-out;
+}
+
+.disconnect-dialog {
   background: rgba(139, 35, 35, 0.95);
   color: white;
   text-align: center;
   font-size: 18px;
-  z-index: 500;
-  animation: slideDown 0.3s ease-out;
+  padding: 32px 40px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-@keyframes slideDown {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(0); }
+.disconnect-dialog p {
+  margin: 0 0 20px;
+}
+
+.disconnect-ok-btn {
+  background: white;
+  color: #8b2323;
+  border: none;
+  padding: 10px 36px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.disconnect-ok-btn:hover {
+  background: #f0f0f0;
 }
 
 /* Confetti canvas styles defined in style.css (includes dvh viewport fix) */
