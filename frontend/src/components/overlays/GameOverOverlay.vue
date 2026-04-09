@@ -27,7 +27,7 @@
         :deckStyle="deckStyle"
       />
 
-      <p class="gameover-final">
+      <p v-if="gameType !== 'briscola'" class="gameover-final">
         {{ t('gameover.finalScore', { my: myTotalScore, opp: opponentTotalScore }) }}
       </p>
       <button class="btn btn-primary" @click="$emit('backToLobby')">
