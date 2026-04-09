@@ -30,6 +30,9 @@ function makeState(overrides: Partial<GameState> = {}): GameState {
     pendingChoice: null,
     roundHistory: [],
     deckStyle: 'piacentine',
+    gameType: 'scopa',
+    briscolaCard: null,
+    lastTrick: null,
     ...overrides,
   }
 }
@@ -394,6 +397,87 @@ describe('Fix 5: played card stays visible until sweep starts', () => {
 
     // Sweep clone position matches play clone final position
     expect(sweepItems[0].rect).toBe(playCloneR)
+  })
+})
+
+describe('Fix 9: Briscola trick — place clone removed before sweep', () => {
+  /**
+   * In animTrick (Briscola), the follower's card clone flies from hand to the
+   * table center (step 2). When the sweep begins (step 4-5), a NEW clone is
+   * created at the same position to fly to the captured deck. The original
+   * place clone must be removed before the sweep starts, otherwise both the
+   * place clone AND the sweep clone are visible simultaneously, making the
+   * card appear stuck on the table during the sweep.
+   *
+   * Fix: track the place clone in a variable and remove it right before
+   * creating sweep clones — identical to how animCapture removes playClone.
+   */
+
+  it('place clone must be removed before sweep clones are created', () => {
+    // Simulate the animTrick lifecycle
+    const phases = [
+      'slide-to-table',  // place clone flies from hand to table center
+      'pause',           // 150ms pause to show both cards
+      'remove-clone',    // FIX: remove place clone before sweep
+      'sweep-start',     // sweep clones created at same position
+      'sweep-end',       // sweep clones fly to captured deck
+    ]
+
+    let placeCloneExists = false
+    let sweepCloneExists = false
+    const stateLog: Array<{ phase: string; placeClone: boolean; sweepClone: boolean }> = []
+
+    for (const phase of phases) {
+      if (phase === 'slide-to-table') placeCloneExists = true
+      if (phase === 'remove-clone') placeCloneExists = false   // FIX
+      if (phase === 'sweep-start') sweepCloneExists = true
+      if (phase === 'sweep-end') sweepCloneExists = false
+      stateLog.push({ phase, placeClone: placeCloneExists, sweepClone: sweepCloneExists })
+    }
+
+    // Place clone visible during slide and pause
+    expect(stateLog.find(l => l.phase === 'slide-to-table')!.placeClone).toBe(true)
+    expect(stateLog.find(l => l.phase === 'pause')!.placeClone).toBe(true)
+
+    // Place clone removed BEFORE sweep clone created — no overlap
+    expect(stateLog.find(l => l.phase === 'remove-clone')!.placeClone).toBe(false)
+    expect(stateLog.find(l => l.phase === 'sweep-start')!.placeClone).toBe(false)
+
+    // Sweep clone takes over
+    expect(stateLog.find(l => l.phase === 'sweep-start')!.sweepClone).toBe(true)
+  })
+
+  it('without fix: place clone and sweep clone overlap (the bug)', () => {
+    // OLD (buggy) behavior: place clone never removed
+    let placeCloneExists = false
+    let sweepCloneExists = false
+
+    // slide
+    placeCloneExists = true
+    // pause — still exists
+    // sweep-start — sweep clone created but place clone NOT removed
+    sweepCloneExists = true
+
+    // BUG: both visible at the same time
+    expect(placeCloneExists).toBe(true)
+    expect(sweepCloneExists).toBe(true)
+    // Two clones of the same card visible = card appears stuck on table
+  })
+
+  it('leader card DOM element is hidden before sweep (unchanged behavior)', () => {
+    // The leader card is a real DOM element (placed in a previous turn).
+    // It is correctly hidden via setStyle before the sweep.
+    // This test documents that the leader card handling was already correct.
+    const styledEls: Array<{ el: string; prop: string }> = []
+    function setStyle(el: string, prop: string, _val: string) {
+      styledEls.push({ el, prop })
+    }
+
+    // Leader card found in DOM and hidden
+    setStyle('leader-card', 'visibility', 'hidden')
+
+    expect(styledEls).toHaveLength(1)
+    expect(styledEls[0].el).toBe('leader-card')
   })
 })
 

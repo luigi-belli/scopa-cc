@@ -83,9 +83,9 @@ export default {
   'briscola.trickWon': 'Trick won!',
   'briscola.trickLost': 'Trick lost',
   'briscola.draw': 'Draw! 60 - 60',
-  'briscola.score.points': 'Card points',
+  'briscola.score.points': 'Points',
   'briscola.lastTrick': 'Last trick',
-
+  'briscola.score.cards': 'Cards',
   // API/backend error keys
   'error.conflict': 'Conflict: please retry',
   'error.gameNameTaken': 'A game with this name already exists. Please choose a different name.',

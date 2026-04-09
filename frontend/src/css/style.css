@@ -859,32 +859,6 @@ body {
   color: #ff6b6b;
 }
 
-.briscola-score-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 16px 0;
-  padding: 12px 20px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-}
-
-.briscola-score-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 18px;
-}
-
-.briscola-score-row .player-label {
-  font-weight: bold;
-  color: #f0e6d0;
-}
-
-.briscola-score-row .score-value {
-  color: #ffd700;
-  font-size: 20px;
-}
 
 .gameover-final {
   font-size: 20px;

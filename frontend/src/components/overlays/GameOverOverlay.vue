@@ -15,17 +15,17 @@
         @rowClick="selectedCategory = $event"
       />
 
-      <!-- Briscola: simple point display -->
-      <div v-if="gameType === 'briscola'" class="briscola-score-summary">
-        <div class="briscola-score-row">
-          <span class="player-label">{{ myName }}</span>
-          <span class="score-value">{{ myTotalScore }} {{ t('briscola.points') }}</span>
-        </div>
-        <div class="briscola-score-row">
-          <span class="player-label">{{ opponentName }}</span>
-          <span class="score-value">{{ opponentTotalScore }} {{ t('briscola.points') }}</span>
-        </div>
-      </div>
+      <!-- Briscola: detailed point breakdown -->
+      <BriscolaScoreTable
+        v-if="gameType === 'briscola' && capturedCards"
+        :capturedCards="capturedCards"
+        :myIndex="myIndex"
+        :myName="myName"
+        :opponentName="opponentName"
+        :myTotalScore="myTotalScore"
+        :oppTotalScore="opponentTotalScore"
+        :deckStyle="deckStyle"
+      />
 
       <p class="gameover-final">
         {{ t('gameover.finalScore', { my: myTotalScore, opp: opponentTotalScore }) }}
@@ -50,9 +50,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { RoundScores, ScoreCategory, GameType } from '@/types/game'
-import type { DeckStyle } from '@/types/card'
+import type { Card, DeckStyle } from '@/types/card'
 import ScoreTable from './ScoreTable.vue'
 import ScoreDetailDialog from './ScoreDetailDialog.vue'
+import BriscolaScoreTable from './BriscolaScoreTable.vue'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
@@ -65,6 +66,7 @@ const props = defineProps<{
   opponentTotalScore: number
   deckStyle: DeckStyle
   gameType: GameType
+  capturedCards: [Card[], Card[]] | null
 }>()
 
 defineEmits<{

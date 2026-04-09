@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Dto\Output\GameStateOutput;
 use App\Entity\Game;
 use App\Enum\GameState;
+use App\Enum\GameType;
 use App\ValueObject\Card;
 use App\ValueObject\RoundHistoryEntry;
 use App\ValueObject\RoundScores;
@@ -100,17 +101,28 @@ final class MercurePublisher
         $winner = $game->getPlayer1TotalScore() > $game->getPlayer2TotalScore() ? 0 : 1;
         $sweepData = $sweep?->jsonSerialize();
 
+        // Include captured cards for Briscola so the frontend can show point breakdown
+        $capturedCards = null;
+        if ($game->getGameType() === GameType::Briscola) {
+            $capturedCards = [
+                $game->getPlayer1Captured()->jsonSerialize(),
+                $game->getPlayer2Captured()->jsonSerialize(),
+            ];
+        }
+
         $this->publishToPlayer($gameId, 0, 'game-over', array_filter([
             'scores' => $scores?->jsonSerialize(),
             'winner' => $winner,
             'gameState' => $this->stateToArray($state0),
             'sweep' => $sweepData,
+            'capturedCards' => $capturedCards,
         ], static fn($v) => $v !== null));
         $this->publishToPlayer($gameId, 1, 'game-over', array_filter([
             'scores' => $scores?->jsonSerialize(),
             'winner' => $winner,
             'gameState' => $this->stateToArray($state1),
             'sweep' => $sweepData,
+            'capturedCards' => $capturedCards,
         ], static fn($v) => $v !== null));
     }
 

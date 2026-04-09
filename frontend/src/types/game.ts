@@ -83,6 +83,7 @@ export interface GameOverData {
   winner: number
   gameState: GameState
   sweep?: SweepData
+  capturedCards?: [Card[], Card[]]
 }
 
 export interface CreateGameResponse {

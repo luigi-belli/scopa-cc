@@ -125,6 +125,7 @@
       :myTotalScore="gs?.myTotalScore ?? 0"
       :opponentTotalScore="gs?.opponentTotalScore ?? 0"
       :deckStyle="currentDeckStyle"
+      :capturedCards="gameOverCapturedCards"
       @backToLobby="handleBackToLobby"
     />
 
@@ -177,6 +178,7 @@ function sweepScale(cardW: number, capR: DOMRect): number | undefined {
 const DEAL_MS     = 350
 const DEAL_HND_LAG = 150
 const DEAL_TBL_LAG = 75
+const DEAL_FLIP_MS = 300
 const POST_ANIM   = 600
 const SAFETY_MS   = 10000
 
@@ -205,6 +207,7 @@ const showRoundEnd     = ref(false)
 const showGameOver     = ref(false)
 const lastRoundScores  = ref<[RoundScores, RoundScores] | null>(null)
 const gameOverWinner   = ref(0)
+const gameOverCapturedCards = ref<[Card[], Card[]] | null>(null)
 /** true while inside handleTurnResult's post-animation delay — prevents
  *  incoming events from being committed before processQueue runs */
 const inPostAnimDelay  = ref(false)
@@ -307,11 +310,65 @@ function mkBack(r: DOMRect): HTMLElement {
   d.appendChild(i)
   return d
 }
+/** Two-sided card clone. Default: starts showing back, add 'flipped' to reveal face.
+ *  With startFaceUp=true: starts showing face, call flipToBack() to flip to back. */
+function mkFlippable(card: Card, r: DOMRect, startFaceUp = false): HTMLElement {
+  const d = document.createElement('div')
+  d.className = startFaceUp ? 'card-flip flipped' : 'card-flip'
+  d.style.cssText = `position:fixed;z-index:52;pointer-events:none;will-change:transform;`
+  applyRect(d, r)
+  const inner = document.createElement('div')
+  inner.className = 'card-flip-inner'
+  // Front face (hidden until flipped)
+  const front = document.createElement('div')
+  front.className = 'card-flip-front'
+  const fi = document.createElement('img')
+  fi.src = cardImagePath(card, currentDeckStyle.value)
+  front.appendChild(fi)
+  // Back face (visible initially, unless startFaceUp)
+  const back = document.createElement('div')
+  back.className = 'card-flip-back'
+  const bi = document.createElement('img')
+  bi.src = cardBackPath(currentDeckStyle.value)
+  back.appendChild(bi)
+  inner.appendChild(front)
+  inner.appendChild(back)
+  d.appendChild(inner)
+  return d
+}
+/** Trigger back→face flip */
+function flipCard(el: HTMLElement) { el.classList.add('flipped') }
+/** Trigger face→back flip */
+function flipToBack(el: HTMLElement) { el.classList.remove('flipped') }
 function applyRect(el: HTMLElement, r: DOMRect) {
   el.style.left   = `${r.left}px`
   el.style.top    = `${r.top}px`
   el.style.width  = `${r.width}px`
   el.style.height = `${r.height}px`
+}
+
+/** Sweep face-up cards to a captured deck with staggered face-to-back flip.
+ *  Each card clone starts face-up, flips to back at 40% of the sweep, then flies
+ *  to the captured-deck rect and is removed on arrival. */
+function sweepToCaptured(
+  items: { card: Card; rect: DOMRect }[],
+  capR: DOMRect,
+  scale: number | undefined,
+): Promise<void> {
+  const ps: Promise<void>[] = []
+  items.forEach((si, i) => {
+    const cl = mkFlippable(si.card, si.rect, true)
+    aLayer().appendChild(cl)
+    ps.push(
+      sleep(i * SWEEP_LAG).then(() => {
+        setTimeout(() => flipToBack(cl), SWEEP_MS * 0.4)
+        return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
+          if (cl.parentNode) cl.remove()
+        })
+      })
+    )
+  })
+  return Promise.all(ps).then(() => {})
 }
 
 // ─── Low-level animation ───
@@ -489,19 +546,7 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
     const capR = capturedR(lastCapturer)
     if (capR && sweepItems.length > 0) {
       const scale = sweepScale(sweepItems[0].rect.width, capR)
-      const ps: Promise<void>[] = []
-      sweepItems.forEach((si, i) => {
-        const cl = mkFace(si.card, si.rect)
-        aLayer().appendChild(cl)
-        ps.push(
-          sleep(i * SWEEP_LAG).then(() =>
-            flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
-              if (cl.parentNode) cl.remove()
-            })
-          )
-        )
-      })
-      await Promise.all(ps)
+      await sweepToCaptured(sweepItems, capR, scale)
     }
   } catch (e) {
     console.error('End-of-round sweep animation error:', e)
@@ -523,6 +568,7 @@ async function handleRoundEnd(data: RoundEndData): Promise<void> {
 async function handleGameOver(data: GameOverData): Promise<void> {
   lastRoundScores.value = data.scores || null
   gameOverWinner.value = data.winner
+  gameOverCapturedCards.value = data.capturedCards || null
   if (data.gameState) {
     // For Briscola, no sweep animation — just commit the final state
     if (data.gameState.gameType === 'briscola') {
@@ -790,14 +836,9 @@ async function animPlace(result: TurnResult) {
   if (!dest) return
 
   // 3. Clone flies from hand → target slot
-  const clone = isMe ? mkFace(card, srcR) : mkBack(srcR)
+  const clone = isMe ? mkFace(card, srcR) : mkFlippable(card, srcR)
   aLayer().appendChild(clone)
-  if (!isMe) {
-    setTimeout(() => {
-      const img = clone.querySelector('img')
-      if (img) img.src = cardImagePath(card, currentDeckStyle.value)
-    }, SLIDE_MS * 0.4)
-  }
+  if (!isMe) setTimeout(() => flipCard(clone), SLIDE_MS * 0.4)
   await flyTo(clone, dest, SLIDE_MS, SLIDE_EASE)
 }
 
@@ -861,14 +902,9 @@ async function animCapture(result: TurnResult) {
   let playClone: HTMLElement | null = null
   let playCloneR: DOMRect | null = null
   if (srcR) {
-    playClone = isMe ? mkFace(card, srcR) : mkBack(srcR)
+    playClone = isMe ? mkFace(card, srcR) : mkFlippable(card, srcR)
     aLayer().appendChild(playClone)
-    if (!isMe) {
-      setTimeout(() => {
-        const img = playClone!.querySelector('img')
-        if (img) img.src = cardImagePath(card, currentDeckStyle.value)
-      }, SLIDE_MS * 0.4)
-    }
+    if (!isMe) setTimeout(() => flipCard(playClone!), SLIDE_MS * 0.4)
     if (landR) await flyTo(playClone, landR, SLIDE_MS, SLIDE_EASE)
     else await sleep(SLIDE_MS)
     playCloneR = playClone.getBoundingClientRect()
@@ -917,19 +953,7 @@ async function animCapture(result: TurnResult) {
   const capR = capturedR(result.playerIndex)
   if (capR && sweepItems.length > 0) {
     const scale = sweepScale(sweepItems[0].rect.width, capR)
-    const ps: Promise<void>[] = []
-    sweepItems.forEach((si, i) => {
-      const cl = mkFace(si.card, si.rect)
-      aLayer().appendChild(cl)
-      ps.push(
-        sleep(i * SWEEP_LAG).then(() =>
-          flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
-            if (cl.parentNode) cl.remove()
-          })
-        )
-      )
-    })
-    await Promise.all(ps)
+    await sweepToCaptured(sweepItems, capR, scale)
   }
 
   // 7. Scopa: flash + mark the capturing card in the captured deck
@@ -975,16 +999,12 @@ async function animTrick(result: TurnResult) {
 
   // 2. Fly follower's card to table center (same slot — overlays leader's card)
   const dest = getSlotRect(0, srcR?.width ?? 75, srcR?.height ?? 133)
+  let placeClone: HTMLElement | null = null
   if (srcR && dest) {
-    const clone = isMe ? mkFace(card, srcR) : mkBack(srcR)
-    aLayer().appendChild(clone)
-    if (!isMe) {
-      setTimeout(() => {
-        const img = clone.querySelector('img')
-        if (img) img.src = cardImagePath(card, currentDeckStyle.value)
-      }, SLIDE_MS * 0.4)
-    }
-    await flyTo(clone, dest, SLIDE_MS, SLIDE_EASE)
+    placeClone = isMe ? mkFace(card, srcR) : mkFlippable(card, srcR)
+    aLayer().appendChild(placeClone)
+    if (!isMe) setTimeout(() => flipCard(placeClone!), SLIDE_MS * 0.4)
+    await flyTo(placeClone, dest, SLIDE_MS, SLIDE_EASE)
   }
 
   // 3. Brief pause to show both cards
@@ -1004,7 +1024,8 @@ async function animTrick(result: TurnResult) {
       }
     }
   }
-  // Follower card (use the dest position from the clone)
+  // Follower card — remove the place clone (sweep clone replaces it at same position)
+  if (placeClone?.parentNode) placeClone.remove()
   if (dest) {
     sweepItems.push({ card, rect: dest })
   }
@@ -1013,19 +1034,7 @@ async function animTrick(result: TurnResult) {
   const capR = capturedR(trickWinner)
   if (capR && sweepItems.length > 0) {
     const scale = sweepScale(sweepItems[0].rect.width, capR)
-    const ps: Promise<void>[] = []
-    sweepItems.forEach((si, i) => {
-      const cl = mkFace(si.card, si.rect)
-      aLayer().appendChild(cl)
-      ps.push(
-        sleep(i * SWEEP_LAG).then(() =>
-          flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
-            if (cl.parentNode) cl.remove()
-          })
-        )
-      )
-    })
-    await Promise.all(ps)
+    await sweepToCaptured(sweepItems, capR, scale)
   }
 }
 
@@ -1170,24 +1179,68 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
       deckEl.classList.add('empty')
       const countEl = deckEl.querySelector('.deck-count')
       if (countEl) (countEl as HTMLElement).style.display = 'none'
+      // Hide briscola trump card together with the deck
+      const briscolaEl = q('.briscola-trump-card')
+      if (briscolaEl) (briscolaEl as HTMLElement).style.opacity = '0'
     } else {
       const countEl = deckEl.querySelector('.deck-count')
       if (countEl) countEl.textContent = String(remainingDeck)
     }
   }
 
+  // Build a set of "my" element refs for quick lookup (to distinguish from opponent)
+  const myElSet = new Set(myEls)
+
+  // Map my hand elements to their card data for flippable clones.
+  // For partial deals (Briscola), myEls only contains new cards — those are at the
+  // end of newState.myHand. For full deals, myEls maps 1:1 to newState.myHand.
+  const myElCards = new Map<HTMLElement, Card>()
+  if (isBriscolaPartialDeal) {
+    // New cards are appended at the end of the hand
+    const handLen = newState.myHand.length
+    myEls.forEach((el, idx) => {
+      const card = newState.myHand[handLen - myEls.length + idx]
+      if (card) myElCards.set(el, card)
+    })
+  } else {
+    myEls.forEach((el, idx) => {
+      const card = newState.myHand[idx]
+      if (card) myElCards.set(el, card)
+    })
+  }
+
+  /** Create a deal clone: flippable for face-up cards, plain back for opponent */
+  function mkDealClone(el: HTMLElement, card: Card | undefined): HTMLElement {
+    if (card) return mkFlippable(card, dr!)
+    return mkBack(dr!)
+  }
+
+  /** On arrival: flip if flippable, then reveal real element and remove clone */
+  function onDealArrive(clone: HTMLElement, el: HTMLElement, card: Card | undefined): Promise<void> {
+    if (card) {
+      flipCard(clone)
+      return sleep(DEAL_FLIP_MS).then(() => {
+        el.style.opacity = '1'
+        if (clone.parentNode) clone.remove()
+      })
+    }
+    el.style.opacity = '1'
+    if (clone.parentNode) clone.remove()
+    return Promise.resolve()
+  }
+
   // Table cards (new round only)
-  tblEls.forEach(el => {
+  tblEls.forEach((el, idx) => {
     const target = el.getBoundingClientRect()
-    const clone = mkBack(dr)
+    const card = newState.table[idx]
+    const clone = mkDealClone(el, card)
     aLayer().appendChild(clone)
     const d = i++ * DEAL_TBL_LAG
     deals.push(sleep(d).then(() => {
       tickDeckDOM()
-      return flyTo(clone, target, DEAL_MS, SLIDE_EASE, dealScale).then(() => {
-        el.style.opacity = '1'   // override reactive opacity:0
-        if (clone.parentNode) clone.remove()
-      })
+      return flyTo(clone, target, DEAL_MS, SLIDE_EASE, dealScale).then(() =>
+        onDealArrive(clone, el, card)
+      )
     }))
   })
 
@@ -1198,15 +1251,15 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
     for (const el of [oppEls[h], myEls[h]]) {
       if (!el) continue
       const target = el.getBoundingClientRect()
-      const clone = mkBack(dr)
+      const card = myElSet.has(el) ? myElCards.get(el) : undefined
+      const clone = mkDealClone(el, card)
       aLayer().appendChild(clone)
       const d = i++ * DEAL_HND_LAG
       deals.push(sleep(d).then(() => {
         tickDeckDOM()
-        return flyTo(clone, target, DEAL_MS, SLIDE_EASE, dealScale).then(() => {
-          el.style.opacity = '1'
-          if (clone.parentNode) clone.remove()
-        })
+        return flyTo(clone, target, DEAL_MS, SLIDE_EASE, dealScale).then(() =>
+          onDealArrive(clone, el, card)
+        )
       }))
     }
   }

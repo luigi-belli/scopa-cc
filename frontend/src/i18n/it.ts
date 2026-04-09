@@ -83,9 +83,9 @@ export default {
   'briscola.trickWon': 'Presa vinta!',
   'briscola.trickLost': 'Presa persa',
   'briscola.draw': 'Pareggio! 60 - 60',
-  'briscola.score.points': 'Punti carte',
+  'briscola.score.points': 'Punti',
   'briscola.lastTrick': 'Ultima presa',
-
+  'briscola.score.cards': 'Carte',
   // API/backend error keys
   'error.conflict': 'Conflitto: riprova',
   'error.gameNameTaken': 'Esiste già una partita con questo nome. Scegline un altro.',
