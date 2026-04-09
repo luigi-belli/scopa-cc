@@ -27,8 +27,9 @@ export default {
   // Game
   'game.exit': 'Esci dalla partita',
   'game.exitConfirm': 'Sei sicuro di voler abbandonare la partita?',
-  'game.pts': 'pts',
+  'game.pts': 'pti',
   'game.scope': 'scope',
+  'game.scopa': 'scopa',
 
   // Turn indicator
   'turn.mine': 'Il tuo turno',

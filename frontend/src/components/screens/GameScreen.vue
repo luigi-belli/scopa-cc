@@ -7,7 +7,7 @@
       <div class="player-info">
         <span class="player-name">{{ gs?.opponentName }}</span>
         <span class="score-badge">{{ gs?.opponentTotalScore }} {{ t('game.pts') }}</span>
-        <span class="scopa-badge" v-if="isScopa && (gs?.opponentScope ?? 0) > 0">{{ gs?.opponentScope }} {{ t('game.scope') }}</span>
+        <span class="scopa-badge" v-if="isScopa && (gs?.opponentScope ?? 0) > 0">{{ gs?.opponentScope }} {{ gs?.opponentScope === 1 ? t('game.scopa') : t('game.scope') }}</span>
       </div>
       <TurnIndicator
         :isMyTurn="false"
@@ -87,7 +87,7 @@
       <div class="player-info">
         <span class="player-name">{{ gs?.myName }}</span>
         <span class="score-badge">{{ gs?.myTotalScore }} {{ t('game.pts') }}</span>
-        <span class="scopa-badge" v-if="isScopa && (gs?.myScope ?? 0) > 0">{{ gs?.myScope }} {{ t('game.scope') }}</span>
+        <span class="scopa-badge" v-if="isScopa && (gs?.myScope ?? 0) > 0">{{ gs?.myScope }} {{ gs?.myScope === 1 ? t('game.scopa') : t('game.scope') }}</span>
       </div>
     </div>
 

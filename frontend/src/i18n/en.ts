@@ -29,6 +29,7 @@ export default {
   'game.exitConfirm': 'Are you sure you want to leave the game?',
   'game.pts': 'pts',
   'game.scope': 'scope',
+  'game.scopa': 'scopa',
 
   // Turn indicator
   'turn.mine': 'Your turn',
