@@ -22,7 +22,7 @@ if (typeof globalThis.DOMRect === 'undefined') {
   globalThis.DOMRect = DOMRectPolyfill as unknown as typeof DOMRect
 }
 
-import { computeSlotRect } from './flipUtils'
+import { computeSlotRect, computeFlyToDelta } from './flipUtils'
 
 describe('computeSlotRect', () => {
   // Standard desktop dimensions from CSS
@@ -158,5 +158,73 @@ describe('computeSlotRect', () => {
 
     expect(r0a.left).toBe(r0b.left)
     expect(r0a.top).toBe(r0b.top)
+  })
+})
+
+describe('computeFlyToDelta', () => {
+  it('centers clone on target when scale is 1 (desktop, same-size cards)', () => {
+    // Desktop: deck and cards are both 75×133
+    const { dx, dy, sx, sy } = computeFlyToDelta(
+      12, 100, 75, 133,  // from: deck at (12, 100), size 75×133
+      { left: 300, top: 50, width: 75, height: 133 },  // to: card slot
+    )
+    expect(sx).toBe(1)
+    expect(sy).toBe(1)
+    // Clone top-left should move exactly to target top-left
+    expect(dx).toBeCloseTo(300 - 12)
+    expect(dy).toBeCloseTo(50 - 100)
+  })
+
+  it('centers clone on target when scaling up (mobile deal animation)', () => {
+    // Mobile: deck visual is 40×71, card slots are 58×103
+    const deckL = 8, deckT = 90, deckW = 40, deckH = 71
+    const target = { left: 100, top: 50, width: 58, height: 103 }
+    const scale = target.width / deckW  // 58/40 = 1.45
+
+    const { dx, dy, sx, sy } = computeFlyToDelta(deckL, deckT, deckW, deckH, target, scale)
+
+    expect(sx).toBeCloseTo(1.45)
+    expect(sy).toBeCloseTo(103 / 71)
+
+    // After CSS transform: translate(dx,dy) scale(sx,sy) with transform-origin center,
+    // the visual center of the clone should land on the target's center.
+    // Visual center = fromL + fromW/2 + dx, fromT + fromH/2 + dy
+    const visualCenterX = deckL + deckW / 2 + dx
+    const visualCenterY = deckT + deckH / 2 + dy
+    const targetCenterX = target.left + target.width / 2
+    const targetCenterY = target.top + target.height / 2
+
+    expect(visualCenterX).toBeCloseTo(targetCenterX)
+    expect(visualCenterY).toBeCloseTo(targetCenterY)
+  })
+
+  it('centers clone on target when scaling down (sweep to captured on mobile)', () => {
+    // Card (58×103) sweeping to captured deck (40×71)
+    const fromL = 100, fromT = 50, fromW = 58, fromH = 103
+    const target = { left: 8, top: 200, width: 40, height: 71 }
+    const scale = target.width / fromW  // 40/58 ≈ 0.69
+
+    const { dx, dy } = computeFlyToDelta(fromL, fromT, fromW, fromH, target, scale)
+
+    const visualCenterX = fromL + fromW / 2 + dx
+    const visualCenterY = fromT + fromH / 2 + dy
+    const targetCenterX = target.left + target.width / 2
+    const targetCenterY = target.top + target.height / 2
+
+    expect(visualCenterX).toBeCloseTo(targetCenterX)
+    expect(visualCenterY).toBeCloseTo(targetCenterY)
+  })
+
+  it('no scale parameter behaves same as scale=1', () => {
+    const fromL = 50, fromT = 80, fromW = 75, fromH = 133
+    const target = { left: 200, top: 40, width: 75, height: 133 }
+
+    const withoutScale = computeFlyToDelta(fromL, fromT, fromW, fromH, target)
+    const withScale1 = computeFlyToDelta(fromL, fromT, fromW, fromH, target, 1)
+
+    expect(withoutScale.dx).toBeCloseTo(withScale1.dx)
+    expect(withoutScale.dy).toBeCloseTo(withScale1.dy)
+    expect(withoutScale.sx).toBe(1)
+    expect(withoutScale.sy).toBe(1)
   })
 })

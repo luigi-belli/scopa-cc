@@ -189,6 +189,22 @@ export function computeSlotRect(
   return new DOMRect(left, top, cardW, cardH)
 }
 
+/** Compute the translation delta and scale factors for a flyTo animation.
+ *  CSS scale() transforms around the element's center (default transform-origin),
+ *  so we translate center-to-center for correct positioning at any scale. */
+export function computeFlyToDelta(
+  fromL: number, fromT: number, fromW: number, fromH: number,
+  to: { left: number; top: number; width: number; height: number },
+  scale?: number
+): { dx: number; dy: number; sx: number; sy: number } {
+  const toW = scale != null ? scale * fromW : fromW
+  const toH = scale != null ? scale * fromH : fromH
+  const sx = toW / fromW, sy = toH / fromH
+  const dx = to.left + to.width / 2 - fromL - fromW / 2
+  const dy = to.top  + to.height / 2 - fromT - fromH / 2
+  return { dx, dy, sx, sy }
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }

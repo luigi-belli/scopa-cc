@@ -146,7 +146,7 @@ import { useI18n } from '@/i18n'
 import type { Card, DeckStyle } from '@/types/card'
 import { cardImagePath, cardBackPath } from '@/types/card'
 import type { GameState, TurnResult, RoundScores, RoundEndData, GameOverData, SweepData } from '@/types/game'
-import { cardKey, sleep, computeSlotRect } from '@/animations/flipUtils'
+import { cardKey, sleep, computeSlotRect, computeFlyToDelta } from '@/animations/flipUtils'
 import type { SlotGridParams } from '@/animations/flipUtils'
 
 import CardComponent from '@/components/game/CardComponent.vue'
@@ -379,13 +379,7 @@ function flyTo(el: HTMLElement, to: DOMRect, dur: number, ease: string, scale?: 
   const fromT = parseFloat(el.style.top)
   const fromW = parseFloat(el.style.width)
   const fromH = parseFloat(el.style.height)
-  // scale: if provided, shrink/grow to scale × source size; if absent, keep original size
-  const toW = scale != null ? scale * fromW : fromW
-  const toH = scale != null ? scale * fromH : fromH
-  // Centre the (possibly resized) clone on the target's centre
-  const dx = to.left + (to.width - toW) / 2 - fromL
-  const dy = to.top  + (to.height - toH) / 2 - fromT
-  const sx = toW / fromW, sy = toH / fromH
+  const { dx, dy, sx, sy } = computeFlyToDelta(fromL, fromT, fromW, fromH, to, scale)
   const a = el.animate([
     { transform: 'translate(0,0) scale(1)' },
     { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy})` },
