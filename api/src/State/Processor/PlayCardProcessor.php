@@ -60,14 +60,16 @@ final class PlayCardProcessor implements ProcessorInterface
         $gameId = (string) $game->getId();
 
         if ($result->type === TurnResultType::Choosing) {
-            $this->mercurePublisher->publishToBothPlayers($gameId, 'turn-result', [
-                'type' => 'place',
+            // Only notify the choosing player — the opponent will see the full
+            // capture animation once the choice is resolved by SelectCaptureProcessor
+            $this->mercurePublisher->publishToPlayer($gameId, $playerIndex, 'turn-result', [
+                'type' => TurnResultType::Place->value,
                 'card' => $result->card->jsonSerialize(),
                 'playerIndex' => $playerIndex,
                 'captured' => [],
                 'scopa' => false,
             ]);
-            $this->mercurePublisher->publishGameState($gameId, $game, $engine);
+            $this->mercurePublisher->publishGameStateToPlayer($gameId, $playerIndex, $game, $engine);
         } else {
             $this->mercurePublisher->publishTurnOutcome($gameId, $game, $engine, $result);
 

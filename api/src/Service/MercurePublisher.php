@@ -75,6 +75,12 @@ final class MercurePublisher
         $this->publishToPlayer($gameId, 1, $eventType, $data2 ?? $data);
     }
 
+    public function publishGameStateToPlayer(string $gameId, int $playerIndex, Game $game, GameEngine $engine): void
+    {
+        $state = $engine->getStateForPlayer($game, $playerIndex);
+        $this->publishToPlayer($gameId, $playerIndex, 'game-state', $this->stateToArray($state));
+    }
+
     public function publishGameState(string $gameId, Game $game, GameEngine $engine): void
     {
         $state0 = $engine->getStateForPlayer($game, 0);
