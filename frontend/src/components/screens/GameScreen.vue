@@ -492,7 +492,22 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
 
   const { remainingCards, lastCapturer } = sweep
 
-  // First, commit an intermediate state that shows the post-play table
+  // Snapshot remaining cards' current positions BEFORE committing the
+  // intermediate state. The previous capture animation hid captured cards
+  // with visibility:hidden — remaining cards are still visible and in their
+  // original grid slots. We need these old positions to FLIP-animate after
+  // Vue re-renders the table with only the remaining cards.
+  const oldRects = new Map<string, DOMRect>()
+  const currentTable = store.displayState?.table ?? []
+  remainingCards.forEach(card => {
+    const idx = currentTable.findIndex(t => t.suit === card.suit && t.value === card.value)
+    if (idx >= 0) {
+      const el = q(`[data-card-key="${cardKey(card, idx)}"]`)
+      if (el) oldRects.set(`${card.value}-${card.suit}`, el.getBoundingClientRect())
+    }
+  })
+
+  // Commit an intermediate state that shows the post-play table
   // (with remaining cards visible) so Vue renders them for us to animate.
   // Preserve current display scores/counts — newState has post-scoring values
   // that would flash before the sweep completes.
@@ -510,6 +525,25 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
   }
   store.commitState(intermediateState)
   await nextTick()
+
+  // FLIP: animate remaining cards from their old grid positions to the new
+  // positions (after reflow with fewer cards). This prevents a visible jump.
+  const flipPs: Promise<void>[] = []
+  remainingCards.forEach((card, idx) => {
+    const oldR = oldRects.get(`${card.value}-${card.suit}`)
+    if (!oldR) return
+    const el = q(`[data-card-key="${cardKey(card, idx)}"]`)
+    if (!el) return
+    const newR = el.getBoundingClientRect()
+    const dx = oldR.left - newR.left, dy = oldR.top - newR.top
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return
+    const a = el.animate(
+      [{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'translate(0,0)' }],
+      { duration: FLIP_TBL_MS, easing: 'ease-out' }
+    )
+    flipPs.push(new Promise(r => { a.onfinish = () => r() }))
+  })
+  if (flipPs.length > 0) await Promise.all(flipPs)
 
   store.animating = true
 
