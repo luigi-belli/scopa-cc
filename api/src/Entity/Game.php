@@ -210,6 +210,9 @@ class Game
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $trickLeader = null;
 
+    /** Transient (not persisted) — set by ScopaEngine when sequential counting resolves a tie */
+    private ?int $resolvedWinner = null;
+
     #[ORM\Version]
     #[ORM\Column(type: 'integer')]
     private int $version = 1;
@@ -660,6 +663,17 @@ class Game
             return 1;
         }
         return null;
+    }
+
+    public function getResolvedWinner(): ?int
+    {
+        return $this->resolvedWinner;
+    }
+
+    public function setResolvedWinner(?int $winner): self
+    {
+        $this->resolvedWinner = $winner;
+        return $this;
     }
 
     public function isLastPlayOfRound(): bool

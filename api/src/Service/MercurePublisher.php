@@ -129,7 +129,8 @@ final class MercurePublisher
         $state0 = $engine->getStateForPlayer($game, 0);
         $state1 = $engine->getStateForPlayer($game, 1);
 
-        $winner = $game->getPlayer1TotalScore() > $game->getPlayer2TotalScore() ? 0 : 1;
+        $winner = $game->getResolvedWinner()
+            ?? ($game->getPlayer1TotalScore() > $game->getPlayer2TotalScore() ? 0 : 1);
         $sweepData = $sweep?->jsonSerialize();
 
         // Include captured cards for Briscola so the frontend can show point breakdown

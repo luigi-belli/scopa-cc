@@ -56,7 +56,8 @@ Must have all 4 suits to compete. If one player has all 4 and the other doesn't,
 ## Winning
 
 - Game to **11 points** across multiple rounds
-- If both reach 11+ with the same score, play continues until clear lead
+- If both reach 11+ in the same round, points are counted in order: **Carte → Denari → Settebello → Primiera → Scope**. The first player to reach 11 in this counting order wins.
+- If still tied after all categories (both players cross 11 on the same category, e.g. scope), play continues with another round until one player is ahead
 
 ## Game States
 

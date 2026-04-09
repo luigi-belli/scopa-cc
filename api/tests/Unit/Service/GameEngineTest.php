@@ -452,4 +452,202 @@ class GameEngineTest extends TestCase
             );
         }
     }
+
+    /**
+     * When both players reach 11+ but one reached it first by counting
+     * order (Carte → Denari → Settebello → Primiera → Scope), the game
+     * should end with that player as the winner.
+     *
+     * Scenario: both at 10 before the round. P1 gets carte (1pt, total 11),
+     * P2 gets settebello (1pt, total 11). P1 reaches 11 first via carte.
+     */
+    public function testTiebreak_SequentialCounting_P1WinsViaCarte(): void
+    {
+        $game = new Game();
+        $game->setState(GameState::Playing);
+        $game->setCurrentPlayer(0);
+        $game->setDealerIndex(0);
+        $game->setPlayer1TotalScore(10);
+        $game->setPlayer2TotalScore(10);
+
+        // P1 has more cards (22 vs 18) → P1 gets carte (+1)
+        // P2 has the 7 of Denari → P2 gets settebello (+1)
+        // Denari tied (5-5), primiera null for both (neither has 4 suits), scope 0-0.
+        // Both get exactly 1 round point → 11-11 tie.
+        // Sequential counting: carte counted first → P1 reaches 11 before P2.
+        //
+        // P1 pre-sweep: 21 cards in 3 suits (D1-5, C1-10, B1-6)
+        // P1 plays B7 → swept back → 22 cards total, still 3 suits (D,C,B)
+        // P2: 18 cards in 3 suits (D6-10 incl 7d, B8-10, S1-10)
+        // Total: 40 cards.
+        $p1Cards = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $p1Cards[] = new Card(Suit::Denari, $i);
+        }
+        for ($i = 1; $i <= 10; $i++) {
+            $p1Cards[] = new Card(Suit::Coppe, $i);
+        }
+        for ($i = 1; $i <= 6; $i++) {
+            $p1Cards[] = new Card(Suit::Bastoni, $i);
+        }
+
+        $p2Cards = [];
+        for ($i = 6; $i <= 10; $i++) {
+            $p2Cards[] = new Card(Suit::Denari, $i); // includes D7 (settebello)
+        }
+        for ($i = 8; $i <= 10; $i++) {
+            $p2Cards[] = new Card(Suit::Bastoni, $i);
+        }
+        for ($i = 1; $i <= 10; $i++) {
+            $p2Cards[] = new Card(Suit::Spade, $i);
+        }
+
+        $game->setPlayer1Captured(new CardCollection($p1Cards));
+        $game->setPlayer2Captured(new CardCollection($p2Cards));
+        $game->setLastCapturer(0);
+
+        // P1 plays Bastoni 7 (same suit as existing B1-6) onto empty table.
+        // lastCapturer=P1 so it sweeps back to P1.
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Bastoni, 7)]));
+        $game->setPlayer2Hand(new CardCollection());
+        $game->setTableCards(new CardCollection());
+        $game->setDeck(new CardCollection());
+
+        $this->engine->playCard($game, 0, 0);
+
+        $this->assertSame(GameState::GameOver, $game->getState());
+        $this->assertSame(0, $game->getResolvedWinner());
+    }
+
+    /**
+     * When both reach 11+ on the exact same category with the same running
+     * total (e.g. both cross 11 via scope), there's no tiebreaker possible
+     * and another round should start.
+     *
+     * Scenario: Pre-round P1=9, P2=9. P2 wins carte (+1), P1 wins settebello (+1),
+     * denari tied, primiera null for both (neither has 4 suits), both have 1 scope.
+     * Sequential counting:
+     *   After carte:     P1=9,  P2=10
+     *   After denari:    P1=9,  P2=10
+     *   After settebello: P1=10, P2=10
+     *   After primiera:  P1=10, P2=10
+     *   After scope:     P1=11, P2=11 → still tied → RoundEnd
+     */
+    public function testTiebreak_StillTied_PlaysAnotherRound(): void
+    {
+        $game = new Game();
+        $game->setState(GameState::Playing);
+        $game->setCurrentPlayer(0);
+        $game->setDealerIndex(0);
+        $game->setPlayer1TotalScore(9);
+        $game->setPlayer2TotalScore(9);
+
+        // Neither player has all 4 suits → both primiera = null.
+        // P1 pre-sweep: D1-4,D7 (5 denari incl 7d), C1-10, B1-3 = 18 cards (3 suits)
+        // P2: D5,D6,D8-10 (5 denari), B5-10, S1-10 = 21 cards (3 suits)
+        // P1 plays B4 → swept back → P1=19, P2=21, total=40.
+        $p1Cards = [];
+        $p1Cards[] = new Card(Suit::Denari, 1);
+        $p1Cards[] = new Card(Suit::Denari, 2);
+        $p1Cards[] = new Card(Suit::Denari, 3);
+        $p1Cards[] = new Card(Suit::Denari, 4);
+        $p1Cards[] = new Card(Suit::Denari, 7); // settebello
+        for ($i = 1; $i <= 10; $i++) {
+            $p1Cards[] = new Card(Suit::Coppe, $i);
+        }
+        for ($i = 1; $i <= 3; $i++) {
+            $p1Cards[] = new Card(Suit::Bastoni, $i);
+        }
+        // P1 pre-sweep: 18 cards, 3 suits (Denari, Coppe, Bastoni)
+
+        $p2Cards = [];
+        $p2Cards[] = new Card(Suit::Denari, 5);
+        $p2Cards[] = new Card(Suit::Denari, 6);
+        $p2Cards[] = new Card(Suit::Denari, 8);
+        $p2Cards[] = new Card(Suit::Denari, 9);
+        $p2Cards[] = new Card(Suit::Denari, 10);
+        for ($i = 5; $i <= 10; $i++) {
+            $p2Cards[] = new Card(Suit::Bastoni, $i);
+        }
+        for ($i = 1; $i <= 10; $i++) {
+            $p2Cards[] = new Card(Suit::Spade, $i);
+        }
+        // P2: 21 cards, 3 suits (Denari, Bastoni, Spade)
+
+        $game->setPlayer1Captured(new CardCollection($p1Cards));
+        $game->setPlayer2Captured(new CardCollection($p2Cards));
+        $game->setPlayer1Scope(1);
+        $game->setPlayer2Scope(1);
+        $game->setLastCapturer(0);
+
+        // P1 plays Bastoni 4 (a suit P1 already has) onto empty table.
+        // lastCapturer=P1 so it returns to P1 after sweep.
+        // After endRound: P1=19 cards (3 suits), P2=21 cards (3 suits).
+        // Carte: P2 wins (21>19). Denari: tied (5-5). Settebello: P1 (has 7d).
+        // Primiera: null for both (neither has 4 suits). Scope: 1-1 each.
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Bastoni, 4)]));
+        $game->setPlayer2Hand(new CardCollection());
+        $game->setTableCards(new CardCollection());
+        $game->setDeck(new CardCollection());
+
+        $this->engine->playCard($game, 0, 0);
+
+        // Both cross 11 on scope simultaneously → another round
+        $this->assertSame(GameState::RoundEnd, $game->getState());
+        $this->assertNull($game->getResolvedWinner());
+    }
+
+    /**
+     * Standard case: one player clearly ahead at 11+, no tiebreaker needed.
+     */
+    public function testEndRound_ClearWinner_NoTiebreaker(): void
+    {
+        $game = new Game();
+        $game->setState(GameState::Playing);
+        $game->setCurrentPlayer(0);
+        $game->setDealerIndex(0);
+        $game->setPlayer1TotalScore(10);
+        $game->setPlayer2TotalScore(5);
+
+        // P1 has more cards and settebello → gets at least 2 points → 12
+        $p1Cards = [];
+        for ($i = 1; $i <= 7; $i++) {
+            $p1Cards[] = new Card(Suit::Denari, $i);
+        }
+        for ($i = 1; $i <= 10; $i++) {
+            $p1Cards[] = new Card(Suit::Coppe, $i);
+        }
+        for ($i = 1; $i <= 4; $i++) {
+            $p1Cards[] = new Card(Suit::Bastoni, $i);
+        }
+        // P1 pre-sweep: 21 cards (D1-7, C1-10, B1-4), 3 suits
+
+        $p2Cards = [];
+        for ($i = 8; $i <= 10; $i++) {
+            $p2Cards[] = new Card(Suit::Denari, $i);
+        }
+        for ($i = 6; $i <= 10; $i++) {
+            $p2Cards[] = new Card(Suit::Bastoni, $i);
+        }
+        for ($i = 1; $i <= 10; $i++) {
+            $p2Cards[] = new Card(Suit::Spade, $i);
+        }
+        // P2: 18 cards (D8-10, B6-10, S1-10), 3 suits
+
+        $game->setPlayer1Captured(new CardCollection($p1Cards));
+        $game->setPlayer2Captured(new CardCollection($p2Cards));
+        $game->setLastCapturer(0);
+
+        // P1 plays B5 (not a duplicate). After sweep: P1=22, P2=18. Total=40.
+        // Carte: P1(+1), Denari: P1(+1), Settebello: P1(+1). P1=13, P2=5.
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Bastoni, 5)]));
+        $game->setPlayer2Hand(new CardCollection());
+        $game->setTableCards(new CardCollection());
+        $game->setDeck(new CardCollection());
+
+        $this->engine->playCard($game, 0, 0);
+
+        $this->assertSame(GameState::GameOver, $game->getState());
+        $this->assertNull($game->getResolvedWinner()); // No tiebreaker needed
+    }
 }

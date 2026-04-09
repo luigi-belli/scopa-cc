@@ -10,6 +10,8 @@ use App\Enum\GameState;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 use App\ValueObject\PendingPlay;
+use App\ValueObject\RoundHistoryEntry;
+use App\ValueObject\RoundScores;
 use App\ValueObject\SweepData;
 use App\ValueObject\TurnResult;
 use App\ValueObject\TurnResultType;
@@ -287,7 +289,7 @@ final class ScopaEngine implements GameEngine
         $game->setPlayer2TotalScore($game->getPlayer2TotalScore() + $p2RoundTotal);
 
         $history = $game->getRoundHistory();
-        $history[] = new \App\ValueObject\RoundHistoryEntry(
+        $history[] = new RoundHistoryEntry(
             scores: $scores,
             totals: [$game->getPlayer1TotalScore(), $game->getPlayer2TotalScore()],
         );
@@ -298,6 +300,22 @@ final class ScopaEngine implements GameEngine
 
         if (($s1 >= 11 || $s2 >= 11) && $s1 !== $s2) {
             $game->setState(GameState::GameOver);
+        } elseif ($s1 >= 11 && $s2 >= 11 && $s1 === $s2) {
+            // Both reached 11+ with the same total — apply the traditional
+            // sequential counting tiebreaker (Carte → Denari → Settebello →
+            // Primiera → Scope).  The first player to reach 11 in this
+            // counting order wins.
+            $winner = $this->resolveByCountingOrder(
+                $s1 - $p1RoundTotal,
+                $s2 - $p2RoundTotal,
+                $scores,
+            );
+            if ($winner !== null) {
+                $game->setResolvedWinner($winner);
+                $game->setState(GameState::GameOver);
+            } else {
+                $game->setState(GameState::RoundEnd);
+            }
         } else {
             $game->setState(GameState::RoundEnd);
         }
@@ -343,6 +361,42 @@ final class ScopaEngine implements GameEngine
             deckStyle: $game->getDeckStyle(),
             gameType: $game->getGameType(),
         );
+    }
+
+    /**
+     * Traditional tiebreaker: count round points in order
+     * (Carte -> Denari -> Settebello -> Primiera -> Scope).
+     * Returns the winning player index, or null if still tied.
+     */
+    private function resolveByCountingOrder(int $preRound1, int $preRound2, RoundScores $scores): ?int
+    {
+        $running1 = $preRound1;
+        $running2 = $preRound2;
+
+        // Ordered category pairs: [player1 score, player2 score]
+        $categoryPairs = [
+            [$scores->player1->carte, $scores->player2->carte],
+            [$scores->player1->denari, $scores->player2->denari],
+            [$scores->player1->setteBello, $scores->player2->setteBello],
+            [$scores->player1->primiera, $scores->player2->primiera],
+            [$scores->player1->scope, $scores->player2->scope],
+        ];
+
+        foreach ($categoryPairs as [$p1Score, $p2Score]) {
+            $running1 += $p1Score;
+            $running2 += $p2Score;
+
+            if ($running1 >= 11 || $running2 >= 11) {
+                if ($running1 > $running2) {
+                    return 0;
+                }
+                if ($running2 > $running1) {
+                    return 1;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
