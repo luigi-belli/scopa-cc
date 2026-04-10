@@ -101,8 +101,7 @@ services:
   acme:
     image: neilpang/acme.sh
     environment:
-      Dynu_ClientId: ${DYNU_CLIENT_ID}
-      Dynu_Secret: ${DYNU_SECRET}
+      Dynu_Token: ${DYNU_TOKEN}
     volumes:
       - ./ssl:/ssl
       - acme-data:/acme.sh
@@ -110,9 +109,8 @@ services:
     command:
       - |
         DOMAIN="${EXTERNAL_HOSTNAME}"
-        EMAIL="${LETSENCRYPT_EMAIL}"
         acme.sh --set-default-ca --server letsencrypt
-        acme.sh --register-account -m "$$EMAIL" 2>/dev/null || true
+        acme.sh --register-account 2>/dev/null || true
         install_cert() {
           acme.sh --install-cert -d "$$DOMAIN" --ecc \
             --fullchain-file /ssl/cert.pem --key-file /ssl/key.pem

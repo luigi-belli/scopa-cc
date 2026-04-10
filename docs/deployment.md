@@ -22,9 +22,7 @@ cp .env.dist .env
 | `EXTERNAL_PORT` | Public port users see (after NAT forwarding) | `59820` |
 | `INTERNAL_PORT` | Port Docker binds on the host machine | `5982` |
 | `TLS_MODE` | `selfsigned` for dev, `letsencrypt` for production | `letsencrypt` |
-| `LETSENCRYPT_EMAIL` | Contact email for Let's Encrypt notifications | `admin@example.com` |
-| `DYNU_CLIENT_ID` | Dynu DNS OAuth2 client ID | `abc123...` |
-| `DYNU_SECRET` | Dynu DNS API secret | `xyz789...` |
+| `DYNU_TOKEN` | Dynu DNS API token | `abc123...` |
 
 The `.env` file is gitignored. The `.env.dist` template is committed to the repo.
 
@@ -137,9 +135,7 @@ cp .env.dist .env
 #   EXTERNAL_PORT=59820
 #   INTERNAL_PORT=5982
 #   TLS_MODE=letsencrypt
-#   LETSENCRYPT_EMAIL=admin@example.com
-#   DYNU_CLIENT_ID=your-client-id
-#   DYNU_SECRET=your-api-key
+#   DYNU_TOKEN=your-api-token
 
 # 2. Start (acme service issues cert automatically)
 docker compose --profile letsencrypt up --build -d
