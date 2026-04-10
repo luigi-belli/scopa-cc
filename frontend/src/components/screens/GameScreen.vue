@@ -46,7 +46,7 @@
         class="briscola-trump-card"
         :style="store.dealHidingBriscola ? { opacity: '0' } : {}"
       />
-      <div class="table-center" :class="{ 'no-deck': shownDeckCount === 0, 'briscola-table': isBriscola }" ref="tableCenterEl">
+      <div class="table-center" :class="{ 'briscola-table': isBriscola }" ref="tableCenterEl">
         <CardComponent
           v-for="(card, idx) in (gs?.table ?? [])"
           :key="cardKey(card, idx)"

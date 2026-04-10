@@ -513,11 +513,6 @@ body {
   justify-content: center;
   align-content: center;
   padding-left: 70px;
-  transition: padding-left 0.5s ease;
-}
-
-.table-center.no-deck {
-  padding-left: 0;
 }
 
 /* Briscola: single centered slot for the current trick card */
