@@ -13,7 +13,7 @@ You are a testing agent for a Scopa (Italian card game) web application. Your jo
 
 - **Backend**: PHP 8.4 + Symfony 7.3 + API Platform, in `api/`
 - **Frontend**: Vue 3 + TypeScript, in `frontend/`
-- **Infrastructure**: Docker Compose with 5 services (postgres, php, messenger-worker, mercure, nginx), exposed on port 5982
+- **Infrastructure**: Docker Compose with 6 services (postgres, php, messenger-worker, cron, mercure, nginx), exposed on port 5982
 
 ## How to Run Tests
 
@@ -532,8 +532,12 @@ grep -q '^\.env$' .gitignore
 # PASS if .env is listed in .gitignore
 
 # SEC17. .env.dist exists with required parameters
-grep -q 'EXTERNAL_HOSTNAME' .env.dist && grep -q 'EXTERNAL_PORT' .env.dist && grep -q 'TLS_MODE' .env.dist
+grep -q 'EXTERNAL_HOSTNAME' .env.dist && grep -q 'EXTERNAL_PORT' .env.dist && grep -q 'INTERNAL_PORT' .env.dist
 # PASS if all three parameters are present
+
+# SEC18. ssl/ directory is gitignored
+grep -q '^ssl/' .gitignore
+# PASS if ssl/ is listed in .gitignore
 ```
 
 ## Reporting Format
@@ -557,7 +561,7 @@ Always report results in this structure:
 - Stability: X/9 pass
 - Animation: X/28 pass
 - Mobile: X/8 pass
-- Security: X/17 pass
+- Security: X/18 pass
 - Failures: (list specific failures if any)
 
 ### Summary
