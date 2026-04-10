@@ -24,7 +24,7 @@ cp .env.dist .env
 | `TLS_MODE` | `selfsigned` for dev, `letsencrypt` for production | `letsencrypt` |
 | `LETSENCRYPT_EMAIL` | Contact email for Let's Encrypt notifications | `admin@example.com` |
 | `DYNU_CLIENT_ID` | Dynu DNS OAuth2 client ID | `abc123...` |
-| `DYNU_API_KEY` | Dynu DNS API secret | `xyz789...` |
+| `DYNU_SECRET` | Dynu DNS API secret | `xyz789...` |
 
 The `.env` file is gitignored. The `.env.dist` template is committed to the repo.
 
@@ -139,7 +139,7 @@ cp .env.dist .env
 #   TLS_MODE=letsencrypt
 #   LETSENCRYPT_EMAIL=admin@example.com
 #   DYNU_CLIENT_ID=your-client-id
-#   DYNU_API_KEY=your-api-key
+#   DYNU_SECRET=your-api-key
 
 # 2. Start (acme service issues cert automatically)
 docker compose --profile letsencrypt up --build -d

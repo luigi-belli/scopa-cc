@@ -45,14 +45,15 @@ docker compose exec php bin/console <command>
 
 ```
 scopa/
+  Makefile                     # Shortcuts: up, down, build, logs, test, shell, db, acme-up/down
   docker-compose.yml           # 7 services, configurable port
   ssl/                         # TLS certificates: cert.pem + key.pem (gitignored)
   .env.dist                    # Deploy config template (hostname, port, TLS mode, Dynu DNS)
   .env                         # Local deploy config (gitignored)
   
   api/                         # API Platform (PHP/Symfony)
-    Dockerfile                 # PHP 8.4 CLI + composer + entrypoint
-    entrypoint.sh              # cache:clear, migrations, messenger:setup
+    Dockerfile                 # PHP 8.4 FPM + composer + entrypoint
+    entrypoint.sh              # cache:clear, migrations, messenger:setup-transports
     composer.json
     .env                       # DATABASE_URL, MERCURE_*, APP_SECRET
     .env.test                  # Test environment overrides
@@ -91,9 +92,9 @@ scopa/
           PlayCardInput.php    # cardIndex
           SelectCaptureInput.php # optionIndex
         Output/
-          CreateGameOutput.php # gameId, playerToken, state, gameType, gameState?
-          JoinGameOutput.php   # gameId, playerToken, gameState
-          GameStateOutput.php  # Full player-specific game state (23 fields, incl. gameType, briscolaCard, lastTrick)
+          CreateGameOutput.php # gameId, playerToken, state, gameType, gameState?, mercureToken?
+          JoinGameOutput.php   # gameId, playerToken, gameState, mercureToken?
+          GameStateOutput.php  # Full player-specific game state (24 fields, incl. mercureToken, gameType, briscolaCard, lastTrick)
           GameLookupOutput.php # id, name, state, gameType
       Service/
         GameEngine.php         # Interface: initializeGame, startGame, playCard, getStateForPlayer, selectCapture, nextRound
@@ -108,7 +109,9 @@ scopa/
         ScopaScoringService.php # Scopa 5-category round scoring
         BriscolaScoringService.php # Briscola card point values and strength ranking
         MercurePublisher.php   # Publishes SSE events via Symfony Mercure HubInterface
+        MercureTokenService.php # Generates Mercure subscriber JWT tokens
         PlayerTokenService.php # Token generation, name sanitization
+        PlayerAuthenticator.php # Game loading + player token validation
       State/
         Provider/
           GameStateProvider.php   # GET /games/{id} — player-specific state
@@ -121,6 +124,20 @@ scopa/
           NextRoundProcessor.php     # POST /games/{id}/next-round
           HeartbeatProcessor.php     # POST /games/{id}/heartbeat
           LeaveGameProcessor.php     # POST /games/{id}/leave
+      EventListener/
+        MercureTerminateListener.php # Deferred Mercure publishing via kernel events
+      ValueObject/
+        Card.php               # Card value object (suit + value)
+        CardCollection.php     # Typed card list
+        AIMove.php             # AI move evaluation result
+        PendingPlay.php        # Pending capture choice state
+        LastTrick.php          # Last resolved trick (Briscola)
+        TurnResult.php         # Turn outcome data
+        TurnResultType.php     # Turn result type enum
+        RoundScores.php        # Round scoring breakdown
+        RoundHistoryEntry.php  # Round history record
+        ScoreRow.php           # Score table row
+        SweepData.php          # Scopa sweep data
       Command/
         CleanupGamesCommand.php  # app:cleanup-games — delete inactive games (>10 min)
       Message/
@@ -134,6 +151,7 @@ scopa/
         Service/
           DeckServiceTest.php
           GameEngineTest.php
+          BriscolaEngineTest.php
           ScoringServiceTest.php
           AIServiceTest.php
           PlayerTokenServiceTest.php
@@ -147,6 +165,7 @@ scopa/
     index.html
     public/
       favicon.svg
+      apple-touch-icon.png
       assets/cards/            # Card images (4 deck styles)
         piacentine/            # 40 files + bg
         napoletane/            # 40 files + bg
@@ -157,7 +176,7 @@ scopa/
       vite-env.d.ts            # TypeScript declarations for .vue modules
       App.vue                  # Root component (router-view)
       types/
-        card.ts                # Card, DeckStyle, SUIT_LETTER, DECK_EXT, cardImagePath, cardBackPath
+        card.ts                # Card, DeckStyle, SUIT_LETTER, DECK_EXT, cardImagePath, cardBackPath, PRIMIERA_VALUES, BRISCOLA_CARD_POINTS
         game.ts                # GameState, TurnResult, RoundEndData, CreateGameResponse, etc.
       stores/
         gameStore.ts           # Pinia: displayState/serverState separation, event queue
@@ -170,7 +189,7 @@ scopa/
         useMercure.ts          # SSE subscription with typed event handlers
         useDeckStyle.ts        # Deck selection + localStorage persistence
       animations/
-        flipUtils.ts           # FLIP helpers: snapshot, animateFLIP, createCardClone, animateClone
+        flipUtils.ts           # FLIP helpers: snapshotPositions, animateFLIP, createCardClone, createCardBackClone, animateClone, computeSlotRect, computeFlyToDelta, sleep, cardKey
       components/
         screens/
           LobbyScreen.vue      # Create/join/single-player, language selector
@@ -187,6 +206,8 @@ scopa/
           RoundEndOverlay.vue       # Round scores + next round button
           GameOverOverlay.vue       # Final scores, winner, back to lobby
           ScoreTable.vue            # 5-category breakdown with manual esc() for safety
+          BriscolaScoreTable.vue    # Briscola-specific score display
+          ScoreDetailDialog.vue     # Detailed card breakdown modal
         effects/
           ScopaFlash.vue       # 1500ms "SCOPA!" flash animation
           ConfettiCanvas.vue   # Canvas-based confetti for game winner
@@ -356,7 +377,9 @@ Sequencing: `turn-result` published first, then `game-state`. Mercure SSE preser
 
 Publishing uses **Symfony Mercure Bundle's `HubInterface`** (not raw curl). The `MercurePublisher` service injects `HubInterface` and creates `Update` objects with topic, data, and event type. Configuration in `config/packages/mercure.yaml` sets the JWT secret and publish permissions.
 
-JWT auth: Mercure bundle mints HS256 JWTs using the shared secret from `MERCURE_JWT_SECRET` env var. Anonymous mode enabled on Mercure hub for subscribers.
+JWT auth: `MercureTokenService` generates HS256 subscriber JWTs scoped to specific game/player topics. Publishing JWTs are minted by Mercure bundle using the shared secret from `MERCURE_JWT_SECRET` env var. Anonymous mode enabled on Mercure hub for subscribers.
+
+Deferred publishing: `MercureTerminateListener` defers Mercure publishes to the kernel `TerminateEvent` (after the response is sent), reducing request latency.
 
 ### Multi-Game Architecture (Strategy Pattern)
 
@@ -418,6 +441,7 @@ Async via Symfony Messenger: `HandleAITurnMessage` dispatched after player move.
   "roundHistory": [],
   "deckStyle": "piacentine",
   "turnResult": null,
+  "mercureToken": "...",
   "gameType": "scopa",
   "briscolaCard": null,
   "lastTrick": null
@@ -435,10 +459,10 @@ All API endpoints use explicit DTOs for request deserialization and response ser
 - `SelectCaptureInput`: `optionIndex` (NotNull, >=0)
 
 **Output DTOs** (readonly constructor properties):
-- `CreateGameOutput`: `gameId`, `playerToken`, `state`, `gameState` (nullable `GameStateOutput`)
-- `JoinGameOutput`: `gameId`, `playerToken`, `gameState`
-- `GameStateOutput`: 20 fields (see JSON structure above)
-- `GameLookupOutput`: `id`, `name`, `state`
+- `CreateGameOutput`: `gameId`, `playerToken`, `state`, `gameType`, `gameState?`, `mercureToken?`
+- `JoinGameOutput`: `gameId`, `playerToken`, `gameState`, `mercureToken?`
+- `GameStateOutput`: 24 fields (see JSON structure above)
+- `GameLookupOutput`: `id`, `name`, `state`, `gameType`
 
 ### Provider/Processor Pattern
 
@@ -447,8 +471,7 @@ All API endpoints use explicit DTOs for request deserialization and response ser
 - `GameLookupProvider`: Reads `name` query param, queries for matching game with state=waiting, returns array of `GameLookupOutput`.
 
 **State Processors** implement `ApiPlatform\State\ProcessorInterface`:
-- Each processor fetches the Game entity from DB using `$uriVariables['id']` + `EntityManagerInterface`
-- Authenticates the player via `X-Player-Token` header (using `RequestStack`)
+- Each processor uses `PlayerAuthenticator` to load the Game entity and authenticate the player via `X-Player-Token` header
 - Calls appropriate `GameEngine` methods
 - Publishes Mercure events via `MercurePublisher`
 - Dispatches `HandleAITurnMessage` when it's AI's turn in single-player games

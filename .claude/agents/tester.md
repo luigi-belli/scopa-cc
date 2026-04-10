@@ -532,7 +532,7 @@ grep -q '^\.env$' .gitignore
 # PASS if .env is listed in .gitignore
 
 # SEC17. .env.dist exists with required parameters
-grep -q 'EXTERNAL_HOSTNAME' .env.dist && grep -q 'EXTERNAL_PORT' .env.dist && grep -q 'INTERNAL_PORT' .env.dist && grep -q 'DYNU_CLIENT_ID' .env.dist && grep -q 'DYNU_API_KEY' .env.dist
+grep -q 'EXTERNAL_HOSTNAME' .env.dist && grep -q 'EXTERNAL_PORT' .env.dist && grep -q 'INTERNAL_PORT' .env.dist && grep -q 'DYNU_CLIENT_ID' .env.dist && grep -q 'DYNU_SECRET' .env.dist
 # PASS if all five parameters are present
 
 # SEC18. ssl/ directory is gitignored

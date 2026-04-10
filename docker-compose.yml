@@ -102,7 +102,7 @@ services:
     image: neilpang/acme.sh
     environment:
       Dynu_ClientId: ${DYNU_CLIENT_ID}
-      Dynu_Secret: ${DYNU_API_KEY}
+      Dynu_Secret: ${DYNU_SECRET}
     volumes:
       - ./ssl:/ssl
       - acme-data:/acme.sh

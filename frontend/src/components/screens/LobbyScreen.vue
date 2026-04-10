@@ -88,6 +88,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { useDeckStyle } from '@/composables/useDeckStyle'
+import { useCardPreloader } from '@/composables/useCardPreloader'
 import { setMercureCookie } from '@/composables/useMercure'
 import { useGameStore } from '@/stores/gameStore'
 import { useI18n } from '@/i18n'
@@ -97,6 +98,7 @@ import type { GameType } from '@/types/game'
 const router = useRouter()
 const api = useApi()
 const { selectedDeck } = useDeckStyle()
+useCardPreloader(selectedDeck)
 const store = useGameStore()
 const { t, locale, setLocale } = useI18n()
 
