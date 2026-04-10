@@ -2,7 +2,7 @@
 
 ## Overview
 
-The application runs as a Docker Compose stack behind HTTPS with HTTP/3 (QUIC) + HTTP/2 support. Deployment configuration is driven by a `.env` file on the deploy machine. TLS certificates are either self-signed (local dev) or obtained from Let's Encrypt (production).
+The application runs as a Docker Compose stack behind HTTPS with HTTP/3 (QUIC) + HTTP/2 support. Deployment configuration is driven by a `.env` file on the deploy machine. TLS certificates are either self-signed (local dev) or obtained from Let's Encrypt via DNS-01 challenge (production — no port 80 needed).
 
 ## Configuration
 
@@ -43,11 +43,10 @@ The `Alt-Svc` response header advertises `h3=":EXTERNAL_PORT"` so browsers disco
 |---|---|---|---|
 | `EXTERNAL_PORT` | `INTERNAL_PORT` | **TCP** | HTTPS + HTTP/2 |
 | `EXTERNAL_PORT` | `INTERNAL_PORT` | **UDP** | HTTP/3 (QUIC) |
-| 80 | 80 | **TCP** | Let's Encrypt ACME challenges |
+
+Only two port forwards are needed. No port 80 — Let's Encrypt uses DNS-01 validation.
 
 UDP forwarding is required for HTTP/3. Without it, browsers fall back to HTTP/2 over TCP (still works, but without QUIC benefits like 0-RTT and no head-of-line blocking).
-
-Port 80 is only needed when `TLS_MODE=letsencrypt` — for initial certificate issuance and renewals. It serves ACME HTTP-01 challenge responses and redirects all other traffic to HTTPS.
 
 ## Local Development (Self-Signed)
 
@@ -64,12 +63,14 @@ Access `https://localhost:5982`. The browser will show a certificate warning —
 
 The self-signed certificate is generated at container startup using `EXTERNAL_HOSTNAME` as the CN and SAN. It persists in the `ssl-certs` Docker volume across restarts. If you change `EXTERNAL_HOSTNAME`, the entrypoint detects the CN mismatch and regenerates automatically.
 
-## Production (Let's Encrypt)
+## Production (Let's Encrypt via DNS-01)
+
+Let's Encrypt validates domain ownership via a DNS TXT record. No inbound port 80 is needed — only the HTTPS/QUIC ports you already forward.
 
 ### Prerequisites
 
 - `EXTERNAL_HOSTNAME` must be a real domain with DNS A/AAAA record pointing to the server
-- Port 80 must be reachable from the internet (for ACME HTTP-01 challenges)
+- You must have access to your DNS provider's control panel to add TXT records
 - Port `EXTERNAL_PORT` must be forwarded (both TCP and UDP) through NAT to `INTERNAL_PORT`
 
 ### Initial Setup
@@ -87,33 +88,70 @@ cp .env.dist .env
 # 2. Start the stack (boots with a temporary self-signed cert)
 docker compose up --build -d
 
-# 3. Request the initial Let's Encrypt certificate
-docker compose --profile letsencrypt run --rm certbot \
-  certonly --webroot -w /var/www/certbot \
+# 3. Request the initial Let's Encrypt certificate (interactive — see below)
+docker compose --profile letsencrypt run --rm certbot certonly \
+  --manual --preferred-challenges dns \
   -d "scopa.example.com" --email "admin@example.com" \
   --agree-tos --no-eff-email
 
 # 4. Reload nginx to use the real certificate
 docker compose exec nginx nginx -s reload
-
-# 5. Start the certbot renewal container
-docker compose --profile letsencrypt up -d certbot
 ```
+
+### What Happens During Step 3 (DNS Challenge)
+
+Certbot will pause and display a prompt like this:
+
+```
+Please deploy a DNS TXT record under the name:
+
+    _acme-challenge.scopa.example.com
+
+with the following value:
+
+    XyZ1aBcDeFgHiJkLmNoPqRsTuVwXyZ1aBcDeF
+
+Before continuing, verify the TXT record has been deployed.
+Press Enter to continue...
+```
+
+**What you need to do:**
+
+1. Log in to your DNS provider (Cloudflare, Route53, GoDaddy, Namecheap, etc.)
+2. Add a **TXT record** with these values:
+
+   | Field | Value |
+   |---|---|
+   | **Type** | `TXT` |
+   | **Name** / **Host** | `_acme-challenge` (some providers want the full `_acme-challenge.scopa.example.com`) |
+   | **Value** / **Content** | The token string certbot displayed (e.g. `XyZ1aBcDeFgHiJkLmNoPqRsTuVwXyZ1aBcDeF`) |
+   | **TTL** | `300` (5 minutes) or the lowest available |
+
+3. Wait for DNS propagation (usually 1-5 minutes). You can verify with:
+   ```bash
+   dig TXT _acme-challenge.scopa.example.com +short
+   ```
+   The output should show the token value in quotes.
+
+4. Press **Enter** in the certbot prompt. Certbot verifies the TXT record and issues the certificate.
+
+5. **Remove the TXT record** from your DNS provider after the certificate is issued. It is no longer needed.
 
 ### Certificate Renewal
 
-Renewal is automated:
-
-- The **certbot** container checks for renewal every 12 hours
-- The **nginx** entrypoint runs a background loop that re-symlinks certs and reloads nginx every 6 hours
-
-Within 6 hours of a certbot renewal, nginx picks up the new certificate automatically. No manual intervention needed.
-
-To force a manual reload:
+Let's Encrypt certificates are valid for 90 days. To renew, re-run the certbot command:
 
 ```bash
+docker compose --profile letsencrypt run --rm certbot certonly \
+  --manual --preferred-challenges dns \
+  -d "scopa.example.com" --email "admin@example.com" \
+  --agree-tos --no-eff-email
 docker compose exec nginx nginx -s reload
 ```
+
+This will prompt for a new DNS TXT record (same process as initial issuance). Set a calendar reminder for every ~60 days.
+
+The nginx entrypoint also runs a background loop that re-symlinks Let's Encrypt certs and reloads nginx every 6 hours, so if the cert volume is updated (e.g. by an external renewal tool), nginx picks it up automatically.
 
 ## How the Certificate Flow Works
 
@@ -127,8 +165,8 @@ Container starts → nginx/entrypoint.sh
   ├─ No certs yet (or hostname changed)?
   │    → generate self-signed cert with CN=EXTERNAL_HOSTNAME
   │
-  └─ TLS_MODE=letsencrypt?
-       → start background loop: every 6h re-symlink + nginx -s reload
+  ├─ TLS_MODE=letsencrypt?
+  │    → start background loop: every 6h re-symlink + nginx -s reload
   │
   └─ Delegates to nginx's docker-entrypoint.sh
        → envsubst on default.conf.template (only EXTERNAL_* vars)
@@ -164,7 +202,6 @@ The processed config is written to `/etc/nginx/conf.d/default.conf` inside the c
 | `pgdata` | PostgreSQL game data | Yes |
 | `ssl-certs` | Active TLS certificates (self-signed or LE symlinks) | Yes |
 | `certbot-certs` | Let's Encrypt certificates and renewal state | Yes |
-| `certbot-webroot` | ACME challenge response files | Yes |
 
 ## Updating Configuration
 
@@ -178,8 +215,8 @@ docker compose up --build -d   # Entrypoint detects changes, regenerates cert if
 If using Let's Encrypt with a **new domain**, re-run certbot:
 
 ```bash
-docker compose --profile letsencrypt run --rm certbot \
-  certonly --webroot -w /var/www/certbot \
+docker compose --profile letsencrypt run --rm certbot certonly \
+  --manual --preferred-challenges dns \
   -d "new-domain.com" --email "admin@example.com" \
   --agree-tos --no-eff-email
 docker compose exec nginx nginx -s reload
@@ -189,7 +226,7 @@ docker compose exec nginx nginx -s reload
 
 | Command | What starts |
 |---|---|
-| `docker compose up -d` | Core stack only (postgres, php, messenger, cron, mercure, nginx) |
-| `docker compose --profile letsencrypt up -d` | Core stack + certbot renewal container |
+| `docker compose up -d` | Core stack (postgres, php, messenger, cron, mercure, nginx) |
+| `docker compose --profile letsencrypt run --rm certbot ...` | One-shot certbot for cert issuance |
 
-The certbot container is behind the `letsencrypt` profile — it does not start by default.
+The certbot container is behind the `letsencrypt` profile and runs as a one-shot command — it does not stay running.

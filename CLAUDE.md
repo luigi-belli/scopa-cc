@@ -543,7 +543,6 @@ Lightweight, custom i18n system in `frontend/src/i18n/` — no external library.
 nginx (HTTPS, HTTP/2, HTTP/3 on configurable port)
   ├── :443/tcp         → HTTPS + HTTP/2
   ├── :443/udp         → HTTP/3 (QUIC)
-  ├── :80              → ACME challenges + HTTP→HTTPS redirect
   ├── /                → Vue SPA (built in nginx Dockerfile multi-stage)
   ├── /assets/         → Card images (copied into nginx image from frontend build)
   ├── /api/            → fastcgi_pass php:9000

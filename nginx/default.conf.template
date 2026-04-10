@@ -13,21 +13,6 @@ limit_req_zone $binary_remote_addr zone=api_heartbeat:1m rate=20r/m;
 # Read endpoints (GET state, lookup): 60 req/min
 limit_req_zone $binary_remote_addr zone=api_read:2m rate=60r/m;
 
-# ─── Port 80: ACME challenges (Let's Encrypt) + HTTP→HTTPS redirect ───
-server {
-    listen 80;
-    server_name _;
-
-    # Let's Encrypt HTTP-01 challenge responses
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-
-    location / {
-        return 301 https://$host:${EXTERNAL_PORT}$request_uri;
-    }
-}
-
 # ─── Main HTTPS server: HTTP/2 + HTTP/3 (QUIC) ───
 server {
     # HTTP/2 over TLS (TCP)

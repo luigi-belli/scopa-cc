@@ -81,7 +81,6 @@ services:
     ports:
       - "${INTERNAL_PORT:-5982}:443/tcp"   # HTTPS + HTTP/2
       - "${INTERNAL_PORT:-5982}:443/udp"   # HTTP/3 (QUIC)
-      - "80:80"                            # ACME challenges (Let's Encrypt)
     environment:
       EXTERNAL_HOSTNAME: ${EXTERNAL_HOSTNAME:-localhost}
       EXTERNAL_PORT: ${EXTERNAL_PORT:-5982}
@@ -92,31 +91,25 @@ services:
     volumes:
       - ssl-certs:/etc/nginx/ssl
       - certbot-certs:/etc/letsencrypt:ro
-      - certbot-webroot:/var/www/certbot:ro
     depends_on:
       php:
         condition: service_healthy
       mercure:
         condition: service_healthy
 
-  # Let's Encrypt certificate manager (only starts with --profile letsencrypt)
-  # Initial cert:  docker compose --profile letsencrypt run --rm certbot \
-  #                  certonly --webroot -w /var/www/certbot \
-  #                  -d "$EXTERNAL_HOSTNAME" --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email
-  # After issuing:  docker compose exec nginx nginx -s reload
+  # Let's Encrypt certificate manager — DNS-01 challenge (no port 80 needed)
+  # Usage:
+  #   docker compose run --rm certbot certonly --manual --preferred-challenges dns \
+  #     -d "$EXTERNAL_HOSTNAME" --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email
+  # Then:  docker compose exec nginx nginx -s reload
   certbot:
     image: certbot/certbot
     volumes:
       - certbot-certs:/etc/letsencrypt
-      - certbot-webroot:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
     profiles:
       - letsencrypt
-    depends_on:
-      - nginx
 
 volumes:
   pgdata:
   ssl-certs:
   certbot-certs:
-  certbot-webroot:
