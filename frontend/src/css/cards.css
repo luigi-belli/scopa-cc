@@ -216,16 +216,20 @@
     height: 71px;
   }
 
-  /* Tressette mobile: smaller cards with more overlap */
+  /* Tressette mobile: 2 rows × 5 columns grid */
+  .tressette-hand .hand-row {
+    display: grid;
+    grid-template-columns: repeat(5, 42px);
+    grid-template-rows: repeat(2, 75px);
+    gap: 4px 2px;
+    justify-content: center;
+    min-height: auto;
+  }
+
   .tressette-hand .hand-row > .card,
   .tressette-hand .hand-row > .card-back {
     width: 42px;
     height: 75px;
-    margin-left: -14px;
-  }
-
-  .tressette-hand .hand-row > .card:first-child,
-  .tressette-hand .hand-row > .card-back:first-child {
     margin-left: 0;
   }
 }

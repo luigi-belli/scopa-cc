@@ -1,8 +1,8 @@
-# Tressette in Due — Game Rules
+# Tressette in Due a Metà Mazzo — Game Rules
 
 ## Overview
 
-Tressette in Due is the two-player variant of Tressette, one of Italy's most classic card games. It is a trick-taking game played in two phases: a **stock phase** (where players draw after each trick) and a **hand phase** (where players must follow suit). Unlike Briscola, there is **no trump suit** — winning depends on playing the led suit with higher-ranked cards.
+Tressette in Due a Metà Mazzo is a two-player variant of Tressette, one of Italy's most classic card games. It is a trick-taking game where players **always follow suit** when possible. After each trick, both players draw a card from the stock — and **drawn cards are revealed to the opponent**. Unlike Briscola, there is **no trump suit** — winning depends on playing the led suit with higher-ranked cards.
 
 ## The Deck
 
@@ -69,32 +69,23 @@ Traditional Tressette counts points in fractions of thirds. This implementation 
 - **Ultima bonus**: winning the last trick = **+3 points**
 - Grand total: **35** points per game
 
-## Two-Phase Game Play
+## Game Play
 
-### Phase 1 — Stock Phase (Tricks 1–10)
-
-During the stock phase, the draw pile has cards remaining.
-
-1. Leader plays any card face-up
-2. Follower plays any card — **no obligation to follow suit**
-3. Trick resolution (see below)
-4. Winner collects both cards into their won-tricks pile
-5. **Winner draws first** from stock, then loser draws
-6. Winner leads next trick
-7. Phase 1 ends when the stock is exhausted (after 10 tricks)
-
-### Phase 2 — Hand Phase (Tricks 11–20)
-
-After the stock is empty, each player has exactly 10 cards.
+### Trick Flow
 
 1. Leader plays any card face-up
 2. Follower **must follow suit** if they have a card of the led suit
 3. If the follower has no cards of the led suit, they may play any card
 4. Trick resolution (see below)
 5. Winner collects both cards into their won-tricks pile
-6. **No drawing** — stock is empty
+6. Both players **draw one card** from the stock (winner draws first) — **drawn cards are shown face-up to the opponent**
 7. Winner leads next trick
-8. Game ends when all cards are played (after trick 20)
+8. When the stock is exhausted, play continues without drawing
+9. Game ends when all cards are played (after trick 20)
+
+### Drawn Cards Are Visible
+
+A key feature of Tressette in Due a Metà Mazzo: when a player draws a card from the stock after a trick, **the card is revealed to the opponent**. Both players can see what each other drew. This adds a memory and information-tracking dimension to the game — skilled players will remember which cards the opponent holds.
 
 ## Trick Resolution
 
@@ -133,16 +124,15 @@ Note: Tressette does NOT use `choosing` (no capture choices), `round-end` (singl
 | Aspect | Scopa | Briscola | Tressette |
 |--------|-------|----------|-----------|
 | Game type | Table capture | Trick-taking | Trick-taking |
-| Hand size | 3 (redeal) | 3 (draw 1) | **10** (draw 1 in phase 1) |
+| Hand size | 3 (redeal) | 3 (draw 1) | **10** (draw 1) |
 | Trump suit | None | Yes (briscola card) | **None** |
-| Must follow suit | N/A | No | **Phase 2 only** |
+| Must follow suit | N/A | No | **Always** |
 | Card strength | Face value | Ace > 3 > King... | **3 > 2 > Ace > King...** |
 | Point system | 5 categories | Simple count (120 total) | **Thirds ×3 (35 total)** |
 | Win threshold | First to 11 | 61+ of 120 | **18+ of 35** |
 | Special bonuses | Scopa (sweep) | None | **Ultima** (last trick) |
-| Visible info | Table cards | Briscola card | **Nothing** (no trump card) |
+| Drawn cards | N/A | Hidden | **Visible to opponent** |
 | Draw pile | Redeal when empty | 33 cards + briscola | **20 cards** |
-| Phases | Single | Single | **Two** (stock + hand) |
 
 ## Tressette-Specific UI Elements
 
@@ -150,22 +140,26 @@ Note: Tressette does NOT use `choosing` (no capture choices), `round-end` (singl
 - **Trick area**: Central area where the two played cards appear during a trick (like Briscola)
 - **Draw pile**: Displayed to the left of the table area (like Briscola, but no revealed card)
 - **Won-tricks pile**: Each player's pile shows total points captured
-- **Follow-suit indicator**: In phase 2, only playable cards are highlighted when the leader has played
+- **Follow-suit indicator**: Only playable cards are highlighted when the leader has played
+- **Drawn card reveal**: After each trick, drawn cards fly from the deck and flip face-up before going to the hand, so both players can see what was drawn
 - **No table cards grid**: Like Briscola, there is no persistent table card area
 
 ## AI Strategy (Tressette)
 
 Key considerations for AI:
 
-### Phase 1 (Stock — no suit obligation)
+### Leading
 - **Low-value leads**: Lead with zero-point cards (4-7) to avoid giving away points
-- **Opportunistic captures**: Follow with same-suit higher cards when the trick has point value
-- **Asso conservation**: Save Aces for phase 2 when suit control matters more
-- **Information gathering**: Track which suits the opponent doesn't follow to
+- **Suit control**: Lead suits where AI has depth (forces opponent to follow or discard)
+- **Strong suit leads**: Leading with strongest card in a long suit controls the game
 
-### Phase 2 (Hand — must follow suit)
-- **Suit control**: Lead with suits where AI has the strongest remaining cards
-- **Forced responses**: Lead suits the opponent may be void in (they must discard)
-- **Point protection**: When following with a losing card, play the cheapest
+### Following
+- **Win valuable tricks**: Follow with same-suit higher cards when the trick has point value
+- **Lose cheaply**: When losing, play zero-point off-suit cards
+- **Asso conservation**: Save Aces for situations where suit control matters
+
+### Information Tracking
+- **Drawn cards**: AI tracks all drawn cards (visible to both players), knowing which cards the opponent holds
+- **Suit voids**: Track which suits the opponent has discarded from to identify voids
 - **Endgame counting**: With fewer cards, deduce opponent's hand and play optimally
 - **Ultima**: Consider playing for the last trick bonus when it matters for the outcome

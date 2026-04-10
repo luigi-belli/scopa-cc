@@ -17,6 +17,8 @@ final readonly class TurnResult implements \JsonSerializable
         public ?array $options = null,
         public ?int $trickWinner = null,
         public ?Card $leaderCard = null,
+        public ?Card $winnerDrawnCard = null,
+        public ?Card $loserDrawnCard = null,
     ) {}
 
     /** @return array<string, mixed> */
@@ -47,6 +49,14 @@ final readonly class TurnResult implements \JsonSerializable
 
         if ($this->leaderCard !== null) {
             $data['leaderCard'] = $this->leaderCard->jsonSerialize();
+        }
+
+        if ($this->winnerDrawnCard !== null) {
+            $data['winnerDrawnCard'] = $this->winnerDrawnCard->jsonSerialize();
+        }
+
+        if ($this->loserDrawnCard !== null) {
+            $data['loserDrawnCard'] = $this->loserDrawnCard->jsonSerialize();
         }
 
         return $data;

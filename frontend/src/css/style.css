@@ -942,12 +942,18 @@ body {
     max-height: 380px;
   }
 
+  .table-area.tressette-table-area {
+    height: auto;
+    min-height: 120px;
+    max-height: 160px;
+  }
+
   .hand-row {
     min-height: 103px;
   }
 
   .tressette-hand .hand-row {
-    min-height: 75px;
+    min-height: 154px;
   }
 
   .hand-strip {
@@ -956,7 +962,7 @@ body {
   }
 
   .tressette-hand.hand-strip {
-    min-height: 75px;
+    min-height: 154px;
   }
 
   .table-center {

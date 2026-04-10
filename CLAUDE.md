@@ -107,13 +107,13 @@ scopa/
         GameEngineFactory.php  # Resolves GameEngine implementation by GameType
         ScopaEngine.php        # Scopa: table-capture logic, multi-round
         BriscolaEngine.php     # Briscola: trick-taking logic, single game, trump suit
-        TressetteEngine.php    # Tressette: trick-taking, two-phase (stock+hand), follow-suit
+        TressetteEngine.php    # Tressette: trick-taking, always follow-suit, visible draws
         DeckService.php        # Deck creation, Fisher-Yates shuffle
         AIService.php          # Interface: evaluateMove, autoSelectCapture
         AIServiceFactory.php   # Resolves AIService implementation by GameType
         ScopaAIService.php     # Scopa AI: multi-factor capture/placement scoring
         BriscolaAIService.php  # Briscola AI: trump management, trick evaluation
-        TressetteAIService.php # Tressette AI: phase-aware lead/follow strategy
+        TressetteAIService.php # Tressette AI: suit-control lead/follow strategy with drawn card tracking
         ScopaScoringService.php # Scopa 5-category round scoring
         BriscolaScoringService.php # Briscola card point values and strength ranking
         TressetteScoringService.php # Tressette ×3 integer point values and strength ranking
@@ -243,7 +243,7 @@ This application supports multiple Italian card games. Full rules for each game 
 
 - **[Scopa Rules](docs/scopa-rules.md)** — Table-capture game, multi-round to 11 points
 - **[Briscola Rules](docs/briscola-rules.md)** — Trick-taking game with trump suit, single game to 61+ points
-- **[Tressette Rules](docs/tressette-rules.md)** — Trick-taking game with follow-suit, two phases (stock + hand), 35 total points
+- **[Tressette Rules](docs/tressette-rules.md)** — Trick-taking game with always follow-suit, visible draws, 35 total points
 
 ### Shared Card Deck
 - **40 cards** in 4 suits: **Denari** (coins), **Coppe** (cups), **Bastoni** (clubs), **Spade** (swords)
@@ -426,7 +426,7 @@ Trick-taking logic: leader plays to table, follower plays to resolve trick. Trum
 
 Key methods: `initializeGame()`, `startGame()`, `playCard()`, `getStateForPlayer()`.
 
-Two-phase trick-taking game. Phase 1 (stock): 10 cards dealt each, no suit obligation, draw after trick. Phase 2 (hand): must follow suit, no drawing. No trump suit — different suits always lose to leader. Card strength: 3>2>Asso>Re>Cavallo>Fante>7>6>5>4. Points (×3 integer): Asso=3, 2/3/figures=1, rest=0. Ultima bonus: +3 for last trick winner. Total: 35 points.
+Trick-taking game (Tressette in due a metà mazzo). 10 cards dealt each, always must follow suit, draw after each trick (drawn cards visible to opponent). No trump suit — different suits always lose to leader. Card strength: 3>2>Asso>Re>Cavallo>Fante>7>6>5>4. Points (×3 integer): Asso=3, 2/3/figures=1, rest=0. Ultima bonus: +3 for last trick winner. Total: 35 points.
 
 **Does NOT support** `selectCapture()` or `nextRound()` — throws `\LogicException`.
 
@@ -436,7 +436,7 @@ Two-phase trick-taking game. Phase 1 (stock): 10 cards dealt each, no suit oblig
 
 **Briscola AI** (`BriscolaAIService`): Separate strategies for leading vs following. Manages trump cards, avoids giving away high-point cards, captures valuable tricks.
 
-**Tressette AI** (`TressetteAIService`): Phase-aware strategy. Phase 1: lead low, follow opportunistically. Phase 2: suit control, follow-suit enforcement, cheap discards when void. No trump management needed.
+**Tressette AI** (`TressetteAIService`): Suit-control strategy with always-follow-suit enforcement. Lead low, prefer long suits for control. Follow with minimum strength to win, discard cheap when losing. Tracks drawn cards (visible to both players). No trump management needed.
 
 Async via Symfony Messenger: `HandleAITurnMessage` dispatched after player move. Handler (`HandleAITurnHandler`) uses factories to resolve the correct engine and AI service. Sleeps 1.5s, then plays.
 

@@ -21,14 +21,13 @@ final readonly class TressetteAIService implements AIService
         $hand = $game->getPlayerHand($aiIndex);
         $tableCards = $game->getTableCards();
         $isLeading = count($tableCards) === 0;
-        $mustFollowSuit = count($game->getDeck()) === 0;
 
         $bestScore = -PHP_FLOAT_MAX;
         $bestCardIndex = 0;
 
         foreach ($hand as $cardIndex => $card) {
-            // In phase 2, skip cards that don't follow suit (if we have a matching card)
-            if (!$isLeading && $mustFollowSuit) {
+            // Must follow suit when not leading (if we have a matching card)
+            if (!$isLeading) {
                 $leaderCard = $tableCards->get(0);
                 if ($card->suit !== $leaderCard->suit && $this->handHasSuit($hand, $leaderCard->suit)) {
                     continue;
@@ -36,7 +35,7 @@ final readonly class TressetteAIService implements AIService
             }
 
             $score = $isLeading
-                ? $this->scoreLeadPlay($card, $hand, $mustFollowSuit)
+                ? $this->scoreLeadPlay($card, $hand)
                 : $this->scoreFollowPlay($card, $tableCards->get(0));
 
             if ($score > $bestScore) {
@@ -55,10 +54,10 @@ final readonly class TressetteAIService implements AIService
 
     /**
      * Score a card for leading a trick.
-     * Strategy: lead with low-value cards to minimize risk. In phase 2,
-     * prefer suits where we have strong cards (suit control).
+     * Strategy: lead with low-value cards to minimize risk.
+     * Prefer suits where we have depth (suit control, since opponent must follow).
      */
-    private function scoreLeadPlay(Card $card, CardCollection $hand, bool $mustFollowSuit): float
+    private function scoreLeadPlay(Card $card, CardCollection $hand): float
     {
         $score = 0.0;
         $points = $this->scoringService->getCardPoints($card);
@@ -75,16 +74,13 @@ final readonly class TressetteAIService implements AIService
             $score += 30;
         }
 
-        // In phase 2, prefer leading suits where we have depth (suit control)
-        if ($mustFollowSuit) {
-            $suitCount = $this->countSuit($hand, $card->suit);
-            // More cards in suit = better to lead (force opponent to follow)
-            $score += $suitCount * 3;
+        // Prefer leading suits where we have depth (suit control)
+        $suitCount = $this->countSuit($hand, $card->suit);
+        $score += $suitCount * 3;
 
-            // Leading with strongest card in a long suit is good for suit control
-            if ($suitCount >= 3 && $strength >= 8) {
-                $score += 15;
-            }
+        // Leading with strongest card in a long suit is good for suit control
+        if ($suitCount >= 3 && $strength >= 8) {
+            $score += 15;
         }
 
         return $score;

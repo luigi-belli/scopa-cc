@@ -45,6 +45,8 @@ export interface TurnResult {
   options?: Card[][]
   trickWinner?: number
   leaderCard?: Card
+  winnerDrawnCard?: Card
+  loserDrawnCard?: Card
 }
 
 export interface RoundScores {

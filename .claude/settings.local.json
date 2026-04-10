@@ -18,7 +18,8 @@
       "WebFetch(domain:en.wikipedia.org)",
       "Bash(wait)",
       "Bash(make test-front:*)",
-      "Bash(make build-front:*)"
+      "Bash(make build-front:*)",
+      "Bash(md5 /Users/gigi/scopa/api/tests/Unit/Service/TressetteEngineTest.php)"
     ]
   },
   "sandbox": {

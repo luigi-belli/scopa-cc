@@ -92,12 +92,11 @@ final class TressetteEngine implements GameEngine
             );
         }
 
-        // This player is the follower — validate follow-suit in phase 2
+        // This player is the follower — validate follow-suit rule
         $leaderCard = $tableCards->get(0);
         $leaderIndex = $trickLeader ?? ($playerIndex === 0 ? 1 : 0);
 
-        if ($this->mustFollowSuit($game)
-            && $playedCard->suit !== $leaderCard->suit
+        if ($playedCard->suit !== $leaderCard->suit
             && $this->hasSuit($hand->withAppended($playedCard), $leaderCard->suit)
         ) {
             throw new \InvalidArgumentException('Must follow suit when possible');
@@ -121,8 +120,8 @@ final class TressetteEngine implements GameEngine
             winnerIndex: $winnerIndex,
         ));
 
-        // Draw cards from stock (phase 1 only)
-        $this->drawAfterTrick($game, $winnerIndex);
+        // Draw cards from stock (visible to opponent)
+        $drawnCards = $this->drawAfterTrick($game, $winnerIndex);
 
         // Check for game end
         if ($this->isGameOver($game)) {
@@ -142,6 +141,8 @@ final class TressetteEngine implements GameEngine
             scopa: false,
             trickWinner: $winnerIndex,
             leaderCard: $leaderCard,
+            winnerDrawnCard: $drawnCards['winnerCard'],
+            loserDrawnCard: $drawnCards['loserCard'],
         );
     }
 
@@ -211,37 +212,38 @@ final class TressetteEngine implements GameEngine
     }
 
     /**
-     * After each trick in phase 1, both players draw one card. Winner draws first.
+     * After each trick, both players draw one card. Winner draws first.
+     * Drawn cards are visible to the opponent (Tressette in due a metà mazzo).
+     *
+     * @return array{winnerCard: ?Card, loserCard: ?Card}
      */
-    private function drawAfterTrick(Game $game, int $winnerIndex): void
+    private function drawAfterTrick(Game $game, int $winnerIndex): array
     {
         $deck = $game->getDeck();
         if (count($deck) === 0) {
-            return;
+            return ['winnerCard' => null, 'loserCard' => null];
         }
 
         $loserIndex = $winnerIndex === 0 ? 1 : 0;
+        $winnerCard = null;
+        $loserCard = null;
 
         // Winner draws first
         ['taken' => $drawn, 'remaining' => $deck] = $deck->take(1);
+        $winnerCard = $drawn->get(0);
         $winnerHand = $game->getPlayerHand($winnerIndex);
-        $game->setPlayerHand($winnerIndex, $winnerHand->withAppended($drawn->get(0)));
+        $game->setPlayerHand($winnerIndex, $winnerHand->withAppended($winnerCard));
 
         if (count($deck) > 0) {
             ['taken' => $drawn, 'remaining' => $deck] = $deck->take(1);
+            $loserCard = $drawn->get(0);
             $loserHand = $game->getPlayerHand($loserIndex);
-            $game->setPlayerHand($loserIndex, $loserHand->withAppended($drawn->get(0)));
+            $game->setPlayerHand($loserIndex, $loserHand->withAppended($loserCard));
         }
 
         $game->setDeck($deck);
-    }
 
-    /**
-     * Whether the follower must follow suit (phase 2: stock is empty).
-     */
-    private function mustFollowSuit(Game $game): bool
-    {
-        return count($game->getDeck()) === 0;
+        return ['winnerCard' => $winnerCard, 'loserCard' => $loserCard];
     }
 
     private function hasSuit(CardCollection $hand, Suit $suit): bool

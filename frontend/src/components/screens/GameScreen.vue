@@ -33,7 +33,7 @@
     </div>
 
     <!-- Table Area -->
-    <div class="table-area" ref="tableAreaEl">
+    <div class="table-area" :class="{ 'tressette-table-area': isTressette }" ref="tableAreaEl">
       <CardComponent
         v-if="isBriscola && gs?.briscolaCard && shownDeckCount > 0"
         :card="gs.briscolaCard"
@@ -180,6 +180,7 @@ const DEAL_MS     = 350
 const DEAL_HND_LAG = 150
 const DEAL_TBL_LAG = 75
 const DEAL_FLIP_MS = 300
+const DRAW_REVEAL_MS = 800  // Tressette: pause to show drawn card face before proceeding
 const POST_ANIM   = 200
 const SAFETY_MS   = 10000
 
@@ -231,13 +232,13 @@ const canPlay = computed(() =>
   gs.value?.isMyTurn === true && gs.value?.state === 'playing' && !store.animating && !playInFlight.value
 )
 
-/** In Tressette phase 2 (deck empty + leader has played), only cards of the led suit are playable.
+/** In Tressette, follower must always follow suit when possible.
  *  Returns null if all cards are playable, or a Set of playable hand indices. */
 const tressettePlayableIndices = computed<Set<number> | null>(() => {
   if (!isTressette.value || !gs.value) return null
-  const { table, deckCount, myHand } = gs.value
-  // Phase 2: deck empty and leader has played
-  if (deckCount > 0 || table.length === 0) return null
+  const { table, myHand } = gs.value
+  // Only applies when leader has played (we are the follower)
+  if (table.length === 0) return null
   const ledSuit = table[0].suit
   const matching = myHand.reduce<number[]>((acc, c, i) => { if (c.suit === ledSuit) acc.push(i); return acc }, [])
   // If we have matching cards, only those are playable; otherwise all are playable
@@ -314,6 +315,16 @@ function getSlotRect(index: number, cardW: number, cardH: number): DOMRect | nul
 
   const grid: SlotGridParams = { colW, rowH, gap, padLeft, rowCount: rows.length, colCount: cols.length }
   return computeSlotRect(index, cardW, cardH, tcR, grid)
+}
+
+/** Return the table grid cell size (slot dimensions, independent of source card size) */
+function getTableSlotSize(): { w: number; h: number } | null {
+  const tc = tableCenterEl.value
+  if (!tc) return null
+  const style = getComputedStyle(tc)
+  const cols = style.gridTemplateColumns.split(' ')
+  const rows = style.gridTemplateRows.split(' ')
+  return { w: parseFloat(cols[0]) || 75, h: parseFloat(rows[0]) || 133 }
 }
 
 // ─── Animation-layer helpers ───
@@ -796,9 +807,21 @@ async function handleTurnResult(result: TurnResult) {
     const isTrickPartial = (pending!.gameType === 'briscola' || pending!.gameType === 'tressette')
       && store.displayState!.myHand.length > 0
     if (isTrickPartial) {
+      // Determine opponent's drawn card for tressette (drawn cards are visible)
+      let opponentDrawnCard: Card | undefined
+      let trickWinner: number | undefined
+      if (pending!.gameType === 'tressette' && result.type === 'trick') {
+        trickWinner = result.trickWinner
+        const myIndex = store.myIndex
+        const winnerIsMe = result.trickWinner === myIndex
+        // Opponent's drawn card: if I won, opponent is loser; if opponent won, opponent is winner
+        opponentDrawnCard = winnerIsMe ? result.loserDrawnCard : result.winnerDrawnCard
+      }
       redealCtx = {
         prevMyHand: [...store.displayState!.myHand],
         prevDeckCount: store.displayState!.deckCount,
+        opponentDrawnCard,
+        trickWinner,
       }
     }
   }
@@ -917,14 +940,18 @@ async function animPlace(result: TurnResult) {
   //    Briscola: always slot 0 (single centered slot, overlay existing card).
   //    Scopa: next empty slot (index = current table length).
   const slotIdx = isTrickGame.value ? 0 : (gs.value?.table.length ?? 0)
-  const dest = getSlotRect(slotIdx, srcR.width, srcR.height)
+  const slot = getTableSlotSize()
+  const destW = slot?.w ?? srcR.width
+  const destH = slot?.h ?? srcR.height
+  const dest = getSlotRect(slotIdx, destW, destH)
   if (!dest) return
 
-  // 3. Clone flies from hand → target slot
+  // 3. Clone flies from hand → target slot (scale up if hand cards smaller than table slot)
   const clone = isMe ? mkFace(card, srcR) : mkFlippable(card, srcR)
   aLayer().appendChild(clone)
   if (!isMe) setTimeout(() => flipCard(clone), SLIDE_MS * 0.1)
-  await flyTo(clone, dest, SLIDE_MS, SLIDE_EASE)
+  const placeScale = Math.abs(destW / srcR.width - 1) > 0.01 ? destW / srcR.width : undefined
+  await flyTo(clone, dest, SLIDE_MS, SLIDE_EASE, placeScale)
 }
 
 // ════════════════════════════════════════════════════
@@ -1052,7 +1079,7 @@ async function animCapture(result: TurnResult) {
 }
 
 // ════════════════════════════════════════════════════
-// TRICK ANIMATION (Briscola)
+// TRICK ANIMATION (Briscola & Tressette)
 //
 // When the follower plays, the trick resolves:
 // 1. Follower's card flies from hand → table center (500ms)
@@ -1086,13 +1113,17 @@ async function animTrick(result: TurnResult) {
   }
 
   // 2. Fly follower's card to table center (same slot — overlays leader's card)
-  const dest = getSlotRect(0, srcR?.width ?? 75, srcR?.height ?? 133)
+  const slot = getTableSlotSize()
+  const destW = slot?.w ?? srcR?.width ?? 75
+  const destH = slot?.h ?? srcR?.height ?? 133
+  const dest = getSlotRect(0, destW, destH)
+  const trickScale = srcR && Math.abs(destW / srcR.width - 1) > 0.01 ? destW / srcR.width : undefined
   let placeClone: HTMLElement | null = null
   if (srcR && dest) {
     placeClone = isMe ? mkFace(card, srcR) : mkFlippable(card, srcR)
     aLayer().appendChild(placeClone)
     if (!isMe) setTimeout(() => flipCard(placeClone!), SLIDE_MS * 0.1)
-    await flyTo(placeClone, dest, SLIDE_MS, SLIDE_EASE)
+    await flyTo(placeClone, dest, SLIDE_MS, SLIDE_EASE, trickScale)
   }
 
   // 3. Brief pause to show both cards
@@ -1145,10 +1176,14 @@ async function animTrick(result: TurnResult) {
 // already overwritten displayState by the time we get here.
 // ════════════════════════════════════════════════════
 
-/** Pre-commit state info for Briscola partial deals */
+/** Pre-commit state info for trick-game partial deals */
 interface DealContext {
   prevMyHand: Card[]
   prevDeckCount: number
+  /** For Tressette: the card the opponent drew (shown face-up during animation) */
+  opponentDrawnCard?: Card
+  /** For Tressette: which player won the trick (draws first) */
+  trickWinner?: number
 }
 
 async function runDealAnimation(newState: GameState, ctx?: DealContext) {
@@ -1159,7 +1194,7 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
   const isNewRound = !store.displayState || newState.table.length > prevTblLen
 
   // Trick-game partial deal: after a trick, each player draws 1 card (not a full re-deal).
-  // Applies to Briscola (always) and Tressette phase 1 (while stock remains).
+  // Applies to Briscola (always) and Tressette (while stock remains).
   // Detection uses DealContext (pre-commit state) when available, falling back to
   // displayState comparison for non-handleTurnResult paths (e.g. maybeCommitOrDeal).
   const isTrickPartialDeal = !isNewRound && (newState.gameType === 'briscola' || newState.gameType === 'tressette') && (
@@ -1298,16 +1333,39 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
     })
   }
 
-  /** Create a deal clone: flippable for face-up cards, plain back for opponent */
+  // Map opponent elements to drawn card for tressette (drawn cards are visible)
+  const oppElCards = new Map<HTMLElement, Card>()
+  const oppDrawnCard = ctx?.opponentDrawnCard
+  const isTressetteReveal = isTrickPartialDeal && !!oppDrawnCard
+  if (isTressetteReveal && oppDrawnCard && oppEls.length > 0) {
+    oppElCards.set(oppEls[oppEls.length - 1], oppDrawnCard)
+  }
+
+  /** Get the card data for an element (my hand card or tressette opponent drawn card) */
+  function getElCard(el: HTMLElement): Card | undefined {
+    return myElCards.get(el) ?? oppElCards.get(el)
+  }
+
+  /** Create a deal clone: flippable for cards with known face, plain back for unknown */
   function mkDealClone(el: HTMLElement, card: Card | undefined): HTMLElement {
     if (card) return mkFlippable(card, dr!)
     return mkBack(dr!)
   }
 
-  /** On arrival: flip if flippable, then reveal real element and remove clone */
+  /** On arrival: flip if flippable, then reveal real element and remove clone.
+   *  For tressette opponent drawn cards: flip to face, pause, flip back to back, then reveal. */
   function onDealArrive(clone: HTMLElement, el: HTMLElement, card: Card | undefined): Promise<void> {
     if (card) {
       flipCard(clone)
+      if (isTressetteReveal && oppElCards.has(el)) {
+        // Show face, pause, animate flip back to card-back, then reveal
+        return sleep(DRAW_REVEAL_MS)
+          .then(() => { flipToBack(clone) ; return sleep(DEAL_FLIP_MS) })
+          .then(() => {
+            el.style.opacity = '1'
+            if (clone.parentNode) clone.remove()
+          })
+      }
       return sleep(DEAL_FLIP_MS).then(() => {
         el.style.opacity = '1'
         if (clone.parentNode) clone.remove()
@@ -1333,14 +1391,17 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
     }))
   })
 
-  // Hand cards: interleave opponent and player cards (one at a time, alternating)
+  // Hand cards: interleave opponent and player cards (one at a time, alternating).
+  // For tressette, winner draws first — reorder based on trick winner.
+  const winnerIsMe = isTressetteReveal && ctx?.trickWinner === store.myIndex
   const maxHand = Math.max(myEls.length, oppEls.length)
   for (let h = 0; h < maxHand; h++) {
-    // Opponent card first, then my card (traditional dealing order: non-self first)
-    for (const el of [oppEls[h], myEls[h]]) {
+    // Default: opponent first. Tressette: winner first.
+    const pair = winnerIsMe ? [myEls[h], oppEls[h]] : [oppEls[h], myEls[h]]
+    for (const el of pair) {
       if (!el) continue
       const target = el.getBoundingClientRect()
-      const card = myElSet.has(el) ? myElCards.get(el) : undefined
+      const card = getElCard(el)
       const clone = mkDealClone(el, card)
       aLayer().appendChild(clone)
       const d = i++ * DEAL_HND_LAG

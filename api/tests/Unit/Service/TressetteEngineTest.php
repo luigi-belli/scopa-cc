@@ -178,7 +178,7 @@ class TressetteEngineTest extends TestCase
         $this->assertEquals(32, $total);
     }
 
-    public function testDrawAfterTrick_Phase1(): void
+    public function testDrawAfterTrick_WhenDeckHasCards(): void
     {
         $game = $this->createManualGame();
         $game->setCurrentPlayer(1);
@@ -201,7 +201,7 @@ class TressetteEngineTest extends TestCase
         $this->assertCount(2, $game->getDeck());
     }
 
-    public function testNoDrawInPhase2(): void
+    public function testNoDrawWhenDeckEmpty(): void
     {
         $game = $this->createManualGame();
         $game->setCurrentPlayer(1);
@@ -212,16 +212,16 @@ class TressetteEngineTest extends TestCase
             new Card(Suit::Denari, 3),
             new Card(Suit::Coppe, 7),
         ]));
-        $game->setDeck(new CardCollection()); // Empty stock = phase 2
+        $game->setDeck(new CardCollection()); // Empty stock — no drawing
 
         $this->engine->playCard($game, 1, 0);
 
-        // No drawing in phase 2
+        // No drawing when deck is empty
         $this->assertCount(1, $game->getPlayer1Hand());
         $this->assertCount(1, $game->getPlayer2Hand());
     }
 
-    public function testFollowSuit_Phase2_Required(): void
+    public function testFollowSuit_Required_EmptyDeck(): void
     {
         $game = $this->createManualGame();
         $game->setCurrentPlayer(1);
@@ -233,7 +233,7 @@ class TressetteEngineTest extends TestCase
             new Card(Suit::Coppe, 3),
             new Card(Suit::Denari, 7),
         ]));
-        $game->setDeck(new CardCollection()); // Phase 2
+        $game->setDeck(new CardCollection());
 
         // Playing Coppe when holding Denari should fail
         $this->expectException(\InvalidArgumentException::class);
@@ -241,7 +241,26 @@ class TressetteEngineTest extends TestCase
         $this->engine->playCard($game, 1, 0);
     }
 
-    public function testFollowSuit_Phase2_AllowedWhenVoid(): void
+    public function testFollowSuit_Required_WithDeck(): void
+    {
+        $game = $this->createManualGame();
+        $game->setCurrentPlayer(1);
+        $game->setTrickLeader(0);
+        $game->setTableCards(new CardCollection([new Card(Suit::Denari, 4)]));
+        $game->setPlayer1Hand(new CardCollection());
+        // Player 2 has Denari — must follow suit even with cards in deck
+        $game->setPlayer2Hand(new CardCollection([
+            new Card(Suit::Coppe, 3),
+            new Card(Suit::Denari, 7),
+        ]));
+        $game->setDeck(new CardCollection([new Card(Suit::Spade, 5), new Card(Suit::Spade, 6)]));
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Must follow suit');
+        $this->engine->playCard($game, 1, 0);
+    }
+
+    public function testFollowSuit_AllowedWhenVoid(): void
     {
         $game = $this->createManualGame();
         $game->setCurrentPlayer(1);
@@ -253,31 +272,12 @@ class TressetteEngineTest extends TestCase
             new Card(Suit::Coppe, 3),
             new Card(Suit::Bastoni, 7),
         ]));
-        $game->setDeck(new CardCollection()); // Phase 2
+        $game->setDeck(new CardCollection());
 
         $result = $this->engine->playCard($game, 1, 0);
         $this->assertEquals(TurnResultType::Trick, $result->type);
         // Leader wins because follower played off-suit
         $this->assertEquals(0, $result->trickWinner);
-    }
-
-    public function testNoFollowSuit_Phase1(): void
-    {
-        $game = $this->createManualGame();
-        $game->setCurrentPlayer(1);
-        $game->setTrickLeader(0);
-        $game->setTableCards(new CardCollection([new Card(Suit::Denari, 4)]));
-        $game->setPlayer1Hand(new CardCollection());
-        // Player 2 has Denari but can play Coppe in phase 1
-        $game->setPlayer2Hand(new CardCollection([
-            new Card(Suit::Coppe, 3),
-            new Card(Suit::Denari, 7),
-        ]));
-        $game->setDeck(new CardCollection([new Card(Suit::Spade, 5), new Card(Suit::Spade, 6)])); // Non-empty stock
-
-        // Should not throw — phase 1 has no suit obligation
-        $result = $this->engine->playCard($game, 1, 0);
-        $this->assertEquals(TurnResultType::Trick, $result->type);
     }
 
     public function testGameOver_AllCardsPlayed(): void
@@ -356,14 +356,27 @@ class TressetteEngineTest extends TestCase
     {
         $game = $this->createTressetteGame();
 
-        // Play 10 cards (5 tricks)
+        // Play 10 cards (5 tricks), following suit when required
         for ($i = 0; $i < 10; $i++) {
             $playerIdx = $game->getCurrentPlayer();
             $hand = $game->getPlayerHand($playerIdx);
             if (count($hand) === 0) {
                 break;
             }
-            $this->engine->playCard($game, $playerIdx, 0);
+
+            $cardIndex = 0;
+            $tableCards = $game->getTableCards();
+            if (count($tableCards) > 0) {
+                $ledSuit = $tableCards->get(0)->suit;
+                foreach ($hand as $idx => $card) {
+                    if ($card->suit === $ledSuit) {
+                        $cardIndex = $idx;
+                        break;
+                    }
+                }
+            }
+
+            $this->engine->playCard($game, $playerIdx, $cardIndex);
         }
 
         $total = count($game->getDeck())
@@ -424,10 +437,10 @@ class TressetteEngineTest extends TestCase
                 break;
             }
 
-            // In phase 2, must follow suit — find a legal card
+            // Must always follow suit — find a legal card
             $cardIndex = 0;
             $tableCards = $game->getTableCards();
-            if (count($game->getDeck()) === 0 && count($tableCards) > 0) {
+            if (count($tableCards) > 0) {
                 $ledSuit = $tableCards->get(0)->suit;
                 foreach ($hand as $idx => $card) {
                     if ($card->suit === $ledSuit) {
@@ -449,6 +462,45 @@ class TressetteEngineTest extends TestCase
         // Total points should be 32 (card points) + 3 (ultima) = 35
         $total = $game->getPlayer1TotalScore() + $game->getPlayer2TotalScore();
         $this->assertEquals(35, $total, 'Total points must equal 35 (32 card + 3 ultima)');
+    }
+
+    public function testDrawnCards_IncludedInTurnResult(): void
+    {
+        $game = $this->createManualGame();
+        $game->setCurrentPlayer(1);
+        $game->setTrickLeader(0);
+        $game->setTableCards(new CardCollection([new Card(Suit::Denari, 4)]));
+        $game->setPlayer1Hand(new CardCollection());
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Denari, 3)]));
+        $winnerDraw = new Card(Suit::Coppe, 6);
+        $loserDraw = new Card(Suit::Bastoni, 7);
+        $game->setDeck(new CardCollection([$winnerDraw, $loserDraw]));
+
+        $result = $this->engine->playCard($game, 1, 0);
+
+        // Player 1 (index 1) wins with Tre > Quattro
+        $this->assertEquals(1, $result->trickWinner);
+        // Winner draws first card from deck, loser draws second
+        $this->assertNotNull($result->winnerDrawnCard);
+        $this->assertNotNull($result->loserDrawnCard);
+        $this->assertTrue($winnerDraw->equals($result->winnerDrawnCard));
+        $this->assertTrue($loserDraw->equals($result->loserDrawnCard));
+    }
+
+    public function testDrawnCards_NullWhenDeckEmpty(): void
+    {
+        $game = $this->createManualGame();
+        $game->setCurrentPlayer(1);
+        $game->setTrickLeader(0);
+        $game->setTableCards(new CardCollection([new Card(Suit::Denari, 4)]));
+        $game->setPlayer1Hand(new CardCollection([new Card(Suit::Coppe, 5)]));
+        $game->setPlayer2Hand(new CardCollection([new Card(Suit::Denari, 3)]));
+        $game->setDeck(new CardCollection());
+
+        $result = $this->engine->playCard($game, 1, 0);
+
+        $this->assertNull($result->winnerDrawnCard);
+        $this->assertNull($result->loserDrawnCard);
     }
 
     public function testLastTrick_StoredForAnimation(): void
