@@ -101,7 +101,8 @@ services:
   acme:
     image: neilpang/acme.sh
     environment:
-      Dynu_Token: ${DYNU_TOKEN}
+      Dynu_ClientId: ${DYNU_CLIENT_ID}
+      Dynu_Secret: ${DYNU_SECRET}
     volumes:
       - ./ssl:/ssl
       - acme-data:/acme.sh
