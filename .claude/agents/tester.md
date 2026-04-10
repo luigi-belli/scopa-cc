@@ -13,7 +13,7 @@ You are a testing agent for a Scopa (Italian card game) web application. Your jo
 
 - **Backend**: PHP 8.4 + Symfony 7.3 + API Platform, in `api/`
 - **Frontend**: Vue 3 + TypeScript, in `frontend/`
-- **Infrastructure**: Docker Compose with 6 services (postgres, php, messenger-worker, cron, mercure, nginx), exposed on port 5982
+- **Infrastructure**: Docker Compose with 7 services (postgres, php, messenger-worker, cron, mercure, nginx, acme), exposed on port 5982
 
 ## How to Run Tests
 
@@ -532,8 +532,8 @@ grep -q '^\.env$' .gitignore
 # PASS if .env is listed in .gitignore
 
 # SEC17. .env.dist exists with required parameters
-grep -q 'EXTERNAL_HOSTNAME' .env.dist && grep -q 'EXTERNAL_PORT' .env.dist && grep -q 'INTERNAL_PORT' .env.dist
-# PASS if all three parameters are present
+grep -q 'EXTERNAL_HOSTNAME' .env.dist && grep -q 'EXTERNAL_PORT' .env.dist && grep -q 'INTERNAL_PORT' .env.dist && grep -q 'DYNU_CLIENT_ID' .env.dist && grep -q 'DYNU_API_KEY' .env.dist
+# PASS if all five parameters are present
 
 # SEC18. ssl/ directory is gitignored
 grep -q '^ssl/' .gitignore

@@ -17,5 +17,10 @@ else
     echo "nginx: Generated self-signed certificate for $EXTERNAL_HOSTNAME"
 fi
 
+# In letsencrypt mode, periodically reload to pick up renewed certificates
+if [ "$TLS_MODE" = "letsencrypt" ]; then
+    (while true; do sleep 300; nginx -s reload 2>/dev/null || true; done) &
+fi
+
 # Delegate to the official nginx entrypoint (runs envsubst on *.template files)
 exec /docker-entrypoint.sh "$@"

@@ -21,8 +21,14 @@ cp .env.dist .env
 | `EXTERNAL_HOSTNAME` | Public hostname (used for TLS cert CN and nginx `server_name`) | `scopa.example.com` |
 | `EXTERNAL_PORT` | Public port users see (after NAT forwarding) | `59820` |
 | `INTERNAL_PORT` | Port Docker binds on the host machine | `5982` |
+| `TLS_MODE` | `selfsigned` for dev, `letsencrypt` for production | `letsencrypt` |
+| `LETSENCRYPT_EMAIL` | Contact email for Let's Encrypt notifications | `admin@example.com` |
+| `DYNU_CLIENT_ID` | Dynu DNS OAuth2 client ID | `abc123...` |
+| `DYNU_API_KEY` | Dynu DNS API secret | `xyz789...` |
 
 The `.env` file is gitignored. The `.env.dist` template is committed to the repo.
+
+Dynu DNS credentials are found at: https://www.dynu.com/en-US/ControlPanel/APICredentials
 
 ### Port Chain
 
@@ -119,7 +125,38 @@ docker compose up --build -d
 
 Access `https://localhost:5982`. Accept the browser's certificate warning.
 
-## Production
+## Production with Let's Encrypt + Dynu DNS (Automated)
+
+No manual intervention required. The `acme` service automatically issues and renews certificates via DNS-01 challenge using the Dynu DNS API.
+
+```bash
+# 1. Create config
+cp .env.dist .env
+# Edit:
+#   EXTERNAL_HOSTNAME=scopa.example.com
+#   EXTERNAL_PORT=59820
+#   INTERNAL_PORT=5982
+#   TLS_MODE=letsencrypt
+#   LETSENCRYPT_EMAIL=admin@example.com
+#   DYNU_CLIENT_ID=your-client-id
+#   DYNU_API_KEY=your-api-key
+
+# 2. Start (acme service issues cert automatically)
+docker compose --profile letsencrypt up --build -d
+```
+
+What happens on first start:
+1. nginx starts with a temporary self-signed cert
+2. The `acme` container issues a Let's Encrypt cert via Dynu DNS-01 challenge (~1-2 min)
+3. The cert is written to `ssl/cert.pem` and `ssl/key.pem`
+4. nginx reloads every 5 minutes and picks up the real cert automatically
+
+Certificate renewal is fully automated:
+- The `acme` container checks daily and renews when within 30 days of expiry
+- After renewal, the new cert is written to `ssl/`
+- nginx picks it up on the next 5-minute reload cycle
+
+## Production with Custom Certificate (Manual)
 
 ```bash
 # 1. Create config
@@ -141,17 +178,27 @@ docker compose up --build -d
 ## How the Certificate Flow Works
 
 ```
-Container starts → nginx/entrypoint.sh
+nginx container starts → nginx/entrypoint.sh
   │
   ├─ ssl/cert.pem AND ssl/key.pem exist?
   │    → use them as-is
   │
-  └─ Either file missing?
-       → generate self-signed cert with CN=EXTERNAL_HOSTNAME
+  ├─ Either file missing?
+  │    → generate self-signed cert with CN=EXTERNAL_HOSTNAME
+  │
+  ├─ TLS_MODE=letsencrypt?
+  │    → start 5-minute reload loop (picks up renewed certs)
   │
   └─ Delegates to nginx's docker-entrypoint.sh
        → envsubst on default.conf.template (only EXTERNAL_* vars)
        → starts nginx
+
+acme container (profile: letsencrypt)
+  │
+  ├─ Registers Let's Encrypt account
+  ├─ Issues cert via acme.sh + Dynu DNS-01 (if not already present)
+  ├─ Installs cert to ssl/cert.pem + ssl/key.pem
+  └─ Renewal loop: checks daily, reinstalls after renewal
 ```
 
 ## Nginx Configuration (envsubst Template)

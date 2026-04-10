@@ -84,6 +84,7 @@ services:
     environment:
       EXTERNAL_HOSTNAME: ${EXTERNAL_HOSTNAME:-localhost}
       EXTERNAL_PORT: ${EXTERNAL_PORT:-5982}
+      TLS_MODE: ${TLS_MODE:-selfsigned}
       # Only substitute these two variables in the nginx template;
       # leave nginx-native $variables (e.g. $host, $uri) untouched.
       NGINX_ENVSUBST_FILTER: "^EXTERNAL_"
@@ -95,5 +96,41 @@ services:
       mercure:
         condition: service_healthy
 
+  # Automated Let's Encrypt via acme.sh + Dynu DNS-01 (profile: letsencrypt)
+  # Start with:  docker compose --profile letsencrypt up -d
+  acme:
+    image: neilpang/acme.sh
+    environment:
+      Dynu_ClientId: ${DYNU_CLIENT_ID}
+      Dynu_Secret: ${DYNU_API_KEY}
+    volumes:
+      - ./ssl:/ssl
+      - acme-data:/acme.sh
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        DOMAIN="${EXTERNAL_HOSTNAME}"
+        EMAIL="${LETSENCRYPT_EMAIL}"
+        acme.sh --set-default-ca --server letsencrypt
+        acme.sh --register-account -m "$$EMAIL" 2>/dev/null || true
+        # Issue cert if not already present
+        acme.sh --list | grep -q "$$DOMAIN" || \
+          acme.sh --issue -d "$$DOMAIN" --dns dns_dynu
+        # Install cert to shared ssl directory
+        acme.sh --install-cert -d "$$DOMAIN" \
+          --fullchain-file /ssl/cert.pem --key-file /ssl/key.pem
+        echo "acme: Certificate ready for $$DOMAIN"
+        # Renewal loop: check daily, reinstall after renewal
+        while true; do
+          sleep 86400
+          acme.sh --cron
+          acme.sh --install-cert -d "$$DOMAIN" \
+            --fullchain-file /ssl/cert.pem --key-file /ssl/key.pem 2>/dev/null || true
+        done
+    profiles:
+      - letsencrypt
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  acme-data:
