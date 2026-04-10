@@ -1,3 +1,27 @@
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/lora-regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/assets/fonts/lora-bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/lora-italic.woff2') format('woff2');
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -6,7 +30,7 @@
 
 body {
   background: #1a6b1a;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  font-family: 'Lora', 'Georgia', 'Times New Roman', serif;
   color: #f0e6d0;
   min-height: 100vh;
   min-height: 100dvh;
