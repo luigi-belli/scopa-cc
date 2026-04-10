@@ -113,23 +113,34 @@ services:
         EMAIL="${LETSENCRYPT_EMAIL}"
         acme.sh --set-default-ca --server letsencrypt
         acme.sh --register-account -m "$$EMAIL" 2>/dev/null || true
+        install_cert() {
+          acme.sh --install-cert -d "$$DOMAIN" --ecc \
+            --fullchain-file /ssl/cert.pem --key-file /ssl/key.pem
+        }
+        issue_cert() {
+          acme.sh --issue -d "$$DOMAIN" --dns dns_dynu --keylength ec-256 "$$@" || {
+            echo "acme: ERROR — certificate issuance failed for $$DOMAIN"
+            return 1
+          }
+        }
         # Issue cert if not already present
         if ! acme.sh --list | grep -q "$$DOMAIN"; then
-          acme.sh --issue -d "$$DOMAIN" --dns dns_dynu || {
-            echo "acme: ERROR — certificate issuance failed for $$DOMAIN"
-            exit 1
-          }
+          issue_cert || exit 1
         fi
         # Install cert to shared ssl directory
-        acme.sh --install-cert -d "$$DOMAIN" --ecc \
-          --fullchain-file /ssl/cert.pem --key-file /ssl/key.pem
+        install_cert
+        # If fullchain is missing (stale acme data), force re-issue
+        if [ ! -s /ssl/cert.pem ]; then
+          echo "acme: WARNING — fullchain empty, forcing re-issue"
+          issue_cert --force || exit 1
+          install_cert
+        fi
         echo "acme: Certificate ready for $$DOMAIN"
         # Renewal loop: check daily, reinstall after renewal
         while true; do
           sleep 86400
           acme.sh --cron
-          acme.sh --install-cert -d "$$DOMAIN" --ecc \
-            --fullchain-file /ssl/cert.pem --key-file /ssl/key.pem 2>/dev/null || true
+          install_cert 2>/dev/null || true
         done
     profiles:
       - letsencrypt
