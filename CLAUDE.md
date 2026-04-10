@@ -11,7 +11,7 @@ Web-based two-player Italian card games with real-time multiplayer and single-pl
 - **Database**: PostgreSQL 17 via Doctrine ORM 3 (JSONB for card arrays)
 - **Real-time**: Mercure SSE (server→client push), REST API (client→server)
 - **AI**: Symfony Messenger async handler with 1.5s delay
-- **Containerization**: Docker Compose — 6 services, HTTPS on configurable port (default 5982)
+- **Containerization**: Docker Compose — 7 services, HTTPS on configurable port (default 5982)
 - **Card assets**: 4 deck styles, each with 40 card face images + card back
 
 ## How to Run
@@ -23,7 +23,7 @@ docker compose up --build   # Starts on https://localhost:5982
 
 See **[Deployment Guide](docs/deployment.md)** for production setup with custom TLS certificates, NAT port forwarding, and HTTP/3 configuration.
 
-Services: postgres, php (API), messenger-worker (AI), cron (cleanup), mercure (SSE), nginx (SPA + reverse proxy).
+Services: postgres, php (API), messenger-worker (AI), cron (cleanup), mercure (SSE), nginx (SPA + reverse proxy), acme (Let's Encrypt via Dynu DNS, optional profile).
 
 **IMPORTANT: Always use Docker Compose to run all tooling, tests, builds, and commands.** No Node.js, PHP, or Composer is installed on the host machine. All commands must run inside containers.
 
@@ -45,9 +45,9 @@ docker compose exec php bin/console <command>
 
 ```
 scopa/
-  docker-compose.yml           # 6 services, configurable port
+  docker-compose.yml           # 7 services, configurable port
   ssl/                         # TLS certificates: cert.pem + key.pem (gitignored)
-  .env.dist                    # Deploy config template (hostname, port)
+  .env.dist                    # Deploy config template (hostname, port, TLS mode, Dynu DNS)
   .env                         # Local deploy config (gitignored)
   
   api/                         # API Platform (PHP/Symfony)
@@ -554,9 +554,10 @@ messenger-worker     → Same image, runs `messenger:consume async --time-limit=
 cron                 → Same image, runs crond with scheduled Symfony console commands
 postgres             → Game state persistence (with healthcheck)
 mercure              → SSE hub (anonymous mode, CORS *)
+acme (optional)      → Let's Encrypt cert via acme.sh + Dynu DNS (profile: letsencrypt)
 ```
 
-Nginx Dockerfile is multi-stage: builds Vue frontend with Node 22, then copies dist into nginx 1.27 image along with config template. The config (`default.conf.template`) is processed by `envsubst` at container startup — only `EXTERNAL_HOSTNAME` and `EXTERNAL_PORT` are substituted (filtered by `NGINX_ENVSUBST_FILTER=^EXTERNAL_`). TLS certificates are loaded from the `ssl/` bind mount (user-provided or auto-generated self-signed). Card assets are part of the frontend build output.
+Nginx Dockerfile is multi-stage: builds Vue frontend with Node 22, then copies dist into nginx 1.27 image along with config template. The config (`default.conf.template`) is processed by `envsubst` at container startup — only `EXTERNAL_HOSTNAME` and `EXTERNAL_PORT` are substituted (filtered by `NGINX_ENVSUBST_FILTER=^EXTERNAL_`). TLS certificates are loaded from the `ssl/` bind mount (user-provided, acme.sh-managed, or auto-generated self-signed). Card assets are part of the frontend build output.
 
 Full deployment instructions: **[Deployment Guide](docs/deployment.md)**
 
