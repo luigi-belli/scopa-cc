@@ -1,8 +1,8 @@
-# Italian Card Games (Scopa & Briscola)
+# Italian Card Games (Scopa, Briscola & Tressette)
 
 ## Overview
 
-Web-based two-player Italian card games with real-time multiplayer and single-player AI mode. Supports **Scopa** (table-capture) and **Briscola** (trick-taking). Uses traditional Italian regional card images on a green casino-table background. Built with API Platform (PHP/Symfony), Vue 3 + TypeScript, PostgreSQL, and Mercure SSE for real-time. The architecture supports adding new card games cleanly via the strategy pattern.
+Web-based two-player Italian card games with real-time multiplayer and single-player AI mode. Supports **Scopa** (table-capture), **Briscola** (trick-taking with trump), and **Tressette in Due** (trick-taking with follow-suit). Uses traditional Italian regional card images on a green casino-table background. Built with API Platform (PHP/Symfony), Vue 3 + TypeScript, PostgreSQL, and Mercure SSE for real-time. The architecture supports adding new card games cleanly via the strategy pattern.
 
 ## Tech Stack
 
@@ -87,7 +87,7 @@ scopa/
       Entity/
         Game.php               # Single entity: all game state in one table + ApiResource operations
       Enum/
-        GameType.php           # scopa|briscola
+        GameType.php           # scopa|briscola|tressette
         GameState.php          # waiting|playing|choosing|round-end|game-over|finished
         DeckStyle.php          # piacentine|napoletane|toscane|siciliane
         Suit.php               # Denari|Coppe|Bastoni|Spade (with letter() method)
@@ -107,13 +107,16 @@ scopa/
         GameEngineFactory.php  # Resolves GameEngine implementation by GameType
         ScopaEngine.php        # Scopa: table-capture logic, multi-round
         BriscolaEngine.php     # Briscola: trick-taking logic, single game, trump suit
+        TressetteEngine.php    # Tressette: trick-taking, two-phase (stock+hand), follow-suit
         DeckService.php        # Deck creation, Fisher-Yates shuffle
         AIService.php          # Interface: evaluateMove, autoSelectCapture
         AIServiceFactory.php   # Resolves AIService implementation by GameType
         ScopaAIService.php     # Scopa AI: multi-factor capture/placement scoring
         BriscolaAIService.php  # Briscola AI: trump management, trick evaluation
+        TressetteAIService.php # Tressette AI: phase-aware lead/follow strategy
         ScopaScoringService.php # Scopa 5-category round scoring
         BriscolaScoringService.php # Briscola card point values and strength ranking
+        TressetteScoringService.php # Tressette ×3 integer point values and strength ranking
         MercurePublisher.php   # Publishes SSE events via Symfony Mercure HubInterface
         MercureTokenService.php # Generates Mercure subscriber JWT tokens
         PlayerTokenService.php # Token generation, name sanitization
@@ -158,6 +161,7 @@ scopa/
           DeckServiceTest.php
           GameEngineTest.php
           BriscolaEngineTest.php
+          TressetteEngineTest.php
           ScoringServiceTest.php
           AIServiceTest.php
           PlayerTokenServiceTest.php
@@ -213,6 +217,7 @@ scopa/
           GameOverOverlay.vue       # Final scores, winner, back to lobby
           ScoreTable.vue            # 5-category breakdown with manual esc() for safety
           BriscolaScoreTable.vue    # Briscola-specific score display
+          TressetteScoreTable.vue   # Tressette score display with ultima bonus
           ScoreDetailDialog.vue     # Detailed card breakdown modal
         effects/
           ScopaFlash.vue       # 1500ms "SCOPA!" flash animation
@@ -238,6 +243,7 @@ This application supports multiple Italian card games. Full rules for each game 
 
 - **[Scopa Rules](docs/scopa-rules.md)** — Table-capture game, multi-round to 11 points
 - **[Briscola Rules](docs/briscola-rules.md)** — Trick-taking game with trump suit, single game to 61+ points
+- **[Tressette Rules](docs/tressette-rules.md)** — Trick-taking game with follow-suit, two phases (stock + hand), 35 total points
 
 ### Shared Card Deck
 - **40 cards** in 4 suits: **Denari** (coins), **Coppe** (cups), **Bastoni** (clubs), **Spade** (swords)
@@ -392,9 +398,9 @@ Deferred publishing: `MercureTerminateListener` defers Mercure publishes to the 
 The backend uses a **strategy pattern** to support multiple card games:
 
 - **`GameEngine`** (interface): Defines the contract — `initializeGame()`, `startGame()`, `playCard()`, `getStateForPlayer()`, `selectCapture()`, `nextRound()`
-- **`GameEngineFactory`**: Resolves `ScopaEngine` or `BriscolaEngine` based on `Game::getGameType()`
+- **`GameEngineFactory`**: Resolves `ScopaEngine`, `BriscolaEngine`, or `TressetteEngine` based on `Game::getGameType()`
 - **`AIService`** (interface): Defines `evaluateMove()` and `autoSelectCapture()`
-- **`AIServiceFactory`**: Resolves `ScopaAIService` or `BriscolaAIService` based on game type
+- **`AIServiceFactory`**: Resolves `ScopaAIService`, `BriscolaAIService`, or `TressetteAIService` based on game type
 
 All processors and providers inject `GameEngineFactory` (not a specific engine). The factory resolves the correct engine from `$game->getGameType()`.
 
@@ -416,11 +422,21 @@ Trick-taking logic: leader plays to table, follower plays to resolve trick. Trum
 
 **Does NOT support** `selectCapture()` or `nextRound()` — throws `\LogicException` (state guards prevent these from being called).
 
+### Tressette Engine (TressetteEngine.php)
+
+Key methods: `initializeGame()`, `startGame()`, `playCard()`, `getStateForPlayer()`.
+
+Two-phase trick-taking game. Phase 1 (stock): 10 cards dealt each, no suit obligation, draw after trick. Phase 2 (hand): must follow suit, no drawing. No trump suit — different suits always lose to leader. Card strength: 3>2>Asso>Re>Cavallo>Fante>7>6>5>4. Points (×3 integer): Asso=3, 2/3/figures=1, rest=0. Ultima bonus: +3 for last trick winner. Total: 35 points.
+
+**Does NOT support** `selectCapture()` or `nextRound()` — throws `\LogicException`.
+
 ### AI
 
 **Scopa AI** (`ScopaAIService`): Multi-factor scoring for captures and placements. Weights for card value, denari suit, sette bello, primiera, scopa potential.
 
 **Briscola AI** (`BriscolaAIService`): Separate strategies for leading vs following. Manages trump cards, avoids giving away high-point cards, captures valuable tricks.
+
+**Tressette AI** (`TressetteAIService`): Phase-aware strategy. Phase 1: lead low, follow opportunistically. Phase 2: suit control, follow-suit enforcement, cheap discards when void. No trump management needed.
 
 Async via Symfony Messenger: `HandleAITurnMessage` dispatched after player move. Handler (`HandleAITurnHandler`) uses factories to resolve the correct engine and AI service. Sleeps 1.5s, then plays.
 

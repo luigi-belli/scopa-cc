@@ -168,6 +168,23 @@
   pointer-events: none;
   opacity: 0.95;
 }
+/* ─── Tressette: 10-card hand overlap layout ─── */
+
+/* Hand cards overlap with negative margin to fit 10 cards */
+.tressette-hand .hand-row {
+  flex-wrap: nowrap;
+}
+
+.tressette-hand .hand-row > .card,
+.tressette-hand .hand-row > .card-back {
+  margin-left: -12px;
+}
+
+.tressette-hand .hand-row > .card:first-child,
+.tressette-hand .hand-row > .card-back:first-child {
+  margin-left: 0;
+}
+
 /* Mobile */
 @media (max-width: 600px) {
   .card,
@@ -197,5 +214,18 @@
     left: 22px;
     width: 40px;
     height: 71px;
+  }
+
+  /* Tressette mobile: smaller cards with more overlap */
+  .tressette-hand .hand-row > .card,
+  .tressette-hand .hand-row > .card-back {
+    width: 42px;
+    height: 75px;
+    margin-left: -14px;
+  }
+
+  .tressette-hand .hand-row > .card:first-child,
+  .tressette-hand .hand-row > .card-back:first-child {
+    margin-left: 0;
   }
 }

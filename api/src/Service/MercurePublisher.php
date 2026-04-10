@@ -133,9 +133,9 @@ final class MercurePublisher
             ?? ($game->getPlayer1TotalScore() > $game->getPlayer2TotalScore() ? 0 : 1);
         $sweepData = $sweep?->jsonSerialize();
 
-        // Include captured cards for Briscola so the frontend can show point breakdown
+        // Include captured cards for trick-taking games so the frontend can show point breakdown
         $capturedCards = null;
-        if ($game->getGameType() === GameType::Briscola) {
+        if ($game->getGameType() === GameType::Briscola || $game->getGameType() === GameType::Tressette) {
             $capturedCards = [
                 $game->getPlayer1Captured()->jsonSerialize(),
                 $game->getPlayer2Captured()->jsonSerialize(),

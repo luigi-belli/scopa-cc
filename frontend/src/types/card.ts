@@ -41,3 +41,14 @@ export const BRISCOLA_CARD_POINTS: Record<number, number> = {
   1: 11, 3: 10, 10: 4, 9: 3, 8: 2,
   2: 0, 4: 0, 5: 0, 6: 0, 7: 0,
 }
+
+/** Tressette card point values (×3 integer system: Ace=3, 2/3/figures=1, rest=0). */
+export const TRESSETTE_CARD_POINTS: Record<number, number> = {
+  1: 3, 2: 1, 3: 1, 8: 1, 9: 1, 10: 1,
+  4: 0, 5: 0, 6: 0, 7: 0,
+}
+
+/** Tressette card strength for trick resolution (3 strongest, 4 weakest). */
+export const TRESSETTE_CARD_STRENGTH: Record<number, number> = {
+  3: 10, 2: 9, 1: 8, 10: 7, 9: 6, 8: 5, 7: 4, 6: 3, 5: 2, 4: 1,
+}

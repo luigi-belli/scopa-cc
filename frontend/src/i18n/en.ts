@@ -87,6 +87,15 @@ export default {
   'briscola.score.points': 'Points',
   'briscola.lastTrick': 'Last trick',
   'briscola.score.cards': 'Cards',
+
+  // Tressette
+  'lobby.gameType.tressette': 'Tressette',
+  'tressette.score.points': 'Card points',
+  'tressette.score.ultima': 'Last trick',
+  'tressette.score.total': 'Total',
+  'tressette.score.cards': 'Cards',
+  'tressette.draw': 'Draw!',
+  'tressette.followSuit': 'Must follow suit',
   // API/backend error keys
   'error.conflict': 'Conflict: please retry',
   'error.gameNameTaken': 'A game with this name already exists. Please choose a different name.',

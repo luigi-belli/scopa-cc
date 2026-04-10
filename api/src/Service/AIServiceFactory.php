@@ -12,6 +12,7 @@ final class AIServiceFactory
     public function __construct(
         private readonly ScopaAIService $scopaAI,
         private readonly BriscolaAIService $briscolaAI,
+        private readonly TressetteAIService $tressetteAI,
     ) {}
 
     public function forGame(Game $game): AIService
@@ -19,6 +20,7 @@ final class AIServiceFactory
         return match ($game->getGameType()) {
             GameType::Scopa => $this->scopaAI,
             GameType::Briscola => $this->briscolaAI,
+            GameType::Tressette => $this->tressetteAI,
         };
     }
 }

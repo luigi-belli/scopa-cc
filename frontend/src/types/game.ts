@@ -1,6 +1,6 @@
 import type { Card } from './card'
 
-export type GameType = 'scopa' | 'briscola'
+export type GameType = 'scopa' | 'briscola' | 'tressette'
 
 export type GameStateValue = 'waiting' | 'playing' | 'choosing' | 'round-end' | 'game-over' | 'finished'
 

@@ -87,6 +87,15 @@ export default {
   'briscola.score.points': 'Punti',
   'briscola.lastTrick': 'Ultima presa',
   'briscola.score.cards': 'Carte',
+
+  // Tressette
+  'lobby.gameType.tressette': 'Tressette',
+  'tressette.score.points': 'Punti carte',
+  'tressette.score.ultima': 'Ultima',
+  'tressette.score.total': 'Totale',
+  'tressette.score.cards': 'Carte',
+  'tressette.draw': 'Pareggio!',
+  'tressette.followSuit': 'Devi rispondere al seme',
   // API/backend error keys
   'error.conflict': 'Conflitto: riprova',
   'error.gameNameTaken': 'Esiste già una partita con questo nome. Scegline un altro.',
