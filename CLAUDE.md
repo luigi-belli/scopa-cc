@@ -11,16 +11,19 @@ Web-based two-player Italian card games with real-time multiplayer and single-pl
 - **Database**: PostgreSQL 17 via Doctrine ORM 3 (JSONB for card arrays)
 - **Real-time**: Mercure SSE (server→client push), REST API (client→server)
 - **AI**: Symfony Messenger async handler with 1.5s delay
-- **Containerization**: Docker Compose — 6 services, exposed on port 5982
+- **Containerization**: Docker Compose — 7 services, HTTPS on configurable port (default 5982)
 - **Card assets**: 4 deck styles, each with 40 card face images + card back
 
 ## How to Run
 
 ```bash
-docker compose up --build   # Starts on http://localhost:5982
+cp .env.dist .env           # Create local config (edit as needed)
+docker compose up --build   # Starts on https://localhost:5982
 ```
 
-Services: postgres, php (API), messenger-worker (AI), mercure (SSE), nginx (SPA + reverse proxy).
+See **[Deployment Guide](docs/deployment.md)** for production setup with Let's Encrypt, NAT port forwarding, and HTTP/3 configuration.
+
+Services: postgres, php (API), messenger-worker (AI), cron (cleanup), mercure (SSE), nginx (SPA + reverse proxy), certbot (LE certs, optional profile).
 
 **IMPORTANT: Always use Docker Compose to run all tooling, tests, builds, and commands.** No Node.js, PHP, or Composer is installed on the host machine. All commands must run inside containers.
 
@@ -42,7 +45,9 @@ docker compose exec php bin/console <command>
 
 ```
 scopa/
-  docker-compose.yml           # 6 services, port 5982
+  docker-compose.yml           # 7 services, configurable port
+  .env.dist                    # Deploy config template (hostname, port, TLS mode)
+  .env                         # Local deploy config (gitignored)
   
   api/                         # API Platform (PHP/Symfony)
     Dockerfile                 # PHP 8.4 CLI + composer + entrypoint
@@ -194,7 +199,9 @@ scopa/
 
   nginx/
     Dockerfile                 # Multi-stage: builds frontend with Node, serves via nginx
-    default.conf               # Reverse proxy: SPA, /api/, /.well-known/mercure
+    default.conf.template      # Nginx config template (envsubst: EXTERNAL_HOSTNAME, EXTERNAL_PORT)
+    fastcgi_api.conf           # FastCGI params for PHP-FPM
+    entrypoint.sh              # TLS cert management (self-signed or Let's Encrypt)
 ```
 
 ## Game Rules
@@ -533,20 +540,26 @@ Lightweight, custom i18n system in `frontend/src/i18n/` — no external library.
 ### Docker Architecture
 
 ```
-nginx (port 5982)
-  ├── /              → Vue SPA (built in nginx Dockerfile multi-stage)
-  ├── /assets/       → Card images (copied into nginx image from frontend build)
-  ├── /api/          → fastcgi_pass php:9000
+nginx (HTTPS, HTTP/2, HTTP/3 on configurable port)
+  ├── :443/tcp         → HTTPS + HTTP/2
+  ├── :443/udp         → HTTP/3 (QUIC)
+  ├── :80              → ACME challenges + HTTP→HTTPS redirect
+  ├── /                → Vue SPA (built in nginx Dockerfile multi-stage)
+  ├── /assets/         → Card images (copied into nginx image from frontend build)
+  ├── /api/            → fastcgi_pass php:9000
   └── /.well-known/mercure → proxy to mercure:80 (SSE, no buffering)
 
-php (port 9000)     → PHP-FPM (FastCGI)
-messenger-worker    → Same image, runs `messenger:consume async --time-limit=3600`
-cron                → Same image, runs crond with scheduled Symfony console commands
-postgres            → Game state persistence (with healthcheck)
-mercure             → SSE hub (anonymous mode, CORS *)
+php (port 9000)      → PHP-FPM (FastCGI)
+messenger-worker     → Same image, runs `messenger:consume async --time-limit=3600`
+cron                 → Same image, runs crond with scheduled Symfony console commands
+postgres             → Game state persistence (with healthcheck)
+mercure              → SSE hub (anonymous mode, CORS *)
+certbot (optional)   → Let's Encrypt cert issuance/renewal (profile: letsencrypt)
 ```
 
-Nginx Dockerfile is multi-stage: builds Vue frontend with Node 22, then copies dist into nginx 1.27 image along with config. Card assets are part of the frontend build output.
+Nginx Dockerfile is multi-stage: builds Vue frontend with Node 22, then copies dist into nginx 1.27 image along with config template. The config (`default.conf.template`) is processed by `envsubst` at container startup — only `EXTERNAL_HOSTNAME` and `EXTERNAL_PORT` are substituted (filtered by `NGINX_ENVSUBST_FILTER=^EXTERNAL_`). TLS certificates are managed by `entrypoint.sh` (self-signed or Let's Encrypt). Card assets are part of the frontend build output.
+
+Full deployment instructions: **[Deployment Guide](docs/deployment.md)**
 
 Docker Compose uses health checks and `depends_on` conditions to ensure proper startup order: postgres → php → messenger-worker + cron + mercure → nginx.
 
