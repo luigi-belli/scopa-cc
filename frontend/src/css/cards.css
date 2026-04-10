@@ -44,6 +44,12 @@
   }
 }
 
+/* Locked lift — keeps card raised after click until animation starts */
+.card.lifted {
+  transform: translateY(-14px);
+  z-index: 10;
+}
+
 /* Card glow effect */
 .card.glow {
   box-shadow: 0 0 12px 4px rgba(255, 215, 0, 0.6);

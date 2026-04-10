@@ -526,18 +526,22 @@ body {
   justify-self: center;
 }
 
-.deck-visual {
+.deck-visual-wrap {
   position: absolute;
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 2;
   transition: opacity 0.5s;
 }
 
-.deck-visual.empty {
+.deck-visual-wrap.empty {
   opacity: 0;
   pointer-events: none;
+}
+
+.deck-visual {
+  position: relative;
+  z-index: 2;
 }
 
 .deck-count {
@@ -549,6 +553,7 @@ body {
   font-size: 0.7rem;
   padding: 1px 5px;
   border-radius: 8px;
+  z-index: 53;
 }
 
 /* ── Animation Layer ── */
@@ -961,8 +966,9 @@ body {
     height: 71px;
   }
 
-  /* Deck visual: shrink to match captured-stack size so it doesn't overlap table grid */
-  .deck-visual {
+  /* Deck visual: reposition wrapper and shrink card-back to match captured-stack size
+     so it doesn't overlap table grid */
+  .deck-visual-wrap {
     left: 8px;
   }
   .deck-visual .card-back {

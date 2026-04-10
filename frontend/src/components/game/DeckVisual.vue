@@ -1,6 +1,8 @@
 <template>
-  <div class="deck-visual" :class="{ empty: count === 0 }" ref="deckEl">
-    <CardBack :deckStyle="deckStyle" />
+  <div class="deck-visual-wrap" :class="{ empty: count === 0 }" ref="wrapEl">
+    <div class="deck-visual" ref="deckEl">
+      <CardBack :deckStyle="deckStyle" />
+    </div>
     <span class="deck-count" v-if="count > 0">{{ count }}</span>
   </div>
 </template>
@@ -15,6 +17,7 @@ defineProps<{
   count: number
 }>()
 
+const wrapEl = ref<HTMLElement>()
 const deckEl = ref<HTMLElement>()
-defineExpose({ deckEl })
+defineExpose({ wrapEl, deckEl })
 </script>

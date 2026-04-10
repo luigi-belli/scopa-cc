@@ -69,6 +69,7 @@
             :card="card"
             :deckStyle="currentDeckStyle"
             :playable="canPlay"
+            :class="{ lifted: playedCardIdx === idx }"
             :style="store.dealHiding ? { opacity: '0' } : {}"
             @click="canPlay ? handlePlayCard(idx) : undefined"
           />
@@ -213,6 +214,8 @@ const gameOverCapturedCards = ref<[Card[], Card[]] | null>(null)
 const inPostAnimDelay  = ref(false)
 /** true while a playCard API call is in flight — prevents duplicate requests */
 const playInFlight     = ref(false)
+/** index of the card just clicked — keeps it visually lifted until animation starts */
+const playedCardIdx    = ref<number | null>(null)
 
 const gs = computed(() => store.displayState)
 const currentDeckStyle = computed<DeckStyle>(() => (gs.value?.deckStyle as DeckStyle) || 'piacentine')
@@ -852,6 +855,7 @@ async function animPlace(result: TurnResult) {
       const el = q(`[data-card-key="my-${cardKey(card, idx)}"]`)
       if (el) { srcR = el.getBoundingClientRect(); setStyle(el, 'visibility', 'hidden') }
     }
+    playedCardIdx.value = null
   } else {
     const backs = qAll('.player-area.opponent .hand-row .card-back')
     if (backs.length) {
@@ -1207,17 +1211,17 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
   let remainingDeck = preDealDeckCount
   function tickDeckDOM() {
     remainingDeck--
-    const deckEl = deckVisualRef.value?.deckEl
-    if (!deckEl) return
+    const wrapEl = deckVisualRef.value?.wrapEl
+    if (!wrapEl) return
     if (remainingDeck <= 0) {
-      deckEl.classList.add('empty')
-      const countEl = deckEl.querySelector('.deck-count')
+      wrapEl.classList.add('empty')
+      const countEl = wrapEl.querySelector('.deck-count')
       if (countEl) (countEl as HTMLElement).style.display = 'none'
       // Hide briscola trump card together with the deck
       const briscolaEl = q('.briscola-trump-card')
       if (briscolaEl) (briscolaEl as HTMLElement).style.opacity = '0'
     } else {
-      const countEl = deckEl.querySelector('.deck-count')
+      const countEl = wrapEl.querySelector('.deck-count')
       if (countEl) countEl.textContent = String(remainingDeck)
     }
   }
@@ -1302,10 +1306,10 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
   clearLayer()
 
   // Restore imperative deck DOM changes before Vue takes over
-  const deckEl = deckVisualRef.value?.deckEl
-  if (deckEl) {
-    deckEl.classList.remove('empty')
-    const countEl = deckEl.querySelector('.deck-count')
+  const wrapEl = deckVisualRef.value?.wrapEl
+  if (wrapEl) {
+    wrapEl.classList.remove('empty')
+    const countEl = wrapEl.querySelector('.deck-count')
     if (countEl) { (countEl as HTMLElement).style.display = ''; countEl.textContent = '' }
   }
   // Clear deck count override — let reactive value take over
@@ -1383,9 +1387,10 @@ async function processQueue() {
 
 async function handlePlayCard(cardIndex: number) {
   if (!canPlay.value) return
+  playedCardIdx.value = cardIndex
   playInFlight.value = true
   try { await api.playCard(props.gameId, cardIndex) }
-  catch (e: unknown) { console.error('Play card error:', e) }
+  catch (e: unknown) { playedCardIdx.value = null; console.error('Play card error:', e) }
   finally { playInFlight.value = false }
 }
 async function handleSelectCapture(optionIndex: number) {
