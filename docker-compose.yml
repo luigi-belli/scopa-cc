@@ -79,13 +79,44 @@ services:
       context: .
       dockerfile: nginx/Dockerfile
     ports:
-      - "5982:443/tcp"   # HTTPS + HTTP/2
-      - "5982:443/udp"   # HTTP/3 (QUIC)
+      - "${INTERNAL_PORT:-5982}:443/tcp"   # HTTPS + HTTP/2
+      - "${INTERNAL_PORT:-5982}:443/udp"   # HTTP/3 (QUIC)
+      - "80:80"                            # ACME challenges (Let's Encrypt)
+    environment:
+      EXTERNAL_HOSTNAME: ${EXTERNAL_HOSTNAME:-localhost}
+      EXTERNAL_PORT: ${EXTERNAL_PORT:-5982}
+      TLS_MODE: ${TLS_MODE:-selfsigned}
+      # Only substitute these two variables in the nginx template;
+      # leave nginx-native $variables (e.g. $host, $uri) untouched.
+      NGINX_ENVSUBST_FILTER: "^EXTERNAL_"
+    volumes:
+      - ssl-certs:/etc/nginx/ssl
+      - certbot-certs:/etc/letsencrypt:ro
+      - certbot-webroot:/var/www/certbot:ro
     depends_on:
       php:
         condition: service_healthy
       mercure:
         condition: service_healthy
 
+  # Let's Encrypt certificate manager (only starts with --profile letsencrypt)
+  # Initial cert:  docker compose --profile letsencrypt run --rm certbot \
+  #                  certonly --webroot -w /var/www/certbot \
+  #                  -d "$EXTERNAL_HOSTNAME" --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email
+  # After issuing:  docker compose exec nginx nginx -s reload
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot-certs:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    profiles:
+      - letsencrypt
+    depends_on:
+      - nginx
+
 volumes:
   pgdata:
+  ssl-certs:
+  certbot-certs:
+  certbot-webroot:

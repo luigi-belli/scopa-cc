@@ -13,9 +13,22 @@ limit_req_zone $binary_remote_addr zone=api_heartbeat:1m rate=20r/m;
 # Read endpoints (GET state, lookup): 60 req/min
 limit_req_zone $binary_remote_addr zone=api_read:2m rate=60r/m;
 
+# ─── Port 80: ACME challenges (Let's Encrypt) + HTTP→HTTPS redirect ───
+server {
+    listen 80;
+    server_name _;
+
+    # Let's Encrypt HTTP-01 challenge responses
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host:${EXTERNAL_PORT}$request_uri;
+    }
+}
+
 # ─── Main HTTPS server: HTTP/2 + HTTP/3 (QUIC) ───
-# Port 80 is not exposed in docker-compose.yml (only 443/tcp + 443/udp),
-# so no HTTP→HTTPS redirect server block is needed.
 server {
     # HTTP/2 over TLS (TCP)
     listen 443 ssl;
@@ -24,7 +37,7 @@ server {
     # HTTP/3 over QUIC (UDP)
     listen 443 quic reuseport;
 
-    server_name _;
+    server_name ${EXTERNAL_HOSTNAME};
     root /usr/share/nginx/html;
     index index.html;
 
@@ -49,7 +62,7 @@ server {
     # ─── HTTP/3 (QUIC) settings ───
     # Advertise HTTP/3 support via Alt-Svc header
     # max-age=86400 (24h), browsers will try QUIC on subsequent requests
-    add_header Alt-Svc 'h3=":5982"; ma=86400' always;
+    add_header Alt-Svc 'h3=":${EXTERNAL_PORT}"; ma=86400' always;
 
     # QUIC retry for address validation (anti-amplification)
     quic_retry on;
@@ -97,7 +110,7 @@ server {
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable" always;
-        add_header Alt-Svc 'h3=":5982"; ma=86400' always;
+        add_header Alt-Svc 'h3=":${EXTERNAL_PORT}"; ma=86400' always;
         add_header X-Frame-Options "DENY" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -109,7 +122,7 @@ server {
     location ~* \.(?:svg|ico|png|jpg|webp|woff2?)$ {
         expires 7d;
         add_header Cache-Control "public" always;
-        add_header Alt-Svc 'h3=":5982"; ma=86400' always;
+        add_header Alt-Svc 'h3=":${EXTERNAL_PORT}"; ma=86400' always;
         add_header X-Frame-Options "DENY" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -170,7 +183,7 @@ server {
         proxy_buffering off;
         proxy_cache off;
         add_header X-Accel-Buffering no always;
-        add_header Alt-Svc 'h3=":5982"; ma=86400' always;
+        add_header Alt-Svc 'h3=":${EXTERNAL_PORT}"; ma=86400' always;
         add_header X-Frame-Options "DENY" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;

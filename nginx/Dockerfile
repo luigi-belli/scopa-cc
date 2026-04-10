@@ -7,19 +7,21 @@ RUN npm run build
 
 FROM nginx:1.27-alpine
 
-# Generate self-signed TLS certificate for HTTP/3 (QUIC) + HTTP/2
-RUN apk add --no-cache openssl && \
-    mkdir -p /etc/nginx/ssl && \
-    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-      -keyout /etc/nginx/ssl/key.pem \
-      -out /etc/nginx/ssl/cert.pem \
-      -days 3650 -nodes \
-      -subj "/CN=localhost" \
-      -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" && \
-    apk del openssl
+# OpenSSL for runtime self-signed cert generation (kept in image, ~1MB on Alpine)
+RUN apk add --no-cache openssl && mkdir -p /etc/nginx/ssl /var/www/certbot
 
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+# Config template — processed by nginx's built-in envsubst on container start
+# (replaces only defined env vars, leaves nginx $variables untouched)
+COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY nginx/fastcgi_api.conf /etc/nginx/fastcgi_api.conf
+
+# Custom entrypoint: manages TLS certs then delegates to nginx's entrypoint
+COPY nginx/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
 
-EXPOSE 443/tcp 443/udp
+EXPOSE 80 443/tcp 443/udp
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
