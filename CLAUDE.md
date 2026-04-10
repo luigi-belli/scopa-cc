@@ -23,7 +23,7 @@ docker compose up --build   # Starts on https://localhost:5982
 
 See **[Deployment Guide](docs/deployment.md)** for production setup with custom TLS certificates, NAT port forwarding, and HTTP/3 configuration.
 
-Services: postgres, php (API), messenger-worker (AI), cron (cleanup), mercure (SSE), nginx (SPA + reverse proxy), acme (Let's Encrypt via Dynu DNS, optional profile).
+Services: postgres, php (API), messenger-worker (AI), cron (cleanup), mercure (SSE), nginx (SPA + reverse proxy), acme (Let's Encrypt via Dynu DNS, optional profile), node (frontend dev tools, `dev` profile).
 
 **IMPORTANT: Always use Docker Compose to run all tooling, tests, builds, and commands.** No Node.js, PHP, or Composer is installed on the host machine. All commands must run inside containers.
 
@@ -31,11 +31,17 @@ Services: postgres, php (API), messenger-worker (AI), cron (cleanup), mercure (S
 # Backend PHPUnit tests
 docker compose exec php bin/phpunit
 
-# Frontend tests (vitest)
-docker run --rm -v "$(pwd)/frontend:/app" -w /app node:22-alpine sh -c "npm install && npx vitest run"
+# Frontend tests (vitest) — uses persistent node container with cached node_modules
+make test-front
 
 # Frontend build check
-docker run --rm -v "$(pwd)/frontend:/app" -w /app node:22-alpine sh -c "npm install && npm run build"
+make build-front
+
+# Run only frontend tests for changed files
+make test-front-changed
+
+# First-time setup / reinstall node_modules
+make node-install
 
 # Symfony console commands
 docker compose exec php bin/console <command>

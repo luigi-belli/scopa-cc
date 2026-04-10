@@ -63,8 +63,10 @@ The animation system is the most sensitive part of the codebase. It uses a **two
 
 ### Testing
 
-- Frontend build check via Docker multi-stage build
-- Tester agent at `.claude/agents/tester.md` — spawn it to run all checks
+- **Do NOT run tests yourself** — the tester agent handles all testing (PHPUnit, vitest, frontend build, verification checklist)
+- The tester agent auto-detects which files changed and runs only the relevant test subsets
+- Frontend tests use a **persistent Node container** (`docker compose --profile dev exec node`) with cached `node_modules` — no ephemeral containers or `npm install` on every run
+- Tester agent at `.claude/agents/tester.md` — spawn it after your review/refactoring is done
 - If you add new patterns that should be verified on every change, add them to the tester agent definition
 
 ## Best Practices to Enforce

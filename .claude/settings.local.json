@@ -16,7 +16,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.pagat.com)",
       "WebFetch(domain:en.wikipedia.org)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(make test-front:*)",
+      "Bash(make build-front:*)"
     ]
   },
   "sandbox": {

@@ -34,17 +34,17 @@
 
     <!-- Table Area -->
     <div class="table-area" ref="tableAreaEl">
-      <DeckVisual
-        :deckStyle="currentDeckStyle"
-        :count="shownDeckCount"
-        ref="deckVisualRef"
-      />
       <CardComponent
         v-if="isBriscola && gs?.briscolaCard && shownDeckCount > 0"
         :card="gs.briscolaCard"
         :deckStyle="currentDeckStyle"
         class="briscola-trump-card"
         :style="store.dealHidingBriscola ? { opacity: '0' } : {}"
+      />
+      <DeckVisual
+        :deckStyle="currentDeckStyle"
+        :count="shownDeckCount"
+        ref="deckVisualRef"
       />
       <div class="table-center" :class="{ 'briscola-table': isBriscola }" ref="tableCenterEl">
         <CardComponent
@@ -69,7 +69,7 @@
             :card="card"
             :deckStyle="currentDeckStyle"
             :playable="canPlay"
-            :class="{ lifted: playedCardIdx === idx }"
+            :class="{ lifted: playedCardIdx === idx, nudge: nudging }"
             :style="store.dealHiding ? { opacity: '0' } : {}"
             @click="canPlay ? handlePlayCard(idx) : undefined"
           />
@@ -138,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/gameStore'
 import { useApi } from '@/composables/useApi'
@@ -228,6 +228,34 @@ const shownDeckCount = computed(() => dealDeckCountOverride.value ?? gs.value?.d
 const canPlay = computed(() =>
   gs.value?.isMyTurn === true && gs.value?.state === 'playing' && !store.animating && !playInFlight.value
 )
+
+// ─── Turn nudge: pulse hand cards after 5s of inactivity, repeat every 5s ───
+const nudging = ref(false)
+let nudgeTimer: ReturnType<typeof setTimeout> | null = null
+function clearNudge() {
+  if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
+  nudging.value = false
+}
+function scheduleNudge() {
+  nudgeTimer = setTimeout(() => {
+    nudgeTimer = null
+    // Remove class, wait for a real paint, then re-add to guarantee animation restart
+    nudging.value = false
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!canPlay.value) return       // guard: turn may have ended
+        nudging.value = true
+        scheduleNudge()                  // chain next nudge
+      })
+    })
+  }, 5000)
+}
+watch(canPlay, (can) => {
+  clearNudge()
+  if (can) {
+    scheduleNudge()
+  }
+}, { immediate: true })
 
 // ─── DOM Helpers (read-only, never mutate Vue DOM) ───
 
@@ -359,10 +387,12 @@ function sweepToCaptured(
   items: { card: Card; rect: DOMRect }[],
   capR: DOMRect,
   scale: number | undefined,
+  topIndex?: number,
 ): Promise<void> {
   const ps: Promise<void>[] = []
   items.forEach((si, i) => {
     const cl = mkFlippable(si.card, si.rect, true)
+    if (i === topIndex) cl.style.zIndex = '53'
     aLayer().appendChild(cl)
     ps.push(
       sleep(i * SWEEP_LAG).then(() => {
@@ -691,6 +721,7 @@ async function handleTurnResult(result: TurnResult) {
   store.animating = true
   const safety = setTimeout(() => {
     restoreStyles(); clearLayer()
+    playedCardIdx.value = null
     if (store.pendingState) store.finishAnimation()
     else store.animating = false
     inPostAnimDelay.value = false
@@ -705,6 +736,7 @@ async function handleTurnResult(result: TurnResult) {
   } catch (e) { console.error('Animation error:', e) }
 
   clearTimeout(safety)
+  playedCardIdx.value = null
 
   // 1. Clear animation layer (clones no longer needed)
   clearLayer()
@@ -876,7 +908,7 @@ async function animPlace(result: TurnResult) {
   // 3. Clone flies from hand → target slot
   const clone = isMe ? mkFace(card, srcR) : mkFlippable(card, srcR)
   aLayer().appendChild(clone)
-  if (!isMe) setTimeout(() => flipCard(clone), SLIDE_MS * 0.4)
+  if (!isMe) setTimeout(() => flipCard(clone), SLIDE_MS * 0.1)
   await flyTo(clone, dest, SLIDE_MS, SLIDE_EASE)
 }
 
@@ -914,6 +946,7 @@ async function animCapture(result: TurnResult) {
         const el = q(`[data-card-key="my-${cardKey(card, idx)}"]`)
         if (el) { srcR = el.getBoundingClientRect(); setStyle(el, 'visibility', 'hidden') }
       }
+      playedCardIdx.value = null
     } else {
       const backs = qAll('.player-area.opponent .hand-row .card-back')
       if (backs.length) {
@@ -941,8 +974,9 @@ async function animCapture(result: TurnResult) {
   let playCloneR: DOMRect | null = null
   if (srcR) {
     playClone = isMe ? mkFace(card, srcR) : mkFlippable(card, srcR)
+    playClone.style.zIndex = '53'
     aLayer().appendChild(playClone)
-    if (!isMe) setTimeout(() => flipCard(playClone!), SLIDE_MS * 0.4)
+    if (!isMe) setTimeout(() => flipCard(playClone!), SLIDE_MS * 0.1)
     if (landR) await flyTo(playClone, landR, SLIDE_MS, SLIDE_EASE)
     else await sleep(SLIDE_MS)
     playCloneR = playClone.getBoundingClientRect()
@@ -991,7 +1025,7 @@ async function animCapture(result: TurnResult) {
   const capR = capturedR(result.playerIndex)
   if (capR && sweepItems.length > 0) {
     const scale = sweepScale(sweepItems[0].rect.width, capR)
-    await sweepToCaptured(sweepItems, capR, scale)
+    await sweepToCaptured(sweepItems, capR, scale, 0)
   }
 
   // 7. Scopa: flash + mark the capturing card in the captured deck
@@ -1026,6 +1060,7 @@ async function animTrick(result: TurnResult) {
       const el = q(`[data-card-key="my-${cardKey(card, idx)}"]`)
       if (el) { srcR = el.getBoundingClientRect(); setStyle(el, 'visibility', 'hidden') }
     }
+    playedCardIdx.value = null
   } else {
     const backs = qAll('.player-area.opponent .hand-row .card-back')
     if (backs.length) {
@@ -1041,7 +1076,7 @@ async function animTrick(result: TurnResult) {
   if (srcR && dest) {
     placeClone = isMe ? mkFace(card, srcR) : mkFlippable(card, srcR)
     aLayer().appendChild(placeClone)
-    if (!isMe) setTimeout(() => flipCard(placeClone!), SLIDE_MS * 0.4)
+    if (!isMe) setTimeout(() => flipCard(placeClone!), SLIDE_MS * 0.1)
     await flyTo(placeClone, dest, SLIDE_MS, SLIDE_EASE)
   }
 
@@ -1457,5 +1492,6 @@ onMounted(async () => {
 onUnmounted(() => {
   disconnectMercure()
   clearInterval(heartbeatInterval)
+  clearNudge()
 })
 </script>

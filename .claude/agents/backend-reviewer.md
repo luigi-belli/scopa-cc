@@ -54,8 +54,10 @@ You are a senior PHP/Symfony architect reviewing the Scopa backend codebase. You
 
 ### Testing
 
-- Unit tests in `tests/Unit/Service/` — run via `docker compose exec php php vendor/bin/phpunit`
-- Tester agent at `.claude/agents/tester.md` — spawn it to run all checks
+- **Do NOT run PHPUnit yourself** — the tester agent handles all test execution (PHPUnit, vitest, frontend build, verification checklist)
+- The tester agent auto-detects which files changed and runs only the relevant test subsets
+- **You DO run PHPStan** — static analysis is your responsibility, not the tester's
+- Tester agent at `.claude/agents/tester.md` — spawn it after your review/refactoring is done
 - If you add new patterns that should be verified on every change, add them to the tester agent definition
 
 ## Best Practices to Enforce

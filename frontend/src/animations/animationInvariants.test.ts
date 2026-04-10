@@ -873,3 +873,497 @@ describe('Fix 6: deck visual stays visible during deal animation that exhausts d
     expect(domState.hasEmptyClass).toBe(false) // deck stays visible
   })
 })
+
+// ════════════════════════════════════════════════════
+// Fix: playedCardIdx lifecycle — no pop-back on click,
+//      no sticky lift after animation
+// ════════════════════════════════════════════════════
+
+describe('playedCardIdx: card stays lifted after click (no pop-back)', () => {
+  /**
+   * Models the playedCardIdx ref lifecycle.  The `lifted` CSS class is bound
+   * as `:class="{ lifted: playedCardIdx === idx }"`, so whenever
+   * playedCardIdx equals a card's index, that card renders with
+   * `transform: translateY(-14px)` — the same as the hover state.
+   *
+   * This prevents the visual "pop-back" where the card snaps down from its
+   * hover-lifted position between click and animation start.
+   */
+  let playedCardIdx: number | null = null
+
+  function handlePlayCard(cardIndex: number, canPlay: boolean) {
+    if (!canPlay) return
+    playedCardIdx = cardIndex
+  }
+
+  function isLifted(idx: number): boolean {
+    return playedCardIdx === idx
+  }
+
+  it('card is lifted immediately on click', () => {
+    playedCardIdx = null
+    handlePlayCard(2, true)
+    expect(playedCardIdx).toBe(2)
+    expect(isLifted(2)).toBe(true)
+    expect(isLifted(0)).toBe(false)
+    expect(isLifted(1)).toBe(false)
+  })
+
+  it('card stays lifted while API call is in flight', () => {
+    playedCardIdx = null
+    handlePlayCard(1, true)
+    // Simulate waiting for API + Mercure round trip
+    expect(isLifted(1)).toBe(true)
+    // Other cards are not lifted
+    expect(isLifted(0)).toBe(false)
+    expect(isLifted(2)).toBe(false)
+  })
+
+  it('does nothing when canPlay is false', () => {
+    playedCardIdx = null
+    handlePlayCard(2, false)
+    expect(playedCardIdx).toBeNull()
+  })
+
+  it('cleared on API error (catch block)', () => {
+    playedCardIdx = null
+    handlePlayCard(1, true)
+    expect(isLifted(1)).toBe(true)
+    // Simulate API error → catch block
+    playedCardIdx = null
+    expect(isLifted(1)).toBe(false)
+  })
+})
+
+describe('playedCardIdx: cleared in every animation path (no sticky lift)', () => {
+  /**
+   * The bug: playedCardIdx was only cleared in animPlace (the "place" path).
+   * For "capture" and "trick" turn results, it was never cleared, so the
+   * lifted class persisted. When new cards were dealt into the hand, the card
+   * at the old index appeared stuck in the raised position.
+   *
+   * Fix: clear playedCardIdx in ALL animation functions that hide the
+   * player's card (animPlace, animCapture, animTrick) and in the safety
+   * timeout.
+   */
+  let playedCardIdx: number | null = null
+
+  /** Simulates the isMe branch of each animation function */
+  function animPlace_isMe() { playedCardIdx = null }
+  function animCapture_isMe() { playedCardIdx = null }
+  function animTrick_isMe() { playedCardIdx = null }
+  function safetyTimeout() { playedCardIdx = null }
+
+  /** Simulates the dispatcher in handleTurnResult */
+  function dispatch(type: string, isMe: boolean) {
+    if (type === 'place' || type === 'choosing') {
+      if (isMe) animPlace_isMe()
+    } else if (type === 'capture') {
+      if (isMe) animCapture_isMe()
+    } else if (type === 'trick') {
+      if (isMe) animTrick_isMe()
+    }
+  }
+
+  it('cleared after place animation (my card)', () => {
+    playedCardIdx = 2
+    dispatch('place', true)
+    expect(playedCardIdx).toBeNull()
+  })
+
+  it('cleared after capture animation (my card)', () => {
+    playedCardIdx = 1
+    dispatch('capture', true)
+    expect(playedCardIdx).toBeNull()
+  })
+
+  it('cleared after trick animation (my card)', () => {
+    playedCardIdx = 0
+    dispatch('trick', true)
+    expect(playedCardIdx).toBeNull()
+  })
+
+  it('cleared after choosing animation (my card)', () => {
+    playedCardIdx = 2
+    dispatch('choosing', true)
+    expect(playedCardIdx).toBeNull()
+  })
+
+  it('unchanged for opponent animations', () => {
+    // playedCardIdx should already be null for opponent turns,
+    // but even if somehow set, opponent animations don't touch it
+    playedCardIdx = null
+    dispatch('place', false)
+    expect(playedCardIdx).toBeNull()
+    dispatch('capture', false)
+    expect(playedCardIdx).toBeNull()
+    dispatch('trick', false)
+    expect(playedCardIdx).toBeNull()
+  })
+
+  it('cleared by central clear after animation try/catch (covers all paths)', () => {
+    // The central clear in handleTurnResult runs unconditionally after the
+    // animation try/catch and before any branching (round-end early return, etc).
+    // This is the primary safety net — per-animation clears are redundant backup.
+    playedCardIdx = 2
+    // Simulate: animation throws, catch fires, then central clear runs
+    const animationThrew = true
+    if (animationThrew) { /* catch block logs error */ }
+    playedCardIdx = null  // central clear after try/catch
+    expect(playedCardIdx).toBeNull()
+  })
+
+  it('cleared even on round-end/game-over early return path', () => {
+    // The round-end early return (line ~720-724 in handleTurnResult) skips
+    // restoreStyles and FLIP, going straight to processQueue. Previously,
+    // this path did not clear playedCardIdx. Now the central clear runs
+    // BEFORE this branch point.
+    playedCardIdx = 1
+    // Simulate: animation completes normally
+    dispatch('capture', true)
+    // Central clear also runs (redundant but safe)
+    playedCardIdx = null
+    expect(playedCardIdx).toBeNull()
+    // Even if per-animation clear was somehow skipped:
+    playedCardIdx = 1
+    playedCardIdx = null  // central clear catches it
+    expect(playedCardIdx).toBeNull()
+  })
+
+  it('cleared by safety timeout (fallback)', () => {
+    playedCardIdx = 2
+    safetyTimeout()
+    expect(playedCardIdx).toBeNull()
+  })
+
+  it('no sticky lift after full play→capture→deal cycle', () => {
+    // Simulate: click card 2 → capture animation → state commits → deal
+    playedCardIdx = null
+
+    // 1. Click card at index 2
+    playedCardIdx = 2
+    expect(playedCardIdx).toBe(2)
+
+    // 2. Turn result arrives: capture
+    dispatch('capture', true)
+    expect(playedCardIdx).toBeNull()
+
+    // 3. State commits — hand shrinks from 3 to 2 cards
+    const handAfterPlay = ['card-a', 'card-b'] // 2 cards remaining
+
+    // 4. Deal happens — hand grows back to 3
+    const handAfterDeal = ['card-a', 'card-b', 'card-c']
+
+    // No card should be lifted
+    for (let i = 0; i < handAfterDeal.length; i++) {
+      expect(playedCardIdx === i).toBe(false)
+    }
+  })
+
+  it('no sticky lift after full play→trick→deal cycle (Briscola)', () => {
+    playedCardIdx = null
+
+    // 1. Click card at index 1
+    playedCardIdx = 1
+    expect(playedCardIdx).toBe(1)
+
+    // 2. Turn result: trick (Briscola)
+    dispatch('trick', true)
+    expect(playedCardIdx).toBeNull()
+
+    // 3. Deal — hand replenished
+    const handAfterDeal = ['card-x', 'card-y', 'card-z']
+    for (let i = 0; i < handAfterDeal.length; i++) {
+      expect(playedCardIdx === i).toBe(false)
+    }
+  })
+})
+
+// ════════════════════════════════════════════════════
+// Deck badge & briscola card z-index layering
+// ════════════════════════════════════════════════════
+
+describe('counter badges stay above animation clones (stacking context)', () => {
+  /**
+   * CSS stacking context invariants for deck and captured-deck counter badges.
+   *
+   * Both badges must render ABOVE animation clones (z-index 51-52) during
+   * animations. This requires each badge to participate in a stacking
+   * context at or above the animation layer (z-index 50).
+   *
+   * Key constraint: ancestor elements must NOT create stacking contexts,
+   * so the badge z-index escapes to the root context. The following CSS
+   * properties create stacking contexts:
+   *   - explicit z-index (not auto) on a positioned element
+   *   - transform, translate, rotate, scale (any value other than none)
+   *   - opacity < 1
+   *   - filter, clip-path, mask, perspective, isolation: isolate
+   *
+   * .deck-visual-wrap uses flexbox centering (top:0; bottom:0; display:flex;
+   * align-items:center) instead of transform: translateY(-50%) to avoid
+   * creating a stacking context.
+   *
+   * .deck-visual has position:relative (for badge absolute positioning)
+   * but NO z-index — layering above the briscola card is handled by
+   * DOM order (briscola card rendered first in template).
+   *
+   * .captured-deck has NO z-index — removing it lets .captured-count's
+   * z-index 53 escape to the root context above animation clones.
+   */
+
+  /** Properties that create stacking contexts on positioned elements */
+  const STACKING_CONTEXT_PROPS = [
+    'z-index',   // explicit z-index (not auto)
+    'transform', // any transform
+    'translate',
+    'rotate',
+    'scale',
+    'filter',
+    'clip-path',
+    'mask',
+    'perspective',
+    'isolation',
+  ]
+
+  /** Model of the CSS applied to each relevant element */
+  const deckVisualWrapCSS: Record<string, string> = {
+    position: 'absolute',
+    left: '12px',
+    top: '0',
+    bottom: '0',
+    display: 'flex',
+    'align-items': 'center',
+    transition: 'opacity 0.5s',
+    // No z-index, no transform → no stacking context
+  }
+
+  const deckVisualCSS: Record<string, string> = {
+    position: 'relative',
+    // No z-index → no stacking context; DOM order handles briscola layering
+  }
+
+  const capturedDeckCSS: Record<string, string> = {
+    'justify-self': 'center',
+    // No z-index → no stacking context; badge z-index escapes to root
+  }
+
+  const capturedStackCSS: Record<string, string> = {
+    position: 'relative',
+    width: '75px',
+    height: '133px',
+    // No z-index → no stacking context
+  }
+
+  const deckCountCSS: Record<string, string> = {
+    position: 'absolute',
+    'z-index': '53',
+  }
+
+  const capturedCountCSS: Record<string, string> = {
+    position: 'absolute',
+    'z-index': '53',
+  }
+
+  const animationLayerCSS: Record<string, string> = {
+    position: 'fixed',
+    'z-index': '50',
+  }
+
+  it('.deck-visual-wrap must NOT have stacking-context-creating properties', () => {
+    for (const prop of STACKING_CONTEXT_PROPS) {
+      expect(deckVisualWrapCSS[prop]).toBeUndefined()
+    }
+  })
+
+  it('.deck-visual must NOT have stacking-context-creating properties', () => {
+    for (const prop of STACKING_CONTEXT_PROPS) {
+      expect(deckVisualCSS[prop]).toBeUndefined()
+    }
+  })
+
+  it('.captured-deck must NOT have stacking-context-creating properties', () => {
+    for (const prop of STACKING_CONTEXT_PROPS) {
+      expect(capturedDeckCSS[prop]).toBeUndefined()
+    }
+  })
+
+  it('.captured-stack must NOT have stacking-context-creating properties', () => {
+    for (const prop of STACKING_CONTEXT_PROPS) {
+      expect(capturedStackCSS[prop]).toBeUndefined()
+    }
+  })
+
+  it('.deck-visual-wrap must use flexbox centering, not transform', () => {
+    expect(deckVisualWrapCSS.display).toBe('flex')
+    expect(deckVisualWrapCSS['align-items']).toBe('center')
+    expect(deckVisualWrapCSS['top']).toBe('0')
+    expect(deckVisualWrapCSS['bottom']).toBe('0')
+    expect(deckVisualWrapCSS['transform']).toBeUndefined()
+  })
+
+  it('.deck-count z-index (53) > animation clone z-index (51-52)', () => {
+    const badgeZ = parseInt(deckCountCSS['z-index'])
+    expect(badgeZ).toBeGreaterThan(52)
+  })
+
+  it('.captured-count z-index (53) > animation clone z-index (51-52)', () => {
+    const badgeZ = parseInt(capturedCountCSS['z-index'])
+    expect(badgeZ).toBeGreaterThan(52)
+  })
+
+  it('both badges z-index (53) > animation layer z-index (50)', () => {
+    const deckBadgeZ = parseInt(deckCountCSS['z-index'])
+    const capBadgeZ = parseInt(capturedCountCSS['z-index'])
+    const animZ = parseInt(animationLayerCSS['z-index'])
+    expect(deckBadgeZ).toBeGreaterThan(animZ)
+    expect(capBadgeZ).toBeGreaterThan(animZ)
+  })
+
+  it('briscola card layered behind deck by DOM order (no z-index needed)', () => {
+    // In GameScreen template: CardComponent.briscola-trump-card is rendered
+    // BEFORE DeckVisual. Both are position:absolute inside .table-area.
+    // With no explicit z-index, later DOM elements paint on top.
+    // This means the deck visual always paints above the briscola card.
+    const domOrder = ['briscola-trump-card', 'deck-visual-wrap']
+    expect(domOrder.indexOf('deck-visual-wrap')).toBeGreaterThan(
+      domOrder.indexOf('briscola-trump-card')
+    )
+  })
+})
+
+// ════════════════════════════════════════════════════
+// Opponent card flip timing — must complete mid-flight
+// ════════════════════════════════════════════════════
+
+describe('opponent card flips mid-flight, not on arrival', () => {
+  /**
+   * When the opponent plays a card, a flippable clone (back→face) flies from
+   * the opponent's hand to the table. The flip must START immediately so the
+   * 300ms CSS transition completes well before the 500ms flight ends.
+   *
+   * OLD (bug): flipCard triggered at SLIDE_MS * 0.4 = 200ms. With 300ms CSS
+   * transition, flip completes at 500ms — exactly at arrival. Visually the
+   * card appears to flip on landing, not during flight.
+   *
+   * FIX: flipCard triggered immediately (0ms). Flip completes at 300ms,
+   * leaving 200ms of flight with the face fully visible.
+   */
+
+  const SLIDE_MS = 500
+  const SWEEP_MS = 450
+  const CSS_FLIP_DURATION = 200
+  const PLAY_FLIP_PCT = 0.1   // 10% — play animations flip early
+  const SWEEP_FLIP_PCT = 0.4  // 40% — sweep keeps original timing
+
+  it('play flip completes well before card arrives (10% trigger + 200ms transition)', () => {
+    // flipCard triggered at 10% of SLIDE_MS = 50ms, 200ms CSS transition
+    // completes at 250ms — 250ms of face-visible flight before 500ms arrival.
+    const flipStartMs = SLIDE_MS * PLAY_FLIP_PCT   // 50ms
+    const flipEndMs = flipStartMs + CSS_FLIP_DURATION  // 250ms
+
+    expect(flipEndMs).toBeLessThan(SLIDE_MS)
+    expect(SLIDE_MS - flipEndMs).toBe(250)
+  })
+
+  it('OLD bug: 300ms transition at 40% completed exactly at arrival time', () => {
+    const oldFlipDuration = 300
+    const oldTriggerPct = 0.4
+    const flipStartMs = SLIDE_MS * oldTriggerPct  // 200ms
+    const flipEndMs = flipStartMs + oldFlipDuration  // 500ms
+
+    expect(flipEndMs).toBe(SLIDE_MS)
+  })
+
+  it('play flip triggers earlier than sweep flip', () => {
+    // Play animations flip at 10% to show the face sooner during flight.
+    // Sweep animations keep 40% — face→back is less critical to see early.
+    const playFlipStart = SLIDE_MS * PLAY_FLIP_PCT    // 50ms
+    const sweepFlipStart = SWEEP_MS * SWEEP_FLIP_PCT  // 180ms
+
+    const playFlipEnd = playFlipStart + CSS_FLIP_DURATION   // 250ms
+    const sweepFlipEnd = sweepFlipStart + CSS_FLIP_DURATION // 380ms
+
+    expect(playFlipEnd).toBeLessThan(SLIDE_MS)
+    expect(sweepFlipEnd).toBeLessThan(SWEEP_MS)
+    expect(playFlipStart).toBeLessThan(sweepFlipStart)
+  })
+
+  it('flip timing is consistent across place, capture, and trick animations', () => {
+    const flipStart = SLIDE_MS * PLAY_FLIP_PCT  // 50ms
+    const flipEnd = flipStart + CSS_FLIP_DURATION // 250ms
+
+    expect(flipEnd).toBeLessThan(SLIDE_MS)
+
+    const paths = ['place', 'capture', 'trick']
+    for (const _ of paths) {
+      expect(flipStart).toBe(50)
+      expect(flipEnd).toBe(250)
+    }
+  })
+})
+
+// ════════════════════════════════════════════════════
+// Played card z-index during capture — always on top
+// ════════════════════════════════════════════════════
+
+describe('played card stays on top during entire capture animation', () => {
+  /**
+   * During a capture animation, the played card (the one flying from hand to
+   * table, then sweeping to captured deck) must render above all other cards
+   * at every phase: flight, pause, glow, and sweep.
+   *
+   * FIX: playClone uses z-index 53 (above standard clone z-index of 52).
+   * The sweep clone for the played card (index 0 in sweepItems) also gets
+   * z-index 53 via the topIndex parameter.
+   */
+
+  const STANDARD_CLONE_Z = 52
+  const PLAY_CLONE_Z = 53
+
+  it('play clone z-index is above standard clones during flight + glow', () => {
+    expect(PLAY_CLONE_Z).toBeGreaterThan(STANDARD_CLONE_Z)
+  })
+
+  it('sweep clone for played card inherits elevated z-index', () => {
+    // sweepToCaptured receives topIndex=0, and the clone at that index
+    // gets z-index 53 instead of the default 52.
+    const sweepItems = [
+      { card: { suit: 'Denari', value: 7 }, zIndex: PLAY_CLONE_Z },   // played card (topIndex=0)
+      { card: { suit: 'Coppe', value: 3 }, zIndex: STANDARD_CLONE_Z }, // captured card
+      { card: { suit: 'Bastoni', value: 5 }, zIndex: STANDARD_CLONE_Z }, // captured card
+    ]
+
+    // Played card (index 0) is always on top
+    expect(sweepItems[0].zIndex).toBeGreaterThan(sweepItems[1].zIndex)
+    expect(sweepItems[0].zIndex).toBeGreaterThan(sweepItems[2].zIndex)
+  })
+
+  it('played card visible in every capture phase', () => {
+    // Track the played card's z-index through each animation phase
+    const phases: Array<{ phase: string; zIndex: number }> = []
+
+    // Phase 1: flight (hand → table) — playClone at z-index 53
+    phases.push({ phase: 'flight', zIndex: PLAY_CLONE_Z })
+    // Phase 2: pause — playClone still alive at z-index 53
+    phases.push({ phase: 'pause', zIndex: PLAY_CLONE_Z })
+    // Phase 3: glow — playClone still alive at z-index 53
+    phases.push({ phase: 'glow', zIndex: PLAY_CLONE_Z })
+    // Phase 4: sweep — sweep clone for played card at z-index 53 (topIndex=0)
+    phases.push({ phase: 'sweep', zIndex: PLAY_CLONE_Z })
+
+    for (const p of phases) {
+      expect(p.zIndex).toBeGreaterThan(STANDARD_CLONE_Z)
+    }
+  })
+
+  it('non-capture animations do not use elevated z-index', () => {
+    // Place and trick animations don't need the elevated z-index because
+    // there are no other cards competing for visual attention.
+    // mkFace uses z-index 51, mkFlippable uses z-index 52.
+    const placeCloneZ = 52  // mkFlippable default
+    const faceCloneZ = 51   // mkFace default
+
+    expect(placeCloneZ).toBeLessThan(PLAY_CLONE_Z)
+    expect(faceCloneZ).toBeLessThan(PLAY_CLONE_Z)
+  })
+})

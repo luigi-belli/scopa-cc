@@ -1,36 +1,90 @@
 ---
 name: tester
-description: Runs all tests and validates code changes for the Scopa card game project. Use after any code change to verify nothing is broken. Runs backend PHPUnit tests, frontend build checks, verification checklist, and reports results.
+description: Runs tests and validates code changes for the Scopa card game project. Detects what changed and runs only the relevant test subsets. Uses persistent Node container for fast frontend checks.
 tools: Bash Grep Read Glob
 model: sonnet
 ---
 
 # Scopa Tester Agent
 
-You are a testing agent for a Scopa (Italian card game) web application. Your job is to run all available tests, verify constraints, and report results clearly.
+You are a testing agent for a Scopa (Italian card game) web application. Your job is to detect what changed, run only the relevant tests and checks, and report results clearly.
 
 ## Project Structure
 
 - **Backend**: PHP 8.4 + Symfony 7.3 + API Platform, in `api/`
 - **Frontend**: Vue 3 + TypeScript, in `frontend/`
-- **Infrastructure**: Docker Compose with 7 services (postgres, php, messenger-worker, cron, mercure, nginx, acme), exposed on port 5982
+- **Infrastructure**: Docker Compose with 8 services (postgres, php, messenger-worker, cron, mercure, nginx, acme, node), exposed on port 5982
 
-## How to Run Tests
+## Step 1: Detect What Changed
 
-### 1. Ensure Docker is Running
+**Always start here.** Run this to determine which test subsets are needed:
 
 ```bash
-docker compose ps
+git diff --name-only HEAD 2>/dev/null || git diff --name-only
 ```
 
-If services are not running:
+If that returns nothing (changes already staged), try:
+```bash
+git diff --name-only --cached
+```
+
+If both return nothing, fall back to checking against the last commit:
+```bash
+git diff --name-only HEAD~1
+```
+
+Classify changed files into these categories:
+
+| Category | File patterns | What to run |
+|---|---|---|
+| **backend** | `api/src/**`, `api/config/**`, `api/composer.*` | Backend PHPUnit tests |
+| **frontend-css** | `frontend/src/css/**` | Frontend build + Layout checks + Mobile checks |
+| **frontend-gamescreen** | `frontend/src/components/screens/GameScreen.vue` | Frontend build + vitest + Animation checks + Stability checks + Race condition checks + NFSBA checks |
+| **frontend-composables** | `frontend/src/composables/**` | Frontend build + vitest + Security checks + Race condition checks |
+| **frontend-store** | `frontend/src/stores/**` | Frontend build + vitest + Race condition checks + NFSBA checks |
+| **frontend-animations** | `frontend/src/animations/**` | Frontend build + vitest + Animation checks |
+| **frontend-overlays** | `frontend/src/components/overlays/**` | Frontend build + vitest |
+| **frontend-screens** | `frontend/src/components/screens/*.vue` (not GameScreen) | Frontend build + vitest + Race condition checks (RC9-RC13 for WaitingScreen) |
+| **frontend-other** | `frontend/**` (any other) | Frontend build + vitest |
+| **infra** | `nginx/**`, `docker-compose.yml`, `Makefile`, `.env*` | Security checks only |
+
+**Key rules:**
+- If ANY `api/` file changed → run backend tests
+- If ANY `frontend/` file changed → run frontend build + vitest
+- Only run verification subchecks for the specific categories that changed
+- If ONLY infra files changed (`nginx/`, `docker-compose.yml`, `Makefile`) → security checks only, skip all tests
+- When in doubt, run everything
+
+## Step 2: Ensure Infrastructure
+
+### Backend (only if running backend tests)
+
+```bash
+docker compose ps --format '{{.Service}} {{.Health}}' | grep php
+```
+
+If php is not running/healthy:
 ```bash
 docker compose up -d --build
 ```
 
-Wait for all services to be healthy before proceeding.
+Wait for php to be healthy before proceeding.
 
-### 2. Backend Unit Tests (PHPUnit)
+### Frontend (only if running frontend tests/build)
+
+The project uses a **persistent Node container** with cached `node_modules` via a Docker volume. This avoids reinstalling npm packages on every test run.
+
+```bash
+# Start the node container and ensure dependencies are installed
+docker compose --profile dev up -d node
+docker compose --profile dev exec node sh -c "test -d node_modules/.package-lock.json 2>/dev/null && npm ls --depth=0 >/dev/null 2>&1 || npm ci"
+```
+
+## Step 3: Run Tests
+
+### Backend Unit Tests (PHPUnit)
+
+**When**: Any `api/` file changed.
 
 ```bash
 docker compose exec php php vendor/bin/phpunit
@@ -57,37 +111,31 @@ Test suites are configured in `api/phpunit.xml` with `APP_ENV=test`.
 
 **Integration tests**: Directory `api/tests/Integration/` exists (structure ready, tests to be added).
 
-### 3. Frontend Build Check
+### Frontend Tests (Vitest)
 
-The frontend is built inside the nginx Docker image (multi-stage build). A successful build confirms no TypeScript or Vue compilation errors.
+**When**: Any `frontend/` file changed.
 
 ```bash
-docker compose build --no-cache nginx 2>&1 | tail -20
+docker compose --profile dev exec node npx vitest run
+```
+
+### Frontend Build Check
+
+**When**: Any `frontend/` file changed.
+
+```bash
+docker compose --profile dev exec node npm run build
 ```
 
 Look for `built in Xms` in the output to confirm success. Any TypeScript errors will cause the build to fail.
 
-### 4. Verification Checklist
+## Step 4: Verification Checklist
 
-Run these checks after ANY frontend or CSS change. These verify hard constraints that must never be violated.
+Only run the check categories relevant to the changed files (see Step 1 table). All checks run against **source files directly** (no nginx container needed).
 
-#### Layout Checks
+### Layout Checks
 
-```bash
-# 1. Table area has fixed height
-docker compose exec nginx grep 'height: 340' /usr/share/nginx/html/assets/*.css
-
-# 2. Grid template is 1fr auto 1fr
-docker compose exec nginx grep '1fr auto 1fr' /usr/share/nginx/html/assets/*.css
-
-# 3. overflow:hidden on .table-area (not on .player-area)
-docker compose exec nginx grep -A1 'table-area' /usr/share/nginx/html/assets/*.css | grep overflow
-
-# 4. .deck-visual.empty uses opacity (not display:none)
-docker compose exec nginx grep -A2 'deck-visual.*empty\|\.deck-visual\.empty' /usr/share/nginx/html/assets/*.css
-```
-
-Or check against the source files directly:
+**When**: `frontend/src/css/**` changed.
 
 ```bash
 # 1. Table area has fixed height (340px desktop)
@@ -115,7 +163,9 @@ grep 'gap:' frontend/src/css/style.css
 grep -A5 '\.player-area' frontend/src/css/style.css | grep overflow
 ```
 
-#### Stability Checks
+### Stability Checks
+
+**When**: `GameScreen.vue` or `frontend/src/css/**` changed.
 
 ```bash
 # S1. Turn indicator uses visibility:hidden (not v-if)
@@ -132,7 +182,9 @@ grep -A5 '\.table-center' frontend/src/css/style.css | head -10
 grep 'getSlotRect' frontend/src/components/screens/GameScreen.vue
 ```
 
-#### Animation Invariants
+### Animation Invariants
+
+**When**: `GameScreen.vue` or `frontend/src/animations/**` changed.
 
 ```bash
 # 9. commitState/finishAnimation AFTER animation await
@@ -181,9 +233,9 @@ grep -n "round-end\|game-over" frontend/src/components/screens/GameScreen.vue | 
 grep -n 'deckCount.*displayState\|isRedeal' frontend/src/components/screens/GameScreen.vue
 ```
 
-#### No-Final-State-Before-Animation Invariant Checks
+### No-Final-State-Before-Animation Invariant Checks (NFSBA)
 
-These checks enforce the HARD RULE: final state must NEVER be visible before the animation completes.
+**When**: `GameScreen.vue` or `frontend/src/stores/gameStore.ts` changed.
 
 ```bash
 # NFSBA1. Briscola card has dealHidingBriscola opacity binding in template
@@ -242,10 +294,12 @@ grep -n "gameType === 'briscola'" frontend/src/components/screens/GameScreen.vue
 # PASS if isDealState does NOT have an early return false for briscola
 ```
 
-#### Mobile Animation & Deck Sizing Checks
+### Mobile Animation & Deck Sizing Checks
+
+**When**: `frontend/src/css/**` changed.
 
 ```bash
-# M1. Deck visual uses smaller size on mobile (40×71, not 58×103)
+# M1. Deck visual uses smaller size on mobile (40x71, not 58x103)
 grep -A5 '\.deck-visual .card-back' frontend/src/css/style.css | grep -E 'width|height'
 # PASS if width: 40px and height: 71px found inside @media (max-width: 600px) block
 
@@ -265,23 +319,23 @@ grep -c 'flyTo(clone, target, DEAL_MS, SLIDE_EASE, dealScale)' frontend/src/comp
 grep 'dealScale.*firstTarget.*width.*dr.*width\|firstTarget.*width.*\/.*dr.*width' frontend/src/components/screens/GameScreen.vue
 # PASS if dealScale = targetW / deckW
 
-# M6. Desktop card dimensions unchanged (75×133 default, no mobile override leaking)
+# M6. Desktop card dimensions unchanged (75x133 default, no mobile override leaking)
 grep -B1 'width: 75px' frontend/src/css/cards.css | head -4
 # PASS if .card and .card-back default to 75px width
 
-# M7. Mobile captured stack unchanged at 40×71
+# M7. Mobile captured stack unchanged at 40x71
 grep -A2 '\.captured-stack' frontend/src/css/style.css | grep '40px'
 # PASS if captured-stack width is 40px in mobile section
 
-# M8. Desktop deck visual unchanged (inherits .card-back default 75×133)
+# M8. Desktop deck visual unchanged (inherits .card-back default 75x133)
 # Verify no desktop-specific deck-visual .card-back override exists outside media query
 grep -B5 '\.deck-visual .card-back' frontend/src/css/style.css | grep -v '@media'
 # PASS if no desktop override of deck-visual .card-back found
 ```
 
-#### Event Pipeline & Race Condition Checks
+### Event Pipeline & Race Condition Checks
 
-These checks verify fixes for specific bugs that caused game hangs, lost events, and wrong Mercure subscriptions. Run after ANY change to GameScreen.vue, useMercure.ts, or gameStore.ts.
+**When**: `GameScreen.vue`, `useMercure.ts`, `gameStore.ts`, `WaitingScreen.vue`, or `LobbyScreen.vue` changed.
 
 ```bash
 # RC1. canPlay blocks during inPostAnimDelay (prevents play-during-gap hang)
@@ -358,103 +412,9 @@ grep -n 'myIndex.*state.myIndex\|state\.myIndex' frontend/src/components/screens
 # PASS if store.myIndex is set from API state response
 ```
 
-## End-to-End Test Scenarios
+### Security Checks
 
-These are manual/visual tests to verify when doing significant changes. Report which ones are relevant to the change being tested.
-
-### Single Player Flow
-- Create game -> verify 3 cards in hand, 4 on table, deck=30
-- Play card -> AI plays after 1.5s
-- Play through round -> verify round-end scores
-- Next round -> play until game-over
-
-### Multiplayer Flow
-- Browser A creates game -> Browser B joins
-- Verify Mercure events deliver state to both
-- Play turns alternating -> verify opponent animations via SSE
-
-### Edge Cases
-- Scopa flash animation
-- Capture choice overlay
-- Disconnect banner
-- Page refresh (token in localStorage)
-- Tied at 11 (game continues)
-- Briscola trump suit recognized after deck exhausted — a low trump card must beat a high non-trump card even when the deck is empty
-- Briscola card (briscolaCard field) must NOT be cleared when deck empties — it persists for the entire game
-- Messenger worker restart: verify stuck messages (delivered_at set but not completed) are reset by entrypoint.sh on container startup
-
-### Race Condition & Event Pipeline Scenarios
-- **Post-anim play → choosing state**: Play a card during the 600ms post-animation delay that triggers a choosing state. Verify the capture choice overlay appears (not a hang).
-- **Rapid AI turns (single-player)**: Play a capture that takes >1.5s to animate. AI responds during animation. Verify both animations play correctly in sequence.
-- **Player 2 reload**: In multiplayer, player 2 refreshes the page. Verify they reconnect to the correct Mercure topic and see the correct perspective.
-- **Multiple queued events**: Queue contains turn-result + game-state + round-end. Verify all three are processed and round-end overlay shows.
-- **Deal animation with no deck visual**: Edge case where deck rect is missing. Verify game doesn't hang (processQueue still runs).
-- **Session resume after reload**: Reload during playing, choosing, round-end states. Verify the game resumes correctly in each case.
-- **Exit button**: Click exit during game. Verify leave API is called, session cleared, redirected to lobby.
-
-### Animation & Visual Integrity Tests
-- Deal animation fires on initial game load (cards fly from deck to positions)
-- Deal animation fires on re-deal when hands empty mid-round
-- Deal animation fires on new round after nextRound
-- No duplicate cards ever visible on the table -- verify after every place and capture
-- After capture, the captured cards disappear from the table (not just hidden)
-- Place animation: card slides from hand to table centre, then commitState renders final position
-- Capture animation: card slides to table, glow, sweep to captured deck, then commitState
-- Capture animation fires after capture-choice dialog selection (not just direct captures)
-- FLIP rearrangement: surviving table and hand cards animate smoothly to new positions after commitState
-- Table grid: <=5 cards occupy one centred row; 6+ cards use two centred rows
-- Place animation targets the specific next empty slot (not centre of table area)
-- After capture, remaining table cards reflow into contiguous slots with FLIP animation
-- Table slot positions are stable -- only change when cards are added/removed
-- Hand cards (player and opponent) slide smoothly when a card is played (FLIP on both hands)
-- Opponent card backs FLIP-animate when their count changes
-- Capture choice overlay dismisses BEFORE the capture animation starts
-- Capture choice overlay re-shows when a new choosing state arrives (Fix 3: showCaptureChoice re-enabled after finishAnimation)
-- Choosing turn-result animates the played card leaving the hand (Fix 3: choosing routes to animPlace)
-- Animation layer is empty after every animation completes (no stale clones)
-- During animations, scores/turn indicator/deck count do NOT update (only update on commitState)
-- No one-frame flash of hidden cards between animation end and commitState (Fix 1: restoreStyles after nextTick)
-- End-of-round sweep does not flash score badges to final values before sweep completes (Fix 2: intermediate state preserves display scores)
-- Deal animation: card-back clones fly from deck to each card position (table + both hands)
-- LobbyScreen does NOT commitState -- stores state in pendingState, GameScreen deal-animates it
-- No card flash on initial load (displayState is null until deal animation commits it)
-- No card flash after deal animation completes — nextTick between clearing dealHiding and clearing imperative opacity prevents stale reactive opacity:0 from showing
-- Deck visual NEVER flickers or disappears during deal animation — stays visible from pre-deal count, decrements per card dealt, only goes empty when last card leaves
-- Deck visual stays visible during re-deal (mid-round when both hands empty) — dealDeckCountOverride is set before finishAnimation commits post-deal state
-- Deck visual correct on new round deal — preDealDeckCount computed from newState.deckCount + dealtCardCount (not from stale displayState.deckCount which is 0)
-- Briscola card NOT visible before initial deal animation completes — hidden via dealHidingBriscola, fades in after all hand cards dealt
-- Briscola initial deal: hand cards do NOT flicker after deal animation completes — dealHiding cleared before briscola card reveal to prevent Vue re-render from re-applying reactive opacity:0
-- Briscola partial deal (after trick): existing hand cards stay visible, only 1 new card per player animates from deck
-- Briscola partial deal: dealHiding IS set (all cards hidden), then old cards revealed BEFORE FLIP in handleTurnResult — prevents old cards disappearing during FLIP animation
-- Briscola partial deal: old cards also revealed in runDealAnimation (idempotent, covers maybeCommitOrDeal path)
-- Briscola partial deal: new card NEVER visible before deal animation reaches it (dealHiding hides it from commitState onward)
-- Briscola partial deal: deck count override accounts for only the newly drawn cards (not full hand)
-- Scopa marker: when scopa is scored, the capturing card appears face-up rotated 90 degrees in the captured deck
-- Scopa markers cleared at the start of each new round
-- Round-end overlay shown ONLY after the last turn-result animation completes (not during animation)
-- Game-over overlay shown ONLY after the last turn-result animation completes (not during animation)
-
-### Mobile Animation & Sizing Tests
-- Deck visual (40×71) does NOT overlap table cards on mobile (deck extends to 48px, grid starts at 50px)
-- Sweep animation: cards shrink to exactly 40×71 (captured deck size), NOT smaller
-- Deal animation: card-back clones grow from 40×71 (deck) to 58×103 (card slot) on mobile
-- Desktop sweep: no scale applied (card and captured deck are both 75×133)
-- Desktop deal: no scale applied (deck and card slots are both 75×133)
-- Desktop card dimensions unchanged after mobile fixes (75×133 default)
-- Mobile deck visual position is left: 8px (not overlapping 50px padding-left)
-- All animation clones arrive at exact target size (no visual pop/jump on reveal)
-
-### Layout Stability Tests
-- Player names NEVER move regardless of hand card count (0, 1, 2, or 3 cards)
-- Turn indicator NEVER causes layout shift (toggled via visibility, not v-if)
-- Captured deck position NEVER changes regardless of hand card count
-- Captured deck is always visible on screen (not clipped or scrolled out)
-- Hand cards are centred relative to the table area, not offset by captured deck
-- No scrolling required to see any game element at any point in the game
-
-#### Security Checks
-
-Run these checks after ANY security-related change. These verify security hardening measures.
+**When**: `nginx/**`, `docker-compose.yml`, `frontend/src/composables/**`, `api/src/State/**`, `api/src/Dto/**`, or `.env*` changed.
 
 ```bash
 # SEC1. Nginx security headers present
@@ -540,6 +500,100 @@ grep -q '^ssl/' .gitignore
 # PASS if ssl/ is listed in .gitignore
 ```
 
+## End-to-End Test Scenarios
+
+These are manual/visual tests to verify when doing significant changes. Report which ones are relevant to the change being tested.
+
+### Single Player Flow
+- Create game -> verify 3 cards in hand, 4 on table, deck=30
+- Play card -> AI plays after 1.5s
+- Play through round -> verify round-end scores
+- Next round -> play until game-over
+
+### Multiplayer Flow
+- Browser A creates game -> Browser B joins
+- Verify Mercure events deliver state to both
+- Play turns alternating -> verify opponent animations via SSE
+
+### Edge Cases
+- Scopa flash animation
+- Capture choice overlay
+- Disconnect banner
+- Page refresh (token in localStorage)
+- Tied at 11 (game continues)
+- Briscola trump suit recognized after deck exhausted — a low trump card must beat a high non-trump card even when the deck is empty
+- Briscola card (briscolaCard field) must NOT be cleared when deck empties — it persists for the entire game
+- Messenger worker restart: verify stuck messages (delivered_at set but not completed) are reset by entrypoint.sh on container startup
+
+### Race Condition & Event Pipeline Scenarios
+- **Post-anim play -> choosing state**: Play a card during the 600ms post-animation delay that triggers a choosing state. Verify the capture choice overlay appears (not a hang).
+- **Rapid AI turns (single-player)**: Play a capture that takes >1.5s to animate. AI responds during animation. Verify both animations play correctly in sequence.
+- **Player 2 reload**: In multiplayer, player 2 refreshes the page. Verify they reconnect to the correct Mercure topic and see the correct perspective.
+- **Multiple queued events**: Queue contains turn-result + game-state + round-end. Verify all three are processed and round-end overlay shows.
+- **Deal animation with no deck visual**: Edge case where deck rect is missing. Verify game doesn't hang (processQueue still runs).
+- **Session resume after reload**: Reload during playing, choosing, round-end states. Verify the game resumes correctly in each case.
+- **Exit button**: Click exit during game. Verify leave API is called, session cleared, redirected to lobby.
+
+### Animation & Visual Integrity Tests
+- Deal animation fires on initial game load (cards fly from deck to positions)
+- Deal animation fires on re-deal when hands empty mid-round
+- Deal animation fires on new round after nextRound
+- No duplicate cards ever visible on the table -- verify after every place and capture
+- After capture, the captured cards disappear from the table (not just hidden)
+- Place animation: card slides from hand to table centre, then commitState renders final position
+- Capture animation: card slides to table, glow, sweep to captured deck, then commitState
+- Capture animation fires after capture-choice dialog selection (not just direct captures)
+- FLIP rearrangement: surviving table and hand cards animate smoothly to new positions after commitState
+- Table grid: <=5 cards occupy one centred row; 6+ cards use two centred rows
+- Place animation targets the specific next empty slot (not centre of table area)
+- After capture, remaining table cards reflow into contiguous slots with FLIP animation
+- Table slot positions are stable -- only change when cards are added/removed
+- Hand cards (player and opponent) slide smoothly when a card is played (FLIP on both hands)
+- Opponent card backs FLIP-animate when their count changes
+- Capture choice overlay dismisses BEFORE the capture animation starts
+- Capture choice overlay re-shows when a new choosing state arrives (Fix 3: showCaptureChoice re-enabled after finishAnimation)
+- Choosing turn-result animates the played card leaving the hand (Fix 3: choosing routes to animPlace)
+- Animation layer is empty after every animation completes (no stale clones)
+- During animations, scores/turn indicator/deck count do NOT update (only update on commitState)
+- No one-frame flash of hidden cards between animation end and commitState (Fix 1: restoreStyles after nextTick)
+- End-of-round sweep does not flash score badges to final values before sweep completes (Fix 2: intermediate state preserves display scores)
+- Deal animation: card-back clones fly from deck to each card position (table + both hands)
+- LobbyScreen does NOT commitState -- stores state in pendingState, GameScreen deal-animates it
+- No card flash on initial load (displayState is null until deal animation commits it)
+- No card flash after deal animation completes — nextTick between clearing dealHiding and clearing imperative opacity prevents stale reactive opacity:0 from showing
+- Deck visual NEVER flickers or disappears during deal animation — stays visible from pre-deal count, decrements per card dealt, only goes empty when last card leaves
+- Deck visual stays visible during re-deal (mid-round when both hands empty) — dealDeckCountOverride is set before finishAnimation commits post-deal state
+- Deck visual correct on new round deal — preDealDeckCount computed from newState.deckCount + dealtCardCount (not from stale displayState.deckCount which is 0)
+- Briscola card NOT visible before initial deal animation completes — hidden via dealHidingBriscola, fades in after all hand cards dealt
+- Briscola initial deal: hand cards do NOT flicker after deal animation completes — dealHiding cleared before briscola card reveal to prevent Vue re-render from re-applying reactive opacity:0
+- Briscola partial deal (after trick): existing hand cards stay visible, only 1 new card per player animates from deck
+- Briscola partial deal: dealHiding IS set (all cards hidden), then old cards revealed BEFORE FLIP in handleTurnResult — prevents old cards disappearing during FLIP animation
+- Briscola partial deal: old cards also revealed in runDealAnimation (idempotent, covers maybeCommitOrDeal path)
+- Briscola partial deal: new card NEVER visible before deal animation reaches it (dealHiding hides it from commitState onward)
+- Briscola partial deal: deck count override accounts for only the newly drawn cards (not full hand)
+- Scopa marker: when scopa is scored, the capturing card appears face-up rotated 90 degrees in the captured deck
+- Scopa markers cleared at the start of each new round
+- Round-end overlay shown ONLY after the last turn-result animation completes (not during animation)
+- Game-over overlay shown ONLY after the last turn-result animation completes (not during animation)
+
+### Mobile Animation & Sizing Tests
+- Deck visual (40x71) does NOT overlap table cards on mobile (deck extends to 48px, grid starts at 50px)
+- Sweep animation: cards shrink to exactly 40x71 (captured deck size), NOT smaller
+- Deal animation: card-back clones grow from 40x71 (deck) to 58x103 (card slot) on mobile
+- Desktop sweep: no scale applied (card and captured deck are both 75x133)
+- Desktop deal: no scale applied (deck and card slots are both 75x133)
+- Desktop card dimensions unchanged after mobile fixes (75x133 default)
+- Mobile deck visual position is left: 8px (not overlapping 50px padding-left)
+- All animation clones arrive at exact target size (no visual pop/jump on reveal)
+
+### Layout Stability Tests
+- Player names NEVER move regardless of hand card count (0, 1, 2, or 3 cards)
+- Turn indicator NEVER causes layout shift (toggled via visibility, not v-if)
+- Captured deck position NEVER changes regardless of hand card count
+- Captured deck is always visible on screen (not clipped or scrolled out)
+- Hand cards are centred relative to the table area, not offset by captured deck
+- No scrolling required to see any game element at any point in the game
+
 ## Reporting Format
 
 Always report results in this structure:
@@ -547,23 +601,32 @@ Always report results in this structure:
 ```
 ## Test Results
 
+### Changed Files
+- (list files detected as changed)
+- Categories triggered: (list which categories matched)
+
 ### Backend Unit Tests
-- Status: PASS/FAIL
+- Status: PASS/FAIL/SKIPPED (reason)
 - Tests: X passed, Y failed out of Z total
-- Failures: (list specific failures if any)
+
+### Frontend Vitest
+- Status: PASS/FAIL/SKIPPED (reason)
+- Tests: X passed, Y failed out of Z total
 
 ### Frontend Build
-- Status: PASS/FAIL
+- Status: PASS/FAIL/SKIPPED (reason)
 - Errors: (list if any)
 
 ### Verification Checklist
-- Layout: X/8 pass
-- Stability: X/9 pass
-- Animation: X/28 pass
-- Mobile: X/8 pass
-- Security: X/18 pass
+- Layout: X/8 pass (or SKIPPED)
+- Stability: X/9 pass (or SKIPPED)
+- Animation: X/28 pass (or SKIPPED)
+- NFSBA: X/10 pass (or SKIPPED)
+- Mobile: X/8 pass (or SKIPPED)
+- Race Conditions: X/13 pass (or SKIPPED)
+- Security: X/18 pass (or SKIPPED)
 - Failures: (list specific failures if any)
 
 ### Summary
-(One-line overall status)
+(One-line overall status + which categories were tested)
 ```

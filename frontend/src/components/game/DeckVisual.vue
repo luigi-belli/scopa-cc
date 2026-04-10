@@ -2,8 +2,8 @@
   <div class="deck-visual-wrap" :class="{ empty: count === 0 }" ref="wrapEl">
     <div class="deck-visual" ref="deckEl">
       <CardBack :deckStyle="deckStyle" />
+      <span class="deck-count" v-if="count > 0">{{ count }}</span>
     </div>
-    <span class="deck-count" v-if="count > 0">{{ count }}</span>
   </div>
 </template>
 

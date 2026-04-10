@@ -145,6 +145,18 @@ services:
       - letsencrypt
     restart: unless-stopped
 
+  # Persistent Node.js container for fast frontend tests & builds (dev profile)
+  node:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    entrypoint: ["tail", "-f", "/dev/null"]
+    profiles:
+      - dev
+
 volumes:
   pgdata:
   acme-data:
+  frontend_node_modules:

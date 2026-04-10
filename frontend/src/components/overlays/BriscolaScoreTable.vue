@@ -88,14 +88,16 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 const myCards = computed(() => props.capturedCards[props.myIndex])
 const oppCards = computed(() => props.capturedCards[1 - props.myIndex])
 
-/** Sort cards by Briscola point value descending, then by card value descending */
+/** Sort cards by Briscola point value descending, then by card value descending. Exclude 0-point cards. */
 function sortByPoints(cards: Card[]): Card[] {
-  return [...cards].sort((a, b) => {
-    const pa = BRISCOLA_CARD_POINTS[a.value] ?? 0
-    const pb = BRISCOLA_CARD_POINTS[b.value] ?? 0
-    if (pa !== pb) return pb - pa
-    return b.value - a.value
-  })
+  return [...cards]
+    .filter((c) => (BRISCOLA_CARD_POINTS[c.value] ?? 0) > 0)
+    .sort((a, b) => {
+      const pa = BRISCOLA_CARD_POINTS[a.value] ?? 0
+      const pb = BRISCOLA_CARD_POINTS[b.value] ?? 0
+      if (pa !== pb) return pb - pa
+      return b.value - a.value
+    })
 }
 
 const mySorted = computed(() => sortByPoints(myCards.value))

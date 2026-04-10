@@ -4,14 +4,14 @@ upstream php_backend {
 }
 
 # Rate limit zones (keyed by client IP)
-# Game creation: 5 req/min
-limit_req_zone $binary_remote_addr zone=api_create:1m rate=5r/m;
-# Game actions (play-card, select-capture, join, leave, next-round): 30 req/min
-limit_req_zone $binary_remote_addr zone=api_action:2m rate=30r/m;
-# Heartbeat: 20 req/min — accommodates two players behind the same NAT (each sends 6/min)
-limit_req_zone $binary_remote_addr zone=api_heartbeat:1m rate=20r/m;
-# Read endpoints (GET state, lookup): 60 req/min
-limit_req_zone $binary_remote_addr zone=api_read:2m rate=60r/m;
+# Game creation: 50 req/min
+limit_req_zone $binary_remote_addr zone=api_create:1m rate=50r/m;
+# Game actions (play-card, select-capture, join, leave, next-round): 300 req/min
+limit_req_zone $binary_remote_addr zone=api_action:2m rate=300r/m;
+# Heartbeat: 200 req/min
+limit_req_zone $binary_remote_addr zone=api_heartbeat:1m rate=200r/m;
+# Read endpoints (GET state, lookup): 600 req/min
+limit_req_zone $binary_remote_addr zone=api_read:2m rate=600r/m;
 
 # ─── Main HTTPS server: HTTP/2 + HTTP/3 (QUIC) ───
 server {
@@ -86,6 +86,9 @@ server {
         set $early_data_reject 1;
     }
 
+    # Redirect plain HTTP requests sent to the HTTPS port
+    error_page 497 =301 https://$host:${EXTERNAL_PORT}$request_uri;
+
     # ─── SPA fallback ───
     location / {
         try_files $uri $uri/ /index.html;
@@ -124,7 +127,7 @@ server {
         if ($early_data_reject = "1") {
             return 425;
         }
-        limit_req zone=api_create burst=2 nodelay;
+        limit_req zone=api_create burst=20 nodelay;
         limit_req_status 429;
         include /etc/nginx/fastcgi_api.conf;
     }
@@ -134,7 +137,7 @@ server {
         if ($early_data_reject = "1") {
             return 425;
         }
-        limit_req zone=api_heartbeat burst=3 nodelay;
+        limit_req zone=api_heartbeat burst=30 nodelay;
         limit_req_status 429;
         include /etc/nginx/fastcgi_api.conf;
     }
@@ -144,14 +147,14 @@ server {
         if ($early_data_reject = "1") {
             return 425;
         }
-        limit_req zone=api_action burst=5 nodelay;
+        limit_req zone=api_action burst=50 nodelay;
         limit_req_status 429;
         include /etc/nginx/fastcgi_api.conf;
     }
 
     # Read endpoints and any other API routes — general limit
     location /api/ {
-        limit_req zone=api_read burst=10 nodelay;
+        limit_req zone=api_read burst=100 nodelay;
         limit_req_status 429;
         include /etc/nginx/fastcgi_api.conf;
     }

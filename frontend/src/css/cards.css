@@ -60,6 +60,18 @@
   transition: box-shadow 0.3s;
 }
 
+/* Nudge pulse: gentle glow + lift to remind player it's their turn.
+   Only when NOT hovered so the hover lift isn't overridden by the animation. */
+.card.nudge:not(:hover) {
+  animation: cardNudge 1s ease-in-out;
+}
+@keyframes cardNudge {
+  0%   { transform: translateY(0);     box-shadow: none; }
+  30%  { transform: translateY(-8px);  box-shadow: 0 0 14px 4px rgba(255, 215, 0, 0.5); }
+  60%  { transform: translateY(-4px);  box-shadow: 0 0 10px 2px rgba(255, 215, 0, 0.3); }
+  100% { transform: translateY(0);     box-shadow: none; }
+}
+
 /* ─── 3D Card Flip (animation clones only) ─── */
 .card-flip {
   perspective: 800px;
@@ -70,7 +82,7 @@
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 0.3s ease-in-out;
+  transition: transform 0.2s ease-in-out;
 }
 .card-flip.flipped .card-flip-inner {
   transform: rotateY(180deg);
@@ -153,7 +165,6 @@
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
   transform-origin: center center;
-  z-index: 1;
   pointer-events: none;
   opacity: 0.95;
 }
