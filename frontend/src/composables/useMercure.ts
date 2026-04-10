@@ -2,7 +2,7 @@ import { ref, onUnmounted, type Ref } from 'vue'
 import type { GameState, TurnResult, RoundEndData, GameOverData } from '@/types/game'
 
 export function setMercureCookie(token: string): void {
-  document.cookie = `mercureAuthorization=${token}; path=/.well-known/mercure; SameSite=Strict`
+  document.cookie = `mercureAuthorization=${token}; path=/.well-known/mercure; SameSite=Strict; Secure`
 }
 
 export interface MercureHandlers {

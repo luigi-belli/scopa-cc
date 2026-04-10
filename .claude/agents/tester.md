@@ -498,6 +498,30 @@ grep 'innerHTML' frontend/src/components/screens/GameScreen.vue
 # SEC8. GameLookupProvider limits name query param length
 grep 'mb_substr' api/src/State/Provider/GameLookupProvider.php
 # PASS if mb_substr is used to truncate name
+
+# SEC9. TLS session tickets disabled (forward secrecy without external key rotation)
+grep 'ssl_session_tickets off' nginx/default.conf
+# PASS if ssl_session_tickets is off
+
+# SEC10. HSTS header present on HTTPS server
+grep 'Strict-Transport-Security' nginx/default.conf
+# PASS if HSTS header is present
+
+# SEC11. 0-RTT early data rejected on POST endpoints
+grep -c 'early_data_reject' nginx/default.conf
+# PASS if count >= 4 (variable set + 3 POST location blocks)
+
+# SEC12. HTTPS param hardcoded to "on" in fastcgi config
+grep 'HTTPS on' nginx/fastcgi_api.conf
+# PASS if HTTPS is set to "on" (not conditional)
+
+# SEC13. Mercure cookie has Secure flag
+grep 'Secure' frontend/src/composables/useMercure.ts
+# PASS if Secure flag present in cookie string
+
+# SEC14. Alt-Svc port matches exposed port
+grep 'Alt-Svc.*5982' nginx/default.conf
+# PASS if Alt-Svc header references port 5982
 ```
 
 ## Reporting Format
@@ -521,7 +545,7 @@ Always report results in this structure:
 - Stability: X/9 pass
 - Animation: X/28 pass
 - Mobile: X/8 pass
-- Security: X/8 pass
+- Security: X/14 pass
 - Failures: (list specific failures if any)
 
 ### Summary

@@ -79,7 +79,8 @@ services:
       context: .
       dockerfile: nginx/Dockerfile
     ports:
-      - "5982:80"
+      - "5982:443/tcp"   # HTTPS + HTTP/2
+      - "5982:443/udp"   # HTTP/3 (QUIC)
     depends_on:
       php:
         condition: service_healthy
