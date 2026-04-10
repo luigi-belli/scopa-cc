@@ -114,17 +114,21 @@ services:
         acme.sh --set-default-ca --server letsencrypt
         acme.sh --register-account -m "$$EMAIL" 2>/dev/null || true
         # Issue cert if not already present
-        acme.sh --list | grep -q "$$DOMAIN" || \
-          acme.sh --issue -d "$$DOMAIN" --dns dns_dynu
+        if ! acme.sh --list | grep -q "$$DOMAIN"; then
+          acme.sh --issue -d "$$DOMAIN" --dns dns_dynu || {
+            echo "acme: ERROR — certificate issuance failed for $$DOMAIN"
+            exit 1
+          }
+        fi
         # Install cert to shared ssl directory
-        acme.sh --install-cert -d "$$DOMAIN" \
+        acme.sh --install-cert -d "$$DOMAIN" --ecc \
           --fullchain-file /ssl/cert.pem --key-file /ssl/key.pem
         echo "acme: Certificate ready for $$DOMAIN"
         # Renewal loop: check daily, reinstall after renewal
         while true; do
           sleep 86400
           acme.sh --cron
-          acme.sh --install-cert -d "$$DOMAIN" \
+          acme.sh --install-cert -d "$$DOMAIN" --ecc \
             --fullchain-file /ssl/cert.pem --key-file /ssl/key.pem 2>/dev/null || true
         done
     profiles:

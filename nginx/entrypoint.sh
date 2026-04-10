@@ -6,7 +6,7 @@ CERT_DIR="/etc/nginx/ssl"
 mkdir -p "$CERT_DIR"
 
 # Use provided certificate if both files exist, otherwise generate self-signed
-if [ -f "$CERT_DIR/cert.pem" ] && [ -f "$CERT_DIR/key.pem" ]; then
+if [ -s "$CERT_DIR/cert.pem" ] && [ -s "$CERT_DIR/key.pem" ]; then
     echo "nginx: Using provided certificate"
 else
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
