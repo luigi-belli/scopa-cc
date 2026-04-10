@@ -79,7 +79,16 @@ services:
       context: .
       dockerfile: nginx/Dockerfile
     ports:
-      - "5982:80"
+      - "${INTERNAL_PORT:-5982}:443/tcp"   # HTTPS + HTTP/2
+      - "${INTERNAL_PORT:-5982}:443/udp"   # HTTP/3 (QUIC)
+    environment:
+      EXTERNAL_HOSTNAME: ${EXTERNAL_HOSTNAME:-localhost}
+      EXTERNAL_PORT: ${EXTERNAL_PORT:-5982}
+      # Only substitute these two variables in the nginx template;
+      # leave nginx-native $variables (e.g. $host, $uri) untouched.
+      NGINX_ENVSUBST_FILTER: "^EXTERNAL_"
+    volumes:
+      - ./ssl:/etc/nginx/ssl
     depends_on:
       php:
         condition: service_healthy

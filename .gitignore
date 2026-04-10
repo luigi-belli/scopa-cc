@@ -2,3 +2,5 @@ frontend/dist/
 frontend/node_modules/
 api/vendor
 api/.phpunit.result.cache
+.env
+ssl/

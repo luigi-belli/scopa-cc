@@ -13,7 +13,7 @@ You are a testing agent for a Scopa (Italian card game) web application. Your jo
 
 - **Backend**: PHP 8.4 + Symfony 7.3 + API Platform, in `api/`
 - **Frontend**: Vue 3 + TypeScript, in `frontend/`
-- **Infrastructure**: Docker Compose with 5 services (postgres, php, messenger-worker, mercure, nginx), exposed on port 5982
+- **Infrastructure**: Docker Compose with 6 services (postgres, php, messenger-worker, cron, mercure, nginx), exposed on port 5982
 
 ## How to Run Tests
 
@@ -458,10 +458,10 @@ Run these checks after ANY security-related change. These verify security harden
 
 ```bash
 # SEC1. Nginx security headers present
-grep 'X-Frame-Options' nginx/default.conf
-grep 'X-Content-Type-Options' nginx/default.conf
-grep 'Referrer-Policy' nginx/default.conf
-grep 'Content-Security-Policy' nginx/default.conf
+grep 'X-Frame-Options' nginx/default.conf.template
+grep 'X-Content-Type-Options' nginx/default.conf.template
+grep 'Referrer-Policy' nginx/default.conf.template
+grep 'Content-Security-Policy' nginx/default.conf.template
 # PASS if all four headers are present
 
 # SEC2. Mercure anonymous mode disabled
@@ -498,6 +498,46 @@ grep 'innerHTML' frontend/src/components/screens/GameScreen.vue
 # SEC8. GameLookupProvider limits name query param length
 grep 'mb_substr' api/src/State/Provider/GameLookupProvider.php
 # PASS if mb_substr is used to truncate name
+
+# SEC9. TLS session tickets disabled (forward secrecy without external key rotation)
+grep 'ssl_session_tickets off' nginx/default.conf.template
+# PASS if ssl_session_tickets is off
+
+# SEC10. HSTS header present on HTTPS server
+grep 'Strict-Transport-Security' nginx/default.conf.template
+# PASS if HSTS header is present
+
+# SEC11. 0-RTT early data rejected on POST endpoints
+grep -c 'early_data_reject' nginx/default.conf.template
+# PASS if count >= 4 (variable set + 3 POST location blocks)
+
+# SEC12. HTTPS param hardcoded to "on" in fastcgi config
+grep 'HTTPS on' nginx/fastcgi_api.conf
+# PASS if HTTPS is set to "on" (not conditional)
+
+# SEC13. Mercure cookie has Secure flag
+grep 'Secure' frontend/src/composables/useMercure.ts
+# PASS if Secure flag present in cookie string
+
+# SEC14. Alt-Svc port uses EXTERNAL_PORT parameter
+grep 'Alt-Svc.*EXTERNAL_PORT' nginx/default.conf.template
+# PASS if Alt-Svc header uses ${EXTERNAL_PORT} variable
+
+# SEC15. Nginx config is a template (envsubst), not static
+test -f nginx/default.conf.template && ! test -f nginx/default.conf
+# PASS if template exists and static config does not
+
+# SEC16. .env is gitignored
+grep -q '^\.env$' .gitignore
+# PASS if .env is listed in .gitignore
+
+# SEC17. .env.dist exists with required parameters
+grep -q 'EXTERNAL_HOSTNAME' .env.dist && grep -q 'EXTERNAL_PORT' .env.dist && grep -q 'INTERNAL_PORT' .env.dist
+# PASS if all three parameters are present
+
+# SEC18. ssl/ directory is gitignored
+grep -q '^ssl/' .gitignore
+# PASS if ssl/ is listed in .gitignore
 ```
 
 ## Reporting Format
@@ -521,7 +561,7 @@ Always report results in this structure:
 - Stability: X/9 pass
 - Animation: X/28 pass
 - Mobile: X/8 pass
-- Security: X/8 pass
+- Security: X/18 pass
 - Failures: (list specific failures if any)
 
 ### Summary
