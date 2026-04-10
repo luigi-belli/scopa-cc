@@ -196,7 +196,7 @@ describe('Fix 2: animateEndOfRoundSweep intermediate state preserves display sco
 describe('Fix 3: choosing turn-result animation and overlay toggle', () => {
   /**
    * The 'choosing' turn-result must be handled with animPlace so the played
-   * card visually leaves the hand. After finishAnimation commits the choosing
+   * card visually leaves the hand. After the inline commit applies the choosing
    * state, showCaptureChoice must be re-enabled.
    */
 
@@ -212,13 +212,13 @@ describe('Fix 3: choosing turn-result animation and overlay toggle', () => {
     expect(Object.keys(handler)).toContain('choosing')
   })
 
-  it('showCaptureChoice must be set after finishAnimation commits choosing state', () => {
-    // Simulate the flow: finishAnimation commits choosing state,
+  it('showCaptureChoice must be set after inline commit applies choosing state', () => {
+    // Simulate the flow: inline commit applies choosing state,
     // then showCaptureChoice must be set to true
     let showCaptureChoice = false // was set to false by a previous selection
     const committedState = makeState({ state: 'choosing', pendingChoice: [[{ suit: 'Denari', value: 7 }]] })
 
-    // After finishAnimation:
+    // After inline commit:
     if (committedState.state === 'choosing') {
       showCaptureChoice = true
     }
@@ -245,14 +245,14 @@ describe('Fix 3: choosing turn-result animation and overlay toggle', () => {
     showCaptureChoice = false
 
     // ... animation + API call ...
-    // Next choosing turn-result arrives, animation plays, finishAnimation commits
+    // Next choosing turn-result arrives, animation plays, inline commit applies
 
     const newChoosingState = makeState({
       state: 'choosing',
       pendingChoice: [[{ suit: 'Coppe', value: 3 }], [{ suit: 'Bastoni', value: 3 }]],
     })
 
-    // The fix: after finishAnimation, check committed state
+    // The fix: after inline commit, check committed state
     if (newChoosingState.state === 'choosing') {
       showCaptureChoice = true
     }
@@ -268,9 +268,9 @@ describe('Fix 4: last move of round — early return to sweep on round-end', () 
    * pendingState is null after the last turn animation. Without the fix:
    *
    * 1. animCapture hides captured cards via setStyle(visibility:hidden)
-   * 2. pendingState is null → finishAnimation NOT called → displayState unchanged
+   * 2. pendingState is null → no commit → displayState unchanged
    * 3. restoreStyles() makes captured cards visible again — FLASH!
-   * 4. 600ms post-animation delay (cards remain visible)
+   * 4. 200ms post-animation delay (cards remain visible)
    * 5. processQueue → animateEndOfRoundSweep → commits intermediate state
    *
    * Fix: detect round-end/game-over as next queued event when pendingState is null.

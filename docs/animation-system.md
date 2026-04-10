@@ -16,8 +16,9 @@ All DOM changes during animation are imperative (`el.remove()`, `el.style`, `doc
 Mercure turn-result  → handleTurnResult(data)         [sets animating=true]
 Mercure game-state   → stashState(newState)            [buffers, no render]
                      → runPlaceAnimation/runCaptureAnimation
-                     → finishAnimation() at end        [Vue re-renders]
-                     → sleep(600ms) afterAnimation delay
+                     → commitState (inline)            [Vue re-renders, animating stays true]
+                     → FLIP rearrangement              [animating=true guards reflow]
+                     → animating=false, post-anim delay (200ms)
                      → commit any stashed pendingState  [if arrived during delay]
                      → processQueue()                  [handle queued events]
 ```
@@ -26,8 +27,8 @@ Events that arrive while busy (`store.animating || inPostAnimDelay`) are queued 
 
 **Event queuing rules:**
 - `turn-result`, `round-end`, `game-over`: always queued when busy
-- `game-state`: **stashed** if the queue is empty (for the current animation's `finishAnimation`), **queued** if there are already queued events (preserves ordering for multiple turns)
-- `canPlay` blocks during BOTH `animating` and `inPostAnimDelay` to prevent plays during the 600ms gap
+- `game-state`: **stashed** if the queue is empty (for the current animation's commit), **queued** if there are already queued events (preserves ordering for multiple turns)
+- `animating` stays `true` through the entire animation + FLIP reflow, then transitions to `inPostAnimDelay` for the 200ms gap. `canPlay` checks `animating` (blocks during FLIP) but not `inPostAnimDelay` (responsive clicks)
 
 **processQueue chaining:**
 - After `turn-result`: `handleTurnResult` runs animation, which calls `processQueue` at the end
@@ -92,7 +93,7 @@ Events that arrive while busy (`store.animating || inPostAnimDelay`) are queued 
 | Deal stagger (hands) | 150ms | — |
 | Deal stagger (table) | 75ms | — |
 | Scopa flash | 1500ms | scopaFlash keyframe |
-| afterAnimation delay | 600ms default | — |
+| afterAnimation delay | 200ms | — |
 | Safety timeout | 10000ms | — |
 
 ## FLIP Utilities (flipUtils.ts)

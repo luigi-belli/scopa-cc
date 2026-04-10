@@ -428,7 +428,7 @@ const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
     if (isBusy()) {
       // If there are already queued events, queue the game-state too so ordering
       // is preserved (prevents stash-overwrite when multiple turns are queued).
-      // Otherwise, stash it for the currently-running animation's finishAnimation.
+      // Otherwise, stash it for the currently-running animation's commit.
       if (store.pendingEvents.length > 0) {
         store.queueEvent({ type: 'game-state', data })
       } else {
@@ -526,6 +526,7 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
     opponentTotalScore: ds?.opponentTotalScore ?? newState.opponentTotalScore,
   }
   store.commitState(intermediateState)
+  store.animating = true
   await nextTick()
 
   // FLIP: animate remaining cards from their old grid positions to the new
@@ -546,8 +547,6 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
     flipPs.push(new Promise(r => { a.onfinish = () => r() }))
   })
   if (flipPs.length > 0) await Promise.all(flipPs)
-
-  store.animating = true
 
   try {
     // Pause before sweep so there's a visual gap after the last turn animation
@@ -710,7 +709,7 @@ async function handleTurnResult(result: TurnResult) {
   // 2. When the round ends, the server publishes turn-result + round-end (no
   //    separate game-state event — see publishTurnOutcome). So pendingState is null.
   //    If we follow the normal path, restoreStyles() would flash the captured cards
-  //    back to visible for 600ms+ before the sweep starts.
+  //    back to visible for 200ms+ before the sweep starts.
   //    Fix: skip restore/FLIP/delay and go straight to processQueue, which runs
   //    animateEndOfRoundSweep (it commits its own intermediate state via commitState).
   //    Keep animating=true so any straggler events stay queued through the sweep.
@@ -739,7 +738,7 @@ async function handleTurnResult(result: TurnResult) {
   // otherwise the newly drawn card flashes visible before the deal animation hides it.
   // For Briscola partial deals, runDealAnimation immediately reveals old cards after layout.
   // Capture pre-commit hand info for Briscola partial deal detection
-  // (finishAnimation will overwrite displayState, so we must save this now).
+  // (the inline commit will overwrite displayState, so we must save this now).
   let redealCtx: DealContext | undefined
   if (isRedeal) {
     store.dealHiding = true
@@ -755,16 +754,19 @@ async function handleTurnResult(result: TurnResult) {
   }
 
   // 5. *** HARD INVARIANT: commitState ONLY here, after ALL animation ***
-  if (store.pendingState) store.finishAnimation()
-  else store.animating = false
+  //    Commit pending state but keep animating=true — the FLIP rearrangement
+  //    (500ms) still needs the guard so incoming Mercure events stay queued.
+  if (store.pendingState) {
+    store.displayState = store.pendingState
+    store.serverState = store.pendingState
+    store.pendingState = null
+  }
+  // store.animating stays true through FLIP + post-anim delay
 
   // Re-enable capture choice overlay if committed state is choosing
   // (needed because showCaptureChoice is set to false on selection,
   // and the game-state was stashed — not routed through the Mercure handler)
   if (gs.value?.state === 'choosing') showCaptureChoice.value = true
-
-  // Keep animating flag set through FLIP + deal so incoming events stay queued
-  if (isRedeal) store.animating = true
 
   // 5. FLIP: animate surviving cards from old positions to new
   await nextTick()
@@ -800,7 +802,9 @@ async function handleTurnResult(result: TurnResult) {
     return  // deal animation calls processQueue when done
   }
 
-  // Post-animation delay: keep queueing events so nothing commits during gap
+  // Post-animation delay: release animating, use inPostAnimDelay as the guard
+  // so isBusy() still returns true but canPlay is responsive (per d330813).
+  store.animating = false
   inPostAnimDelay.value = true
   await sleep(POST_ANIM)
   inPostAnimDelay.value = false
@@ -1083,7 +1087,7 @@ async function animTrick(result: TurnResult) {
 // - Briscola partial deal (after trick: 1 card per player)
 //
 // For Briscola partial deals, the caller (handleTurnResult) passes a
-// DealContext with the pre-commit hand info, since finishAnimation() has
+// DealContext with the pre-commit hand info, since the inline commit has
 // already overwritten displayState by the time we get here.
 // ════════════════════════════════════════════════════
 
@@ -1132,7 +1136,7 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
   // Freeze deck visual at pre-deal count so it doesn't vanish before animation.
   // Compute pre-deal count by adding back the cards that were dealt
   // (server's deckCount is already post-deal). If the override was already set
-  // (re-deal path sets it before finishAnimation to prevent flicker), keep it.
+  // (re-deal path sets it before the inline commit to prevent flicker), keep it.
   const prevDeckCount = ctx?.prevDeckCount ?? store.displayState?.deckCount ?? 40
   const newCardsDealt = isBriscolaPartialDeal
     ? prevDeckCount - newState.deckCount
@@ -1350,7 +1354,7 @@ async function processQueue() {
 
   if (ev.type === 'turn-result') {
     // If the next queued event is a game-state, pre-stash it so the animation's
-    // finishAnimation() can commit it (preserves correct per-turn state ordering).
+    // inline commit can use it (preserves correct per-turn state ordering).
     if (store.pendingEvents.length > 0 && store.pendingEvents[0].type === 'game-state') {
       const gsEv = store.shiftEvent()!
       if (gsEv.type === 'game-state') store.stashState(gsEv.data)
