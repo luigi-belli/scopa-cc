@@ -105,7 +105,7 @@ services:
       Dynu_Secret: ${DYNU_SECRET}
     volumes:
       - ./ssl:/ssl
-      - acme-data:/acme.sh
+      - ./acme-data:/acme.sh
     entrypoint: ["sh", "-c"]
     command:
       - |
@@ -117,7 +117,7 @@ services:
             --fullchain-file /ssl/cert.pem --key-file /ssl/key.pem
         }
         issue_cert() {
-          acme.sh --issue -d "$$DOMAIN" --dns dns_dynu --keylength ec-256 "$$@" || {
+          acme.sh --issue -d "$$DOMAIN" --dns dns_dynu "$$@" || {
             echo "acme: ERROR — certificate issuance failed for $$DOMAIN"
             return 1
           }
