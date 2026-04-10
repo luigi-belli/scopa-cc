@@ -48,6 +48,15 @@ export const TRESSETTE_CARD_POINTS: Record<number, number> = {
   4: 0, 5: 0, 6: 0, 7: 0,
 }
 
+/** Format a Tressette ×3 integer score as a fraction (e.g. 29 → "9 2/3"). */
+export function formatTressetteScore(n: number): string {
+  const whole = Math.floor(n / 3)
+  const remainder = n % 3
+  if (remainder === 0) return `${whole}`
+  if (whole === 0) return `${remainder}/3`
+  return `${whole} ${remainder}/3`
+}
+
 /** Tressette card strength for trick resolution (3 strongest, 4 weakest). */
 export const TRESSETTE_CARD_STRENGTH: Record<number, number> = {
   3: 10, 2: 9, 1: 8, 10: 7, 9: 6, 8: 5, 7: 4, 6: 3, 5: 2, 4: 1,

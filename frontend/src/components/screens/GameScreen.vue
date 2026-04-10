@@ -6,7 +6,7 @@
     <div class="player-area opponent">
       <div class="player-info">
         <span class="player-name">{{ gs?.opponentName }}</span>
-        <span class="score-badge">{{ gs?.opponentTotalScore }} {{ t('game.pts') }}</span>
+        <span class="score-badge">{{ opponentScoreDisplay }} {{ t('game.pts') }}</span>
         <span class="scopa-badge" v-if="isScopa && (gs?.opponentScope ?? 0) > 0">{{ gs?.opponentScope }} {{ gs?.opponentScope === 1 ? t('game.scopa') : t('game.scope') }}</span>
       </div>
       <TurnIndicator
@@ -87,7 +87,7 @@
       />
       <div class="player-info">
         <span class="player-name">{{ gs?.myName }}</span>
-        <span class="score-badge">{{ gs?.myTotalScore }} {{ t('game.pts') }}</span>
+        <span class="score-badge">{{ myScoreDisplay }} {{ t('game.pts') }}</span>
         <span class="scopa-badge" v-if="isScopa && (gs?.myScope ?? 0) > 0">{{ gs?.myScope }} {{ gs?.myScope === 1 ? t('game.scopa') : t('game.scope') }}</span>
       </div>
     </div>
@@ -145,7 +145,7 @@ import { useApi } from '@/composables/useApi'
 import { useMercure, setMercureCookie } from '@/composables/useMercure'
 import { useI18n } from '@/i18n'
 import type { Card, DeckStyle } from '@/types/card'
-import { cardImagePath, cardBackPath } from '@/types/card'
+import { cardImagePath, cardBackPath, formatTressetteScore } from '@/types/card'
 import type { GameState, TurnResult, RoundScores, RoundEndData, GameOverData, SweepData } from '@/types/game'
 import { cardKey, sleep, computeSlotRect, computeFlyToDelta } from '@/animations/flipUtils'
 import type { SlotGridParams } from '@/animations/flipUtils'
@@ -224,6 +224,12 @@ const isBriscola = computed(() => gs.value?.gameType === 'briscola')
 const isTressette = computed(() => gs.value?.gameType === 'tressette')
 const isTrickGame = computed(() => isBriscola.value || isTressette.value)
 const isScopa = computed(() => !isTrickGame.value)
+const myScoreDisplay = computed(() =>
+  isTressette.value ? formatTressetteScore(gs.value?.myTotalScore ?? 0) : String(gs.value?.myTotalScore ?? 0),
+)
+const opponentScoreDisplay = computed(() =>
+  isTressette.value ? formatTressetteScore(gs.value?.opponentTotalScore ?? 0) : String(gs.value?.opponentTotalScore ?? 0),
+)
 /** Override deck count during deal animation so the deck visual stays visible
  *  until the last card-back clone flies out. null = use live gs value. */
 const dealDeckCountOverride = ref<number | null>(null)

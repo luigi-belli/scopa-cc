@@ -8,18 +8,18 @@
       </tr>
       <tr class="score-row-clickable" @click="showDetail = true">
         <td>{{ t('tressette.score.points') }}</td>
-        <td :class="{ 'winner-cell': myCardPoints > oppCardPoints }">{{ myCardPoints }}</td>
-        <td :class="{ 'winner-cell': oppCardPoints > myCardPoints }">{{ oppCardPoints }}</td>
+        <td :class="{ 'winner-cell': myCardPoints > oppCardPoints }">{{ formatTressetteScore(myCardPoints) }}</td>
+        <td :class="{ 'winner-cell': oppCardPoints > myCardPoints }">{{ formatTressetteScore(oppCardPoints) }}</td>
       </tr>
       <tr>
         <td>{{ t('tressette.score.ultima') }}</td>
-        <td :class="{ 'winner-cell': myUltima > 0 }">{{ myUltima }}</td>
-        <td :class="{ 'winner-cell': oppUltima > 0 }">{{ oppUltima }}</td>
+        <td :class="{ 'winner-cell': myUltima > 0 }">{{ formatTressetteScore(myUltima) }}</td>
+        <td :class="{ 'winner-cell': oppUltima > 0 }">{{ formatTressetteScore(oppUltima) }}</td>
       </tr>
       <tr class="total-row">
         <td>{{ t('tressette.score.total') }}</td>
-        <td :class="{ 'winner-cell': myTotalScore > oppTotalScore }">{{ myTotalScore }}</td>
-        <td :class="{ 'winner-cell': oppTotalScore > myTotalScore }">{{ oppTotalScore }}</td>
+        <td :class="{ 'winner-cell': myTotalScore > oppTotalScore }">{{ formatTressetteScore(myTotalScore) }}</td>
+        <td :class="{ 'winner-cell': oppTotalScore > myTotalScore }">{{ formatTressetteScore(oppTotalScore) }}</td>
       </tr>
     </table>
   </div>
@@ -42,7 +42,7 @@
                 :alt="t('card.alt', { value: card.value, suit: t(`suit.${card.suit}`) })"
                 class="score-detail-card"
               />
-              <span class="primiera-badge">{{ TRESSETTE_CARD_POINTS[card.value] ?? 0 }}</span>
+              <span class="primiera-badge">{{ formatTressetteScore(TRESSETTE_CARD_POINTS[card.value] ?? 0) }}</span>
             </div>
           </div>
         </div>
@@ -60,7 +60,7 @@
                 :alt="t('card.alt', { value: card.value, suit: t(`suit.${card.suit}`) })"
                 class="score-detail-card"
               />
-              <span class="primiera-badge">{{ TRESSETTE_CARD_POINTS[card.value] ?? 0 }}</span>
+              <span class="primiera-badge">{{ formatTressetteScore(TRESSETTE_CARD_POINTS[card.value] ?? 0) }}</span>
             </div>
           </div>
         </div>
@@ -72,7 +72,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import type { Card, DeckStyle } from '@/types/card'
-import { cardImagePath, TRESSETTE_CARD_POINTS } from '@/types/card'
+import { cardImagePath, TRESSETTE_CARD_POINTS, formatTressetteScore } from '@/types/card'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
