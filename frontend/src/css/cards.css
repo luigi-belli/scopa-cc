@@ -61,9 +61,16 @@
 }
 
 /* Nudge pulse: gentle glow + lift to remind player it's their turn.
-   Only when NOT hovered so the hover lift isn't overridden by the animation. */
-.card.nudge:not(:hover) {
+   On hover-capable devices, suppress nudge while hovered so the hover lift
+   isn't overridden.  On touch devices :hover can stick after a tap, so we
+   apply the animation unconditionally there. */
+.card.nudge {
   animation: cardNudge 1s ease-in-out;
+}
+@media (hover: hover) {
+  .card.nudge:hover {
+    animation: none;
+  }
 }
 @keyframes cardNudge {
   0%   { transform: translateY(0);     box-shadow: none; }

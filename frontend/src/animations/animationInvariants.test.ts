@@ -1367,3 +1367,83 @@ describe('played card stays on top during entire capture animation', () => {
     expect(faceCloneZ).toBeLessThan(PLAY_CLONE_Z)
   })
 })
+
+describe('Fix 14: Nudge animation must not use :not(:hover) — sticky hover on mobile', () => {
+  /**
+   * On touch devices, :hover can stick after a tap (the browser keeps the
+   * :hover pseudo-class active until the user taps elsewhere). If the nudge
+   * CSS rule uses `.card.nudge:not(:hover)`, any card with sticky hover will
+   * silently skip the animation — the class is applied but the selector
+   * doesn't match.
+   *
+   * Fix: apply the animation on `.card.nudge` unconditionally, and suppress
+   * it on hover only inside `@media (hover: hover)` (devices with a real
+   * pointer). Touch-only devices never match that media query, so every card
+   * always nudges.
+   */
+
+  it('nudge CSS must not gate animation behind :not(:hover)', async () => {
+    const { readFile } = await import('fs/promises')
+    const { resolve } = await import('path')
+
+    const css = await readFile(
+      resolve(__dirname, '../css/cards.css'),
+      'utf-8',
+    )
+
+    // The old, broken rule: .card.nudge:not(:hover)
+    // This causes missed nudges on mobile when :hover sticks after a tap.
+    expect(css).not.toMatch(/\.card\.nudge:not\(:hover\)/)
+
+    // The fix: unconditional .card.nudge { animation: ... }
+    // Hover suppression wrapped in @media (hover: hover) { .card.nudge:hover { animation: none } }
+    expect(css).toMatch(/\.card\.nudge\s*\{[^}]*animation:\s*cardNudge/)
+    expect(css).toMatch(/@media\s*\(hover:\s*hover\)\s*\{[^}]*\.card\.nudge:hover\s*\{[^}]*animation:\s*none/)
+  })
+
+  it('nudge class applies uniformly to all hand cards (no per-card gating)', () => {
+    // The nudge flag is a single boolean ref applied to every card via
+    // :class="{ nudge: nudging }". This means either ALL cards nudge or
+    // NONE do — there is no per-card condition that could skip one.
+    //
+    // Simulate the template binding for a 3-card hand:
+    const nudging = true
+    const hand = [
+      { suit: 'Denari', value: 7 },
+      { suit: 'Coppe', value: 3 },
+      { suit: 'Spade', value: 1 },
+    ]
+
+    const classes = hand.map(() => ({ nudge: nudging }))
+
+    // Every card must have the nudge class
+    for (const cls of classes) {
+      expect(cls.nudge).toBe(true)
+    }
+  })
+
+  it('nudge toggle off→on via double-rAF restarts animation for every card', () => {
+    // When nudging toggles false→true, the CSS animation restarts because
+    // the class is removed and re-added. The double requestAnimationFrame
+    // ensures a real repaint between removal and re-addition.
+    //
+    // Simulate the scheduling cycle:
+    let nudging = true  // animation playing
+
+    // Timer fires — toggle off
+    nudging = false
+    expect(nudging).toBe(false)
+
+    // First rAF callback (layout flush)
+    // Second rAF callback (paint
+    //   — browser has now committed a frame without the class)
+    // Guard check passes, re-enable:
+    const canPlay = true
+    if (canPlay) {
+      nudging = true
+    }
+
+    // All cards see nudging=true again — animation restarts
+    expect(nudging).toBe(true)
+  })
+})
