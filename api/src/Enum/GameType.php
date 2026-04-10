@@ -8,4 +8,5 @@ enum GameType: string
 {
     case Scopa = 'scopa';
     case Briscola = 'briscola';
+    case Tressette = 'tressette';
 }

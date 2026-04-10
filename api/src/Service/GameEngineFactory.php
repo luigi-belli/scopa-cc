@@ -12,6 +12,7 @@ final class GameEngineFactory
     public function __construct(
         private readonly ScopaEngine $scopaEngine,
         private readonly BriscolaEngine $briscolaEngine,
+        private readonly TressetteEngine $tressetteEngine,
     ) {}
 
     public function forGame(Game $game): GameEngine
@@ -24,6 +25,7 @@ final class GameEngineFactory
         return match ($type) {
             GameType::Scopa => $this->scopaEngine,
             GameType::Briscola => $this->briscolaEngine,
+            GameType::Tressette => $this->tressetteEngine,
         };
     }
 }

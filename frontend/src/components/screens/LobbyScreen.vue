@@ -42,6 +42,10 @@
               class="lang-btn" :class="{ selected: gameType === 'briscola' }"
               @click="gameType = 'briscola'; savePreferences()"
             >{{ t('lobby.gameType.briscola') }}</button>
+            <button
+              class="lang-btn" :class="{ selected: gameType === 'tressette' }"
+              @click="gameType = 'tressette'; savePreferences()"
+            >{{ t('lobby.gameType.tressette') }}</button>
           </div>
         </div>
 
@@ -119,7 +123,7 @@ onMounted(() => {
   const savedGameName = localStorage.getItem('scopa-game-name')
   if (savedGameName) gameName.value = savedGameName
   const savedGameType = localStorage.getItem('scopa-game-type')
-  if (savedGameType === 'scopa' || savedGameType === 'briscola') gameType.value = savedGameType
+  if (savedGameType === 'scopa' || savedGameType === 'briscola' || savedGameType === 'tressette') gameType.value = savedGameType
 })
 
 function savePreferences() {

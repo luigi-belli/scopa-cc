@@ -13,7 +13,7 @@
         :isMyTurn="false"
         :style="{ visibility: gs && !gs.isMyTurn && gs.state === 'playing' ? 'visible' : 'hidden' }"
       />
-      <div class="hand-strip">
+      <div class="hand-strip" :class="{ 'tressette-hand': isTressette }">
         <CapturedDeck
           :deckStyle="currentDeckStyle"
           :count="gs?.opponentCapturedCount ?? 0"
@@ -46,7 +46,7 @@
         :count="shownDeckCount"
         ref="deckVisualRef"
       />
-      <div class="table-center" :class="{ 'briscola-table': isBriscola }" ref="tableCenterEl">
+      <div class="table-center" :class="{ 'briscola-table': isBriscola, 'tressette-table': isTressette }" ref="tableCenterEl">
         <CardComponent
           v-for="(card, idx) in (gs?.table ?? [])"
           :key="cardKey(card, idx)"
@@ -60,7 +60,7 @@
 
     <!-- My Area -->
     <div class="player-area me">
-      <div class="hand-strip">
+      <div class="hand-strip" :class="{ 'tressette-hand': isTressette }">
         <div class="hand-row" ref="myHandRowEl">
           <CardComponent
             v-for="(card, idx) in (gs?.myHand ?? [])"
@@ -68,10 +68,10 @@
             :data-card-key="'my-' + cardKey(card, idx)"
             :card="card"
             :deckStyle="currentDeckStyle"
-            :playable="canPlay"
+            :playable="canPlay && (!tressettePlayableIndices || tressettePlayableIndices.has(idx))"
             :class="{ lifted: playedCardIdx === idx, nudge: nudging }"
             :style="store.dealHiding ? { opacity: '0' } : {}"
-            @click="canPlay ? handlePlayCard(idx) : undefined"
+            @click="canPlay && (!tressettePlayableIndices || tressettePlayableIndices.has(idx)) ? handlePlayCard(idx) : undefined"
           />
         </div>
         <CapturedDeck
@@ -116,7 +116,7 @@
     />
 
     <GameOverOverlay
-      v-if="showGameOver && (lastRoundScores || isBriscola)"
+      v-if="showGameOver && (lastRoundScores || isTrickGame)"
       :scores="lastRoundScores"
       :gameType="gs?.gameType ?? 'scopa'"
       :winner="gameOverWinner"
@@ -220,7 +220,9 @@ const playedCardIdx    = ref<number | null>(null)
 const gs = computed(() => store.displayState)
 const currentDeckStyle = computed<DeckStyle>(() => (gs.value?.deckStyle as DeckStyle) || 'piacentine')
 const isBriscola = computed(() => gs.value?.gameType === 'briscola')
-const isScopa = computed(() => !isBriscola.value)
+const isTressette = computed(() => gs.value?.gameType === 'tressette')
+const isTrickGame = computed(() => isBriscola.value || isTressette.value)
+const isScopa = computed(() => !isTrickGame.value)
 /** Override deck count during deal animation so the deck visual stays visible
  *  until the last card-back clone flies out. null = use live gs value. */
 const dealDeckCountOverride = ref<number | null>(null)
@@ -228,6 +230,19 @@ const shownDeckCount = computed(() => dealDeckCountOverride.value ?? gs.value?.d
 const canPlay = computed(() =>
   gs.value?.isMyTurn === true && gs.value?.state === 'playing' && !store.animating && !playInFlight.value
 )
+
+/** In Tressette phase 2 (deck empty + leader has played), only cards of the led suit are playable.
+ *  Returns null if all cards are playable, or a Set of playable hand indices. */
+const tressettePlayableIndices = computed<Set<number> | null>(() => {
+  if (!isTressette.value || !gs.value) return null
+  const { table, deckCount, myHand } = gs.value
+  // Phase 2: deck empty and leader has played
+  if (deckCount > 0 || table.length === 0) return null
+  const ledSuit = table[0].suit
+  const matching = myHand.reduce<number[]>((acc, c, i) => { if (c.suit === ledSuit) acc.push(i); return acc }, [])
+  // If we have matching cards, only those are playable; otherwise all are playable
+  return matching.length > 0 ? new Set(matching) : null
+})
 
 // ─── Turn nudge: pulse hand cards after 5s of inactivity, repeat every 5s ───
 const nudging = ref(false)
@@ -632,8 +647,8 @@ async function handleGameOver(data: GameOverData): Promise<void> {
   gameOverWinner.value = data.winner
   gameOverCapturedCards.value = data.capturedCards || null
   if (data.gameState) {
-    // For Briscola, no sweep animation — just commit the final state
-    if (data.gameState.gameType === 'briscola') {
+    // For trick-taking games, no sweep animation — just commit the final state
+    if (data.gameState.gameType === 'briscola' || data.gameState.gameType === 'tressette') {
       store.commitState(data.gameState)
     } else {
       await animateEndOfRoundSweep(data.gameState, data.sweep)
@@ -772,15 +787,15 @@ async function handleTurnResult(result: TurnResult) {
   // This MUST be set for ALL re-deal types including Briscola partial deals —
   // otherwise the newly drawn card flashes visible before the deal animation hides it.
   // For Briscola partial deals, runDealAnimation immediately reveals old cards after layout.
-  // Capture pre-commit hand info for Briscola partial deal detection
+  // Capture pre-commit hand info for trick-game partial deal detection
   // (the inline commit will overwrite displayState, so we must save this now).
   let redealCtx: DealContext | undefined
   if (isRedeal) {
     store.dealHiding = true
     dealDeckCountOverride.value = store.displayState!.deckCount
-    const isBriscolaPartial = pending!.gameType === 'briscola'
+    const isTrickPartial = (pending!.gameType === 'briscola' || pending!.gameType === 'tressette')
       && store.displayState!.myHand.length > 0
-    if (isBriscolaPartial) {
+    if (isTrickPartial) {
       redealCtx = {
         prevMyHand: [...store.displayState!.myHand],
         prevDeckCount: store.displayState!.deckCount,
@@ -901,7 +916,7 @@ async function animPlace(result: TurnResult) {
   // 2. Destination: the specific slot where the card will land.
   //    Briscola: always slot 0 (single centered slot, overlay existing card).
   //    Scopa: next empty slot (index = current table length).
-  const slotIdx = isBriscola.value ? 0 : (gs.value?.table.length ?? 0)
+  const slotIdx = isTrickGame.value ? 0 : (gs.value?.table.length ?? 0)
   const dest = getSlotRect(slotIdx, srcR.width, srcR.height)
   if (!dest) return
 
@@ -1143,17 +1158,18 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
   // New round = table has more cards than before (or first load when displayState is null)
   const isNewRound = !store.displayState || newState.table.length > prevTblLen
 
-  // Briscola partial deal: after a trick, each player draws 1 card (not a full re-deal).
+  // Trick-game partial deal: after a trick, each player draws 1 card (not a full re-deal).
+  // Applies to Briscola (always) and Tressette phase 1 (while stock remains).
   // Detection uses DealContext (pre-commit state) when available, falling back to
   // displayState comparison for non-handleTurnResult paths (e.g. maybeCommitOrDeal).
-  const isBriscolaPartialDeal = !isNewRound && newState.gameType === 'briscola' && (
+  const isTrickPartialDeal = !isNewRound && (newState.gameType === 'briscola' || newState.gameType === 'tressette') && (
     ctx
       ? ctx.prevDeckCount > newState.deckCount  // deck decreased = cards were drawn
       : (store.displayState?.deckCount ?? 0) > newState.deckCount
   )
 
   // Build set of old card identities for finding new cards
-  const prevMyHandSet = isBriscolaPartialDeal
+  const prevMyHandSet = isTrickPartialDeal
     ? new Set((ctx?.prevMyHand ?? store.displayState?.myHand ?? []).map(c => `${c.suit}-${c.value}`))
     : null
 
@@ -1177,7 +1193,7 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
   // (server's deckCount is already post-deal). If the override was already set
   // (re-deal path sets it before the inline commit to prevent flicker), keep it.
   const prevDeckCount = ctx?.prevDeckCount ?? store.displayState?.deckCount ?? 40
-  const newCardsDealt = isBriscolaPartialDeal
+  const newCardsDealt = isTrickPartialDeal
     ? prevDeckCount - newState.deckCount
     : (isNewRound ? newState.table.length : 0) + newState.myHand.length + newState.opponentHandCount
   const preDealDeckCount = dealDeckCountOverride.value
@@ -1195,7 +1211,7 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
   let myEls: HTMLElement[]
   let oppEls: HTMLElement[]
 
-  if (isBriscolaPartialDeal && prevMyHandSet) {
+  if (isTrickPartialDeal && prevMyHandSet) {
     // All cards are hidden via dealHiding. Identify old vs new cards, then
     // immediately reveal old cards so only new ones stay hidden for animation.
     const allMyEls = qAll('.player-area.me .hand-row [data-card-key^="my-"]')
@@ -1268,7 +1284,7 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
   // For partial deals (Briscola), myEls only contains new cards — those are at the
   // end of newState.myHand. For full deals, myEls maps 1:1 to newState.myHand.
   const myElCards = new Map<HTMLElement, Card>()
-  if (isBriscolaPartialDeal) {
+  if (isTrickPartialDeal) {
     // New cards are appended at the end of the hand
     const handLen = newState.myHand.length
     myEls.forEach((el, idx) => {

@@ -1,7 +1,7 @@
 <template>
   <div class="overlay overlay-enter">
     <div class="overlay-content gameover-content" :class="iWon ? 'winner' : (isDraw ? '' : 'loser')">
-      <h2 v-if="isDraw">{{ t('briscola.draw') }}</h2>
+      <h2 v-if="isDraw">{{ t(gameType === 'tressette' ? 'tressette.draw' : 'briscola.draw') }}</h2>
       <h2 v-else>{{ iWon ? t('gameover.won') : t('gameover.lost') }}</h2>
 
       <!-- Scopa: detailed score table -->
@@ -27,7 +27,19 @@
         :deckStyle="deckStyle"
       />
 
-      <p v-if="gameType !== 'briscola'" class="gameover-final">
+      <!-- Tressette: point breakdown with ultima bonus -->
+      <TressetteScoreTable
+        v-if="gameType === 'tressette' && capturedCards"
+        :capturedCards="capturedCards"
+        :myIndex="myIndex"
+        :myName="myName"
+        :opponentName="opponentName"
+        :myTotalScore="myTotalScore"
+        :oppTotalScore="opponentTotalScore"
+        :deckStyle="deckStyle"
+      />
+
+      <p v-if="gameType === 'scopa'" class="gameover-final">
         {{ t('gameover.finalScore', { my: myTotalScore, opp: opponentTotalScore }) }}
       </p>
       <button class="btn btn-primary" @click="$emit('backToLobby')">
@@ -54,6 +66,7 @@ import type { Card, DeckStyle } from '@/types/card'
 import ScoreTable from './ScoreTable.vue'
 import ScoreDetailDialog from './ScoreDetailDialog.vue'
 import BriscolaScoreTable from './BriscolaScoreTable.vue'
+import TressetteScoreTable from './TressetteScoreTable.vue'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
@@ -76,6 +89,6 @@ defineEmits<{
 const { t } = useI18n()
 
 const iWon = computed(() => props.winner === props.myIndex)
-const isDraw = computed(() => props.gameType === 'briscola' && props.myTotalScore === props.opponentTotalScore)
+const isDraw = computed(() => (props.gameType === 'briscola' || props.gameType === 'tressette') && props.myTotalScore === props.opponentTotalScore)
 const selectedCategory = ref<ScoreCategory | null>(null)
 </script>

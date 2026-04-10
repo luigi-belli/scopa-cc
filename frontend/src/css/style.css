@@ -514,8 +514,9 @@ body {
   padding-left: 70px;
 }
 
-/* Briscola: single centered slot for the current trick card */
-.table-center.briscola-table {
+/* Briscola / Tressette: single centered slot for the current trick card */
+.table-center.briscola-table,
+.table-center.tressette-table {
   grid-template-columns: 75px;
   grid-template-rows: 133px;
 }
@@ -945,9 +946,17 @@ body {
     min-height: 103px;
   }
 
+  .tressette-hand .hand-row {
+    min-height: 75px;
+  }
+
   .hand-strip {
     grid-template-columns: 50px 1fr 50px;
     min-height: 103px;
+  }
+
+  .tressette-hand.hand-strip {
+    min-height: 75px;
   }
 
   .table-center {
@@ -956,7 +965,8 @@ body {
     padding-left: 50px;
   }
 
-  .table-center.briscola-table {
+  .table-center.briscola-table,
+  .table-center.tressette-table {
     grid-template-columns: 58px;
     grid-template-rows: 103px;
   }
