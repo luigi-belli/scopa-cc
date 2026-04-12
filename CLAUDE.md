@@ -527,6 +527,10 @@ Three routes configured via Vue Router:
 
 Full animation documentation: **[Animation System](docs/animation-system.md)** — Event flow, place/capture/deal animations, timings, FLIP utilities, and the critical invariants around `commitState` and hiding flags.
 
+### Communication Layer
+
+Full analysis: **[Communication Layer](docs/communication-layer.md)** — REST API client, Mercure SSE, three-layer state model, event processing pipeline, and known failure modes/hang scenarios.
+
 ### Game Layout (CSS Grid)
 
 ```

@@ -208,6 +208,8 @@ const showCaptureChoice = ref(true)
 const showRoundEnd     = ref(false)
 const showGameOver     = ref(false)
 const lastRoundScores  = ref<[RoundScores, RoundScores] | null>(null)
+/** Backup of lastRoundScores for retry on nextRound API failure */
+let lastRoundScoresBackup: [RoundScores, RoundScores] | null = null
 const gameOverWinner   = ref(0)
 const gameOverCapturedCards = ref<[Card[], Card[]] | null>(null)
 /** true while inside handleTurnResult's post-animation delay — prevents
@@ -520,16 +522,14 @@ const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
   },
   onOpponentDisconnected() { disconnected.value = true; store.clearSession() },
   async onReconnect() {
+    // getState already has maxRetries: 2 built in (see useApi).
+    // If it still fails, schedule a deferred retry so we don't silently hang.
     try {
       const freshState = await api.getState(props.gameId)
-      if (isBusy()) {
-        store.queueEvent({ type: 'game-state', data: freshState })
-      } else {
-        if (freshState.state === 'choosing') showCaptureChoice.value = true
-        maybeCommitOrDeal(freshState)
-      }
+      reconcileState(freshState)
     } catch (e) {
       console.error('Failed to re-fetch state on reconnect:', e)
+      scheduleReconcile()
     }
   },
 })
@@ -655,6 +655,7 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
 
 async function handleRoundEnd(data: RoundEndData): Promise<void> {
   lastRoundScores.value = data.scores
+  lastRoundScoresBackup = data.scores
   if (data.gameState) await animateEndOfRoundSweep(data.gameState, data.sweep)
   showRoundEnd.value = true
 }
@@ -1481,7 +1482,18 @@ async function processQueue() {
       const gsEv = store.shiftEvent()!
       if (gsEv.type === 'game-state') store.stashState(gsEv.data)
     }
-    handleTurnResult(ev.data)
+    // Await handleTurnResult so exceptions are caught and the queue keeps draining.
+    // handleTurnResult calls processQueue() at the end of its normal path, so we
+    // must NOT chain another processQueue here — only on error fallback.
+    try {
+      await handleTurnResult(ev.data)
+    } catch (e) {
+      console.error('processQueue: turn-result handler failed:', e)
+      // Ensure pipeline doesn't stall: clear animation lock and drain remaining events
+      store.animating = false
+      inPostAnimDelay.value = false
+      processQueue()
+    }
   }
   else if (ev.type === 'game-state') {
     if (ev.data.state === 'choosing') showCaptureChoice.value = true
@@ -1508,19 +1520,34 @@ async function handlePlayCard(cardIndex: number) {
   playedCardIdx.value = cardIndex
   playInFlight.value = true
   try { await api.playCard(props.gameId, cardIndex) }
-  catch (e: unknown) { playedCardIdx.value = null; console.error('Play card error:', e) }
+  catch (e: unknown) {
+    playedCardIdx.value = null
+    console.error('Play card error:', e)
+    // The server may have processed the move despite the network error.
+    // Schedule a reconcile so we catch up with the real server state.
+    scheduleReconcile()
+  }
   finally { playInFlight.value = false }
 }
 async function handleSelectCapture(optionIndex: number) {
   // Dismiss the overlay BEFORE the API call so the animation is visible
   showCaptureChoice.value = false
   try { await api.selectCapture(props.gameId, optionIndex) }
-  catch (e: unknown) { console.error('Select capture error:', e) }
+  catch (e: unknown) {
+    console.error('Select capture error:', e)
+    // Restore the overlay so the player can retry — without this the game hangs
+    showCaptureChoice.value = true
+  }
 }
 async function handleNextRound() {
   showRoundEnd.value = false; lastRoundScores.value = null
   try { await api.nextRound(props.gameId) }
-  catch (e: unknown) { console.error('Next round error:', e) }
+  catch (e: unknown) {
+    console.error('Next round error:', e)
+    // Restore the overlay so the player can retry — without this the game hangs
+    showRoundEnd.value = true
+    lastRoundScores.value = lastRoundScoresBackup
+  }
 }
 function handleBackToLobby() {
   api.leaveGame(props.gameId).catch(() => {})
@@ -1536,10 +1563,76 @@ function handleExit() {
 }
 
 // ════════════════════════════════════════════════════
+// State reconciliation — periodic polling safety net
+// ════════════════════════════════════════════════════
+
+/** Apply a fresh server state to the pipeline, respecting busy/queue semantics. */
+function reconcileState(freshState: GameState) {
+  if (isBusy()) {
+    store.queueEvent({ type: 'game-state', data: freshState })
+  } else {
+    if (freshState.state === 'choosing') showCaptureChoice.value = true
+    maybeCommitOrDeal(freshState)
+  }
+}
+
+let reconcileTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleReconcile(delayMs = 3000) {
+  if (reconcileTimer) return // already scheduled
+  reconcileTimer = setTimeout(async () => {
+    reconcileTimer = null
+    try {
+      const freshState = await api.getState(props.gameId)
+      reconcileState(freshState)
+    } catch (e) {
+      console.error('Deferred reconcile failed:', e)
+    }
+  }, delayMs)
+}
+
+/** Periodic poll interval — catches any state the client missed via SSE.
+ *  Runs every 5s. If the server state diverges from what we have, reconcile. */
+const POLL_INTERVAL = 5000
+let pollInterval: ReturnType<typeof setInterval> | undefined
+
+async function pollForMissedState() {
+  // Don't poll during animations — we'd just queue it anyway and the
+  // animation pipeline will finish and process the queue on its own.
+  if (store.animating || disconnected.value) return
+  // Don't poll if game is over or we're showing an overlay
+  if (showGameOver.value || showRoundEnd.value) return
+
+  try {
+    const fresh = await api.getState(props.gameId)
+    const current = store.serverState
+    if (!current) return
+
+    // Detect divergence: the server has moved to a different state or turn
+    // that we haven't seen. Common cases:
+    //   - It's now our turn but displayState says opponent's turn (missed SSE)
+    //   - Server state changed (e.g. choosing → playing) but we're stuck
+    const diverged =
+      fresh.state !== current.state ||
+      fresh.isMyTurn !== current.isMyTurn ||
+      fresh.deckCount !== current.deckCount ||
+      fresh.myHand.length !== current.myHand.length ||
+      fresh.myCapturedCount !== current.myCapturedCount
+
+    if (diverged) {
+      console.warn('State poll: divergence detected, reconciling')
+      reconcileState(fresh)
+    }
+  } catch {
+    // Polling is best-effort — silently ignore transient failures
+  }
+}
+
+// ════════════════════════════════════════════════════
 // Lifecycle
 // ════════════════════════════════════════════════════
 
-let heartbeatInterval: ReturnType<typeof setInterval>
+let heartbeatInterval: ReturnType<typeof setInterval> | undefined
 
 onMounted(async () => {
   // Restore session from localStorage if store is empty (e.g. page reload)
@@ -1570,11 +1663,14 @@ onMounted(async () => {
   runDealAnimation(state)
   connect(store.myIndex)
   heartbeatInterval = setInterval(() => { api.heartbeat(props.gameId).catch(() => {}) }, 10000)
+  pollInterval = setInterval(pollForMissedState, POLL_INTERVAL)
 })
 
 onUnmounted(() => {
   disconnectMercure()
   clearInterval(heartbeatInterval)
+  clearInterval(pollInterval)
+  if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null }
   clearNudge()
 })
 </script>
