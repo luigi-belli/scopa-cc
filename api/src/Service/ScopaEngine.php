@@ -160,11 +160,12 @@ final class ScopaEngine implements GameEngine
                 captured: new CardCollection(),
                 scopa: false,
                 sweep: $sweep,
+                cardIndex: $cardIndex,
             );
         }
 
         if (count($captures) === 1) {
-            return $this->executeCapture($game, $playerIndex, $playedCard, $captures[0]);
+            return $this->executeCapture($game, $playerIndex, $playedCard, $captures[0], $cardIndex);
         }
 
         // Multiple options: player must choose
@@ -173,6 +174,7 @@ final class ScopaEngine implements GameEngine
             card: $playedCard,
             playerIndex: $playerIndex,
             options: $captures,
+            cardIndex: $cardIndex,
         ));
 
         return new TurnResult(
@@ -182,6 +184,7 @@ final class ScopaEngine implements GameEngine
             captured: new CardCollection(),
             scopa: false,
             options: $this->buildCaptureOptions($tableCards, $captures),
+            cardIndex: $cardIndex,
         );
     }
 
@@ -203,7 +206,8 @@ final class ScopaEngine implements GameEngine
             $game,
             $pending->playerIndex,
             $pending->card,
-            $options[$optionIndex]
+            $options[$optionIndex],
+            $pending->cardIndex,
         );
     }
 
@@ -215,7 +219,7 @@ final class ScopaEngine implements GameEngine
     }
 
     /** @param list<int> $captureIndices */
-    private function executeCapture(Game $game, int $playerIndex, Card $playedCard, array $captureIndices): TurnResult
+    private function executeCapture(Game $game, int $playerIndex, Card $playedCard, array $captureIndices, ?int $cardIndex = null): TurnResult
     {
         $tableCards = $game->getTableCards();
         $captured = $game->getPlayerCaptured($playerIndex);
@@ -247,6 +251,7 @@ final class ScopaEngine implements GameEngine
             captured: $capturedCards,
             scopa: $isScopa,
             sweep: $sweep,
+            cardIndex: $cardIndex,
         );
     }
 

@@ -95,6 +95,7 @@ final class BriscolaEngine implements GameEngine
                 playerIndex: $playerIndex,
                 captured: new CardCollection(),
                 scopa: false,
+                cardIndex: $cardIndex,
             );
         }
 
@@ -141,6 +142,7 @@ final class BriscolaEngine implements GameEngine
             scopa: false,
             trickWinner: $winnerIndex,
             leaderCard: $leaderCard,
+            cardIndex: $cardIndex,
         );
     }
 

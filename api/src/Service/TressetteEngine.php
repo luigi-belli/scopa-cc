@@ -89,6 +89,7 @@ final class TressetteEngine implements GameEngine
                 playerIndex: $playerIndex,
                 captured: new CardCollection(),
                 scopa: false,
+                cardIndex: $cardIndex,
             );
         }
 
@@ -143,6 +144,7 @@ final class TressetteEngine implements GameEngine
             leaderCard: $leaderCard,
             winnerDrawnCard: $drawnCards['winnerCard'],
             loserDrawnCard: $drawnCards['loserCard'],
+            cardIndex: $cardIndex,
         );
     }
 

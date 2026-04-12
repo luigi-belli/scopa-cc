@@ -47,6 +47,7 @@ export interface TurnResult {
   leaderCard?: Card
   winnerDrawnCard?: Card
   loserDrawnCard?: Card
+  cardIndex?: number
 }
 
 export interface RoundScores {

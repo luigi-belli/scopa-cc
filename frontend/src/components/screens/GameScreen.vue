@@ -990,7 +990,8 @@ async function animPlace(result: TurnResult) {
   } else {
     const backs = qAll('.player-area.opponent .hand-row .card-back')
     if (backs.length) {
-      const el = backs[backs.length - 1]
+      const slotIdx = result.cardIndex != null && result.cardIndex < backs.length ? result.cardIndex : backs.length - 1
+      const el = backs[slotIdx]
       srcR = el.getBoundingClientRect()
       setStyle(el, 'visibility', 'hidden')
     }
@@ -1069,7 +1070,8 @@ async function animCapture(result: TurnResult) {
     } else {
       const backs = qAll('.player-area.opponent .hand-row .card-back')
       if (backs.length) {
-        const el = backs[backs.length - 1]
+        const slotIdx = result.cardIndex != null && result.cardIndex < backs.length ? result.cardIndex : backs.length - 1
+        const el = backs[slotIdx]
         srcR = el.getBoundingClientRect()
         setStyle(el, 'visibility', 'hidden')
       }
@@ -1183,7 +1185,8 @@ async function animTrick(result: TurnResult) {
   } else {
     const backs = qAll('.player-area.opponent .hand-row .card-back')
     if (backs.length) {
-      const el = backs[backs.length - 1]
+      const slotIdx = result.cardIndex != null && result.cardIndex < backs.length ? result.cardIndex : backs.length - 1
+      const el = backs[slotIdx]
       srcR = el.getBoundingClientRect()
       setStyle(el, 'visibility', 'hidden')
     }
