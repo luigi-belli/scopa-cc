@@ -134,6 +134,7 @@
     <ScopaFlash ref="scopaFlashRef" />
     <ConfettiCanvas ref="confettiRef" />
     <DisconnectBanner :visible="disconnected" />
+    <ReconnectBanner :visible="reconnecting && !disconnected" />
   </div>
 </template>
 
@@ -161,6 +162,7 @@ import GameOverOverlay from '@/components/overlays/GameOverOverlay.vue'
 import ScopaFlash from '@/components/effects/ScopaFlash.vue'
 import ConfettiCanvas from '@/components/effects/ConfettiCanvas.vue'
 import DisconnectBanner from '@/components/effects/DisconnectBanner.vue'
+import ReconnectBanner from '@/components/effects/ReconnectBanner.vue'
 
 // ─── Animation timing constants (from CLAUDE.md) ───
 const SLIDE_MS    = 500
@@ -204,6 +206,8 @@ const scopaFlashRef    = ref<InstanceType<typeof ScopaFlash>>()
 const confettiRef      = ref<InstanceType<typeof ConfettiCanvas>>()
 
 const disconnected     = ref(false)
+/** true while the SSE connection is down or an API action failed — shows reconnect banner */
+const reconnecting     = ref(false)
 const showCaptureChoice = ref(true)
 const showRoundEnd     = ref(false)
 const showGameOver     = ref(false)
@@ -484,14 +488,16 @@ function isBusy(): boolean {
   return store.animating || inPostAnimDelay.value
 }
 
-const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
+const { connected: mercureConnected, connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
   onTurnResult(data: TurnResult) {
+    reconnecting.value = false
     if (isBusy()) {
       store.queueEvent({ type: 'turn-result', data }); return
     }
     handleTurnResult(data)
   },
   onGameState(data: GameState) {
+    reconnecting.value = false
     if (isBusy()) {
       // If there are already queued events, queue the game-state too so ordering
       // is preserved (prevents stash-overwrite when multiple turns are queued).
@@ -526,12 +532,23 @@ const { connect, disconnect: disconnectMercure } = useMercure(props.gameId, {
     // If it still fails, schedule a deferred retry so we don't silently hang.
     try {
       const freshState = await api.getState(props.gameId)
-      reconcileState(freshState)
+      reconcileState(freshState) // clears reconnecting banner
     } catch (e) {
       console.error('Failed to re-fetch state on reconnect:', e)
+      reconnecting.value = true
       scheduleReconcile()
     }
   },
+})
+
+// Show reconnect banner when Mercure SSE disconnects.
+// When it reconnects, the banner stays visible until reconcileState confirms
+// the client state is in sync (onReconnect handler calls reconcileState which
+// clears the banner).
+watch(mercureConnected, (isConnected) => {
+  if (!isConnected && !disconnected.value) {
+    reconnecting.value = true
+  }
 })
 
 function isDealState(prev: GameState | null, next: GameState): boolean {
@@ -1524,7 +1541,8 @@ async function handlePlayCard(cardIndex: number) {
     playedCardIdx.value = null
     console.error('Play card error:', e)
     // The server may have processed the move despite the network error.
-    // Schedule a reconcile so we catch up with the real server state.
+    // Show reconnecting banner and schedule a reconcile to catch up.
+    reconnecting.value = true
     scheduleReconcile()
   }
   finally { playInFlight.value = false }
@@ -1537,6 +1555,8 @@ async function handleSelectCapture(optionIndex: number) {
     console.error('Select capture error:', e)
     // Restore the overlay so the player can retry — without this the game hangs
     showCaptureChoice.value = true
+    reconnecting.value = true
+    scheduleReconcile()
   }
 }
 async function handleNextRound() {
@@ -1547,6 +1567,8 @@ async function handleNextRound() {
     // Restore the overlay so the player can retry — without this the game hangs
     showRoundEnd.value = true
     lastRoundScores.value = lastRoundScoresBackup
+    reconnecting.value = true
+    scheduleReconcile()
   }
 }
 function handleBackToLobby() {
@@ -1568,6 +1590,7 @@ function handleExit() {
 
 /** Apply a fresh server state to the pipeline, respecting busy/queue semantics. */
 function reconcileState(freshState: GameState) {
+  reconnecting.value = false
   if (isBusy()) {
     store.queueEvent({ type: 'game-state', data: freshState })
   } else {

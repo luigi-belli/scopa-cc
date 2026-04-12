@@ -60,6 +60,7 @@ export default {
   // Effects
   'effect.scopa': 'SCOPA!',
   'effect.disconnect': 'L\'avversario si è disconnesso. Hai vinto!',
+  'effect.reconnecting': 'Riconnessione in corso...',
 
   // Dialog
   'dialog.close': 'Chiudi',

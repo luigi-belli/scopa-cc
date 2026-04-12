@@ -60,6 +60,7 @@ export default {
   // Effects
   'effect.scopa': 'SCOPA!',
   'effect.disconnect': 'Opponent disconnected. You win!',
+  'effect.reconnecting': 'Reconnecting...',
 
   // Dialog
   'dialog.close': 'Close',
