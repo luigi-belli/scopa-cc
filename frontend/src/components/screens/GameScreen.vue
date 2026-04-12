@@ -223,6 +223,9 @@ const inPostAnimDelay  = ref(false)
 const playInFlight     = ref(false)
 /** index of the card just clicked — keeps it visually lifted until animation starts */
 const playedCardIdx    = ref<number | null>(null)
+/** Saved hand position of a card entering the capture-choice overlay.
+ *  Used by animCapture to fly the card from hand after the player selects. */
+const choosingCardRect = ref<DOMRect | null>(null)
 
 const gs = computed(() => store.displayState)
 const currentDeckStyle = computed<DeckStyle>(() => (gs.value?.deckStyle as DeckStyle) || 'piacentine')
@@ -781,7 +784,20 @@ async function handleTurnResult(result: TurnResult) {
   try {
     if (result.type === 'place')   await animPlace(result)
     else if (result.type === 'capture') await animCapture(result)
-    else if (result.type === 'choosing') await animPlace(result)
+    else if (result.type === 'choosing') {
+      // Save card's hand position so animCapture can fly it after the player selects.
+      // No animation here — the capture-choice overlay appears immediately.
+      if (result.playerIndex === store.myIndex) {
+        const hand = gs.value?.myHand ?? []
+        const idx = hand.findIndex(c => c.suit === result.card.suit && c.value === result.card.value)
+        if (idx >= 0) {
+          const el = q(`[data-card-key="my-${cardKey(result.card, idx)}"]`)
+          if (el) choosingCardRect.value = el.getBoundingClientRect()
+        }
+      }
+      // Brief yield so the choosing game-state event can arrive and be stashed
+      await sleep(10)
+    }
     else if (result.type === 'trick') await animTrick(result)
   } catch (e) { console.error('Animation error:', e) }
 
@@ -1000,11 +1016,16 @@ async function animCapture(result: TurnResult) {
   const table = gs.value?.table ?? []
 
   // 1. Find & hide source card in hand.
-  //    If not found (e.g. after capture-choice dialog — card already left hand),
-  //    skip the hand→table slide and go straight to glow+sweep.
+  //    After capture-choice: use the saved hand position (choosingCardRect) to
+  //    animate the card flying from where it was in the hand to the captured card.
   let srcR: DOMRect | null = null
   const fromChoosing = gs.value?.state === 'choosing'
-  if (!fromChoosing) {
+  if (fromChoosing && choosingCardRect.value) {
+    // Choosing player: card already left hand (state committed), use saved position
+    srcR = choosingCardRect.value
+    choosingCardRect.value = null
+    playedCardIdx.value = null
+  } else if (!fromChoosing) {
     if (isMe) {
       const hand = gs.value?.myHand ?? []
       const idx = hand.findIndex(c => c.suit === card.suit && c.value === card.value)
