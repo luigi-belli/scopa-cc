@@ -12,10 +12,11 @@ const STORAGE_KEY = 'scopa-locale'
 const messages: Record<Locale, Record<string, string>> = { it, en }
 
 function detectLocale(): Locale {
+  if (typeof localStorage === 'undefined') return 'en'
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored === 'it' || stored === 'en') return stored
 
-  const browserLang = navigator.language?.slice(0, 2)
+  const browserLang = typeof navigator !== 'undefined' ? navigator.language?.slice(0, 2) : undefined
   if (browserLang === 'it') return 'it'
   return 'en'
 }
@@ -31,7 +32,9 @@ export interface I18n {
 export function useI18n(): I18n {
   function setLocale(locale: Locale): void {
     currentLocale.value = locale
-    localStorage.setItem(STORAGE_KEY, locale)
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, locale)
+    }
   }
 
   function t(key: TranslationKey | string, params?: Record<string, string | number>): string {
