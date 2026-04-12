@@ -97,8 +97,8 @@
 
     <!-- Overlays -->
     <CaptureChoiceOverlay
-      v-if="isScopa && showCaptureChoice && gs?.state === 'choosing' && gs.pendingChoice"
-      :options="gs.pendingChoice"
+      v-if="isScopa && showCaptureChoice && captureChoiceOptions"
+      :options="captureChoiceOptions"
       :deckStyle="currentDeckStyle"
       @select="handleSelectCapture"
     />
@@ -227,6 +227,12 @@ const playedCardIdx    = ref<number | null>(null)
  *  animCapture reads the hand row rect fresh to avoid stale coordinates
  *  after viewport changes (rotation, resize) during the overlay. */
 const choosingFromHand = ref(false)
+/** Capture options from the choosing turn-result, used to show the overlay
+ *  without committing the choosing state (so the card stays in the hand). */
+const choosingOptions  = ref<Card[][] | null>(null)
+/** Safety timer: releases the animating lock if the player doesn't select
+ *  within 30s (e.g. tab backgrounded, network issues). */
+let choosingSafety: ReturnType<typeof setTimeout> | null = null
 
 const gs = computed(() => store.displayState)
 const currentDeckStyle = computed<DeckStyle>(() => (gs.value?.deckStyle as DeckStyle) || 'piacentine')
@@ -234,6 +240,11 @@ const isBriscola = computed(() => gs.value?.gameType === 'briscola')
 const isTressette = computed(() => gs.value?.gameType === 'tressette')
 const isTrickGame = computed(() => isBriscola.value || isTressette.value)
 const isScopa = computed(() => !isTrickGame.value)
+/** Resolved capture options for the overlay: from the choosing turn-result (primary)
+ *  or from committed game state (reconnection fallback). null when not choosing. */
+const captureChoiceOptions = computed<Card[][] | null>(() =>
+  choosingOptions.value ?? (gs.value?.state === 'choosing' ? gs.value.pendingChoice : null)
+)
 const myScoreDisplay = computed(() =>
   isTressette.value ? formatTressetteScore(gs.value?.myTotalScore ?? 0) : String(gs.value?.myTotalScore ?? 0),
 )
@@ -786,14 +797,27 @@ async function handleTurnResult(result: TurnResult) {
     if (result.type === 'place')   await animPlace(result)
     else if (result.type === 'capture') await animCapture(result)
     else if (result.type === 'choosing') {
-      // No animation — the capture-choice overlay appears immediately.
-      // Mark that the card should fly from the hand when the player selects.
-      // The actual hand position is queried fresh in animCapture to avoid
-      // stale coordinates if the viewport changes while the overlay is open.
-      if (result.playerIndex === store.myIndex) choosingFromHand.value = true
-      // Brief yield to give the SSE game-state event a chance to arrive.
-      // Not critical — the post-animation pipeline handles late arrival.
+      // Show the overlay immediately WITHOUT committing the choosing state.
+      // This keeps the card visible in the hand. The choosing game-state
+      // (arriving next via SSE) is stashed because animating=true, and stays
+      // stashed until the player selects. handleSelectCapture releases
+      // the lock so the capture turn-result flows through the normal pipeline
+      // where the card is still in the hand.
+      clearTimeout(safety)
+      playedCardIdx.value = null
+      choosingFromHand.value = result.playerIndex === store.myIndex
+      choosingOptions.value = result.options ?? null
+      showCaptureChoice.value = true
+      // Safety: release lock after 30s if the player hasn't selected
+      choosingSafety = setTimeout(() => {
+        choosingSafety = null
+        choosingOptions.value = null
+        store.finishAnimation()
+        processQueue()
+      }, 30_000)
+      // Brief yield so the choosing game-state arrives and is stashed
       await sleep(10)
+      return  // Don't commit — card stays in hand
     }
     else if (result.type === 'trick') await animTrick(result)
   } catch (e) { console.error('Animation error:', e) }
@@ -1026,9 +1050,12 @@ async function animCapture(result: TurnResult) {
     if (lastHandCard) {
       srcR = lastHandCard.getBoundingClientRect()
     } else if (myHandRowEl.value) {
-      // Hand is now empty — use the hand row's center
+      // Hand is now empty — use the hand row's center with actual card slot dimensions
       const hr = myHandRowEl.value.getBoundingClientRect()
-      srcR = new DOMRect(hr.left + hr.width / 2 - 37, hr.top, 75, 133)
+      const slot = getTableSlotSize()
+      const cardW = slot?.w ?? 75
+      const cardH = slot?.h ?? 133
+      srcR = new DOMRect(hr.left + hr.width / 2 - cardW / 2, hr.top, cardW, cardH)
     }
   } else if (!fromChoosing) {
     if (isMe) {
@@ -1574,10 +1601,15 @@ async function handlePlayCard(cardIndex: number) {
   finally { playInFlight.value = false }
 }
 async function handleSelectCapture(optionIndex: number) {
-  // Dismiss the overlay BEFORE the API call so the animation is visible
+  // Clear the choosing safety timer and release the animation pipeline lock
+  // so the capture turn-result flows through the normal animation path.
+  if (choosingSafety) { clearTimeout(choosingSafety); choosingSafety = null }
   showCaptureChoice.value = false
-  try { await api.selectCapture(props.gameId, optionIndex) }
-  catch (e: unknown) {
+  store.animating = false
+  try {
+    await api.selectCapture(props.gameId, optionIndex)
+    choosingOptions.value = null
+  } catch (e: unknown) {
     console.error('Select capture error:', e)
     // Restore the overlay so the player can retry — without this the game hangs
     showCaptureChoice.value = true
@@ -1617,6 +1649,9 @@ function handleExit() {
 /** Apply a fresh server state to the pipeline, respecting busy/queue semantics. */
 function reconcileState(freshState: GameState) {
   reconnecting.value = false
+  // If the server has moved past the choosing state, clear the overlay data
+  // so it doesn't persist after a successful-but-lost select-capture response.
+  if (freshState.state !== 'choosing') choosingOptions.value = null
   if (isBusy()) {
     store.queueEvent({ type: 'game-state', data: freshState })
   } else {
@@ -1720,6 +1755,7 @@ onUnmounted(() => {
   clearInterval(heartbeatInterval)
   clearInterval(pollInterval)
   if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null }
+  if (choosingSafety) { clearTimeout(choosingSafety); choosingSafety = null }
   clearNudge()
 })
 </script>
