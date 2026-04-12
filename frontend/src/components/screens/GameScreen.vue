@@ -223,9 +223,10 @@ const inPostAnimDelay  = ref(false)
 const playInFlight     = ref(false)
 /** index of the card just clicked — keeps it visually lifted until animation starts */
 const playedCardIdx    = ref<number | null>(null)
-/** Saved hand position of a card entering the capture-choice overlay.
- *  Used by animCapture to fly the card from hand after the player selects. */
-const choosingCardRect = ref<DOMRect | null>(null)
+/** True when a choosing turn-result saved the card's hand origin.
+ *  animCapture reads the hand row rect fresh to avoid stale coordinates
+ *  after viewport changes (rotation, resize) during the overlay. */
+const choosingFromHand = ref(false)
 
 const gs = computed(() => store.displayState)
 const currentDeckStyle = computed<DeckStyle>(() => (gs.value?.deckStyle as DeckStyle) || 'piacentine')
@@ -785,17 +786,13 @@ async function handleTurnResult(result: TurnResult) {
     if (result.type === 'place')   await animPlace(result)
     else if (result.type === 'capture') await animCapture(result)
     else if (result.type === 'choosing') {
-      // Save card's hand position so animCapture can fly it after the player selects.
-      // No animation here — the capture-choice overlay appears immediately.
-      if (result.playerIndex === store.myIndex) {
-        const hand = gs.value?.myHand ?? []
-        const idx = hand.findIndex(c => c.suit === result.card.suit && c.value === result.card.value)
-        if (idx >= 0) {
-          const el = q(`[data-card-key="my-${cardKey(result.card, idx)}"]`)
-          if (el) choosingCardRect.value = el.getBoundingClientRect()
-        }
-      }
-      // Brief yield so the choosing game-state event can arrive and be stashed
+      // No animation — the capture-choice overlay appears immediately.
+      // Mark that the card should fly from the hand when the player selects.
+      // The actual hand position is queried fresh in animCapture to avoid
+      // stale coordinates if the viewport changes while the overlay is open.
+      if (result.playerIndex === store.myIndex) choosingFromHand.value = true
+      // Brief yield to give the SSE game-state event a chance to arrive.
+      // Not critical — the post-animation pipeline handles late arrival.
       await sleep(10)
     }
     else if (result.type === 'trick') await animTrick(result)
@@ -1016,15 +1013,23 @@ async function animCapture(result: TurnResult) {
   const table = gs.value?.table ?? []
 
   // 1. Find & hide source card in hand.
-  //    After capture-choice: use the saved hand position (choosingCardRect) to
-  //    animate the card flying from where it was in the hand to the captured card.
+  //    After capture-choice: card already left hand, so query the hand row
+  //    position fresh (safe against viewport changes during the overlay).
   let srcR: DOMRect | null = null
   const fromChoosing = gs.value?.state === 'choosing'
-  if (fromChoosing && choosingCardRect.value) {
-    // Choosing player: card already left hand (state committed), use saved position
-    srcR = choosingCardRect.value
-    choosingCardRect.value = null
+  if (fromChoosing && choosingFromHand.value) {
+    // Choosing player: build a source rect from the last card in the hand row
+    // (the played card is gone, but adjacent cards give a good origin).
+    choosingFromHand.value = false
     playedCardIdx.value = null
+    const lastHandCard = myHandRowEl.value?.lastElementChild as HTMLElement | null
+    if (lastHandCard) {
+      srcR = lastHandCard.getBoundingClientRect()
+    } else if (myHandRowEl.value) {
+      // Hand is now empty — use the hand row's center
+      const hr = myHandRowEl.value.getBoundingClientRect()
+      srcR = new DOMRect(hr.left + hr.width / 2 - 37, hr.top, 75, 133)
+    }
   } else if (!fromChoosing) {
     if (isMe) {
       const hand = gs.value?.myHand ?? []
