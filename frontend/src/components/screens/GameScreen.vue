@@ -374,6 +374,17 @@ function restoreStyles() {
   }
 }
 
+/** Pick the opponent card-back element at the correct hand slot.
+ *  Falls back to the last element when cardIndex is missing (old server). */
+function getOpponentCardEl(result: TurnResult): HTMLElement | null {
+  const backs = qAll('.player-area.opponent .hand-row .card-back')
+  if (!backs.length) return null
+  const idx = result.cardIndex != null && result.cardIndex < backs.length
+    ? result.cardIndex
+    : backs.length - 1
+  return backs[idx]
+}
+
 // ─── Clone factories — ONLY in #animation-layer, NEVER in Vue DOM ───
 
 function mkFace(card: Card, r: DOMRect): HTMLElement {
@@ -736,8 +747,10 @@ function snapshotByIdentity(): Map<string, DOMRect> {
   return map
 }
 
-/** After commitState + nextTick, animate surviving cards from old positions to new. */
-function flipRearrange(before: Map<string, DOMRect>): Promise<void> {
+/** After commitState + nextTick, animate surviving cards from old positions to new.
+ *  @param oppPlayedIdx 0-based index of the opponent card that was played (or -1 if none).
+ *         Cards after this index slide left to fill the gap left by the removed card. */
+function flipRearrange(before: Map<string, DOMRect>, oppPlayedIdx = -1): Promise<void> {
   const ps: Promise<void>[] = []
 
   // Helper: animate one element from old→new position
@@ -768,11 +781,16 @@ function flipRearrange(before: Map<string, DOMRect>): Promise<void> {
     if (el) flipEl(el, `h:${card.value}-${card.suit}`, FLIP_HND_MS)
   })
 
-  // Opponent hand backs
+  // Opponent hand backs — when a card was played at oppPlayedIdx (0-based),
+  // Vue removes the last opp-N key. Cards after the played position must FLIP
+  // from their old (shifted-right) positions to fill the gap.
   const newOppCount = gs.value?.opponentHandCount ?? 0
+  const playedPos1 = oppPlayedIdx >= 0 ? oppPlayedIdx + 1 : 0  // 1-based, 0 = no shift
   for (let n = 1; n <= newOppCount; n++) {
     const el = q(`[data-card-key="opp-${n}"]`)
-    if (el) flipEl(el, `o:${n}`, FLIP_HND_MS)
+    if (!el) continue
+    const oldN = (playedPos1 > 0 && n >= playedPos1) ? n + 1 : n
+    flipEl(el, `o:${oldN}`, FLIP_HND_MS)
   }
 
   return Promise.all(ps).then(() => {})
@@ -928,7 +946,9 @@ async function handleTurnResult(result: TurnResult) {
     }
   }
 
-  await flipRearrange(beforeRects)
+  const isMe = result.playerIndex === store.myIndex
+  const oppIdx = !isMe && result.cardIndex != null ? result.cardIndex : -1
+  await flipRearrange(beforeRects, oppIdx)
 
   // 6. If re-deal detected, run deal animation instead of normal post-anim flow
   if (isRedeal && pending) {
@@ -988,24 +1008,19 @@ async function animPlace(result: TurnResult) {
     }
     playedCardIdx.value = null
   } else {
-    const backs = qAll('.player-area.opponent .hand-row .card-back')
-    if (backs.length) {
-      const slotIdx = result.cardIndex != null && result.cardIndex < backs.length ? result.cardIndex : backs.length - 1
-      const el = backs[slotIdx]
-      srcR = el.getBoundingClientRect()
-      setStyle(el, 'visibility', 'hidden')
-    }
+    const el = getOpponentCardEl(result)
+    if (el) { srcR = el.getBoundingClientRect(); setStyle(el, 'visibility', 'hidden') }
   }
   if (!srcR) return
 
   // 2. Destination: the specific slot where the card will land.
   //    Briscola: always slot 0 (single centered slot, overlay existing card).
   //    Scopa: next empty slot (index = current table length).
-  const slotIdx = isTrickGame.value ? 0 : (gs.value?.table.length ?? 0)
+  const tableSlotIdx = isTrickGame.value ? 0 : (gs.value?.table.length ?? 0)
   const slot = getTableSlotSize()
   const destW = slot?.w ?? srcR.width
   const destH = slot?.h ?? srcR.height
-  const dest = getSlotRect(slotIdx, destW, destH)
+  const dest = getSlotRect(tableSlotIdx, destW, destH)
   if (!dest) return
 
   // 3. Clone flies from hand → target slot (scale up if hand cards smaller than table slot)
@@ -1068,13 +1083,8 @@ async function animCapture(result: TurnResult) {
       }
       playedCardIdx.value = null
     } else {
-      const backs = qAll('.player-area.opponent .hand-row .card-back')
-      if (backs.length) {
-        const slotIdx = result.cardIndex != null && result.cardIndex < backs.length ? result.cardIndex : backs.length - 1
-        const el = backs[slotIdx]
-        srcR = el.getBoundingClientRect()
-        setStyle(el, 'visibility', 'hidden')
-      }
+      const el = getOpponentCardEl(result)
+      if (el) { srcR = el.getBoundingClientRect(); setStyle(el, 'visibility', 'hidden') }
     }
   }
 
@@ -1183,13 +1193,8 @@ async function animTrick(result: TurnResult) {
     }
     playedCardIdx.value = null
   } else {
-    const backs = qAll('.player-area.opponent .hand-row .card-back')
-    if (backs.length) {
-      const slotIdx = result.cardIndex != null && result.cardIndex < backs.length ? result.cardIndex : backs.length - 1
-      const el = backs[slotIdx]
-      srcR = el.getBoundingClientRect()
-      setStyle(el, 'visibility', 'hidden')
-    }
+    const el = getOpponentCardEl(result)
+    if (el) { srcR = el.getBoundingClientRect(); setStyle(el, 'visibility', 'hidden') }
   }
 
   // 2. Fly follower's card to table center (same slot — overlays leader's card)
