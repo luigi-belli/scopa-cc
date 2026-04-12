@@ -90,21 +90,6 @@ final class MercurePublisher
         $this->publishToPlayer($gameId, 1, 'game-state', $this->stateToArray($state1));
     }
 
-    /** @param list<list<Card>> $options */
-    public function publishChooseCapture(string $gameId, int $playerIndex, array $options): void
-    {
-        $serialized = array_map(
-            static fn(array $cards): array => array_map(
-                static fn(Card $c): array => $c->jsonSerialize(),
-                $cards,
-            ),
-            $options,
-        );
-        $this->publishToPlayer($gameId, $playerIndex, 'choose-capture', [
-            'options' => $serialized,
-        ]);
-    }
-
     public function publishRoundEnd(string $gameId, Game $game, GameEngine $engine, RoundScores $scores, ?SweepData $sweep = null): void
     {
         $state0 = $engine->getStateForPlayer($game, 0);
