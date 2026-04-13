@@ -4,3 +4,5 @@ api/vendor
 api/.phpunit.result.cache
 .env
 ssl/
+db/
+acme-data/

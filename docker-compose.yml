@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: scopa
       POSTGRES_PASSWORD: scopa
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U scopa"]
       interval: 3s
@@ -19,7 +19,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=18&charset=utf8
+      DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=18
       MERCURE_URL: http://mercure/.well-known/mercure
       MERCURE_JWT_SECRET: "!ChangeThisMercureHubJWTSecretKey!ForScopa2026!"
       APP_ENV: prod
@@ -157,6 +157,4 @@ services:
       - dev
 
 volumes:
-  pgdata:
-  acme-data:
   frontend_node_modules:
