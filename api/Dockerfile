@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y \
     libicu-dev \
     unzip \
     cron \
-    && docker-php-ext-install pdo_pgsql intl opcache \
+    && docker-php-ext-install pdo_pgsql intl \
     && rm -rf /var/lib/apt/lists/*
 
 # PHP-FPM production tuning (static pool, status page)
