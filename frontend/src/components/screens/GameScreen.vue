@@ -537,11 +537,13 @@ const { connected: mercureConnected, connect, disconnect: disconnectMercure } = 
       }
       return
     }
-    // Close round-end overlay if the game has moved past it (opponent clicked
-    // "Next Round" first — their next-round request published this game-state).
+    // When the round-end overlay is showing and the game has moved past it
+    // (opponent clicked "Next Round" first), stash the new state but keep the
+    // overlay visible so this player can review scores at their own pace.
+    // handleNextRound will commit this state when the player clicks the button.
     if (showRoundEnd.value && data.state !== 'round-end' && data.state !== 'game-over') {
-      showRoundEnd.value = false
-      lastRoundScores.value = null
+      store.serverState = data
+      return
     }
     // Re-enable capture choice overlay when entering choosing state
     if (data.state === 'choosing') showCaptureChoice.value = true
@@ -1577,9 +1579,10 @@ async function processQueue() {
     }
   }
   else if (ev.type === 'game-state') {
+    // Stash but don't close overlay — see onGameState for explanation.
     if (showRoundEnd.value && ev.data.state !== 'round-end' && ev.data.state !== 'game-over') {
-      showRoundEnd.value = false
-      lastRoundScores.value = null
+      store.serverState = ev.data
+      return
     }
     if (ev.data.state === 'choosing') showCaptureChoice.value = true
     maybeCommitOrDeal(ev.data)
@@ -1634,15 +1637,20 @@ async function handleSelectCapture(optionIndex: number) {
 }
 async function handleNextRound() {
   showRoundEnd.value = false; lastRoundScores.value = null
+  // If the opponent already clicked "Next Round" and the game-state for the new
+  // round was stashed in serverState, skip the API call and commit that state.
+  const ss = store.serverState
+  if (ss && ss.state !== 'round-end' && ss.state !== 'game-over') {
+    maybeCommitOrDeal(ss)
+    return
+  }
   try { await api.nextRound(props.gameId) }
   catch (e: unknown) {
     console.error('Next round error:', e)
-    // If the game has already moved past round-end (opponent clicked "Next Round"
-    // first and the game-state event was already processed), don't re-show the
-    // overlay — just reconcile to pick up the current state.
+    // Re-check: the game-state event may have arrived while the API call was in flight.
     const currentState = store.serverState?.state
-    if (currentState && currentState !== 'round-end') {
-      scheduleReconcile()
+    if (currentState && currentState !== 'round-end' && currentState !== 'game-over') {
+      maybeCommitOrDeal(store.serverState!)
       return
     }
     // Genuine error while still in round-end — restore overlay so player can retry.
@@ -1675,10 +1683,10 @@ function reconcileState(freshState: GameState) {
   // If the server has moved past the choosing state, clear the overlay data
   // so it doesn't persist after a successful-but-lost select-capture response.
   if (freshState.state !== 'choosing') choosingOptions.value = null
-  // Close round-end overlay if the game has moved past it.
+  // Stash but don't close overlay — see onGameState for explanation.
   if (showRoundEnd.value && freshState.state !== 'round-end' && freshState.state !== 'game-over') {
-    showRoundEnd.value = false
-    lastRoundScores.value = null
+    store.serverState = freshState
+    return
   }
   if (isBusy()) {
     store.queueEvent({ type: 'game-state', data: freshState })
