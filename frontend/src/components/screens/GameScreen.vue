@@ -18,6 +18,7 @@
           :deckStyle="currentDeckStyle"
           :count="gs?.opponentCapturedCount ?? 0"
           :mine="false"
+          :scopaCards="gs?.opponentScopaCards ?? []"
           ref="opponentCapturedRef"
         />
         <div class="hand-row" ref="opponentHandRowEl">
@@ -78,6 +79,7 @@
           :deckStyle="currentDeckStyle"
           :count="gs?.myCapturedCount ?? 0"
           :mine="true"
+          :scopaCards="gs?.myScopaCards ?? []"
           ref="myCapturedRef"
         />
       </div>
@@ -1159,11 +1161,9 @@ async function animCapture(result: TurnResult) {
     await sweepToCaptured(sweepItems, capR, scale, 0)
   }
 
-  // 7. Scopa: flash + mark the capturing card in the captured deck
+  // 7. Scopa flash
   if (result.scopa) {
     scopaFlashRef.value?.show()
-    const capRef = result.playerIndex === store.myIndex ? myCapturedRef : opponentCapturedRef
-    capRef.value?.addScopa(card)
   }
 }
 
@@ -1293,11 +1293,8 @@ async function runDealAnimation(newState: GameState, ctx?: DealContext) {
     ? new Set((ctx?.prevMyHand ?? store.displayState?.myHand ?? []).map(c => `${c.suit}-${c.value}`))
     : null
 
-  // Clear scopa markers on new round
-  if (isNewRound) {
-    myCapturedRef.value?.clearScopa()
-    opponentCapturedRef.value?.clearScopa()
-  }
+  // Scopa markers are now driven by server state (myScopaCards/opponentScopaCards)
+  // and reset automatically when the new round state is committed.
 
   // 1. Set hiding flags so Vue renders ALL hand cards with opacity:0.
   // For Briscola partial deals, old cards are revealed immediately after layout (step 2).

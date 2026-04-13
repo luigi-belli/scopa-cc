@@ -28,6 +28,8 @@ export interface GameState {
   gameType: GameType
   briscolaCard: Card | null
   lastTrick: TrickData | null
+  myScopaCards: Card[]
+  opponentScopaCards: Card[]
 }
 
 export interface TrickData {

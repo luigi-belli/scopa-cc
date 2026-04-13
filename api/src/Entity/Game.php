@@ -180,6 +180,14 @@ class Game
     #[ORM\Column(type: 'integer')]
     private int $player2Scope = 0;
 
+    /** @var list<array{suit: string, value: int}> */
+    #[ORM\Column(type: 'json', options: ['jsonb' => true])]
+    private array $player1ScopaCards = [];
+
+    /** @var list<array{suit: string, value: int}> */
+    #[ORM\Column(type: 'json', options: ['jsonb' => true])]
+    private array $player2ScopaCards = [];
+
     #[ORM\Column(type: 'integer')]
     private int $player1TotalScore = 0;
 
@@ -479,6 +487,21 @@ class Game
             $this->player1Scope = $scope;
         } else {
             $this->player2Scope = $scope;
+        }
+        return $this;
+    }
+
+    public function getPlayerScopaCards(int $index): CardCollection
+    {
+        return CardCollection::fromArray($index === 0 ? $this->player1ScopaCards : $this->player2ScopaCards);
+    }
+
+    public function setPlayerScopaCards(int $index, CardCollection $cards): self
+    {
+        if ($index === 0) {
+            $this->player1ScopaCards = $cards->jsonSerialize();
+        } else {
+            $this->player2ScopaCards = $cards->jsonSerialize();
         }
         return $this;
     }

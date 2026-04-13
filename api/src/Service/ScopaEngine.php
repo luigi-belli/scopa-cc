@@ -32,6 +32,8 @@ final class ScopaEngine implements GameEngine
         $game->setPlayer2Captured(new CardCollection());
         $game->setPlayer1Scope(0);
         $game->setPlayer2Scope(0);
+        $game->setPlayerScopaCards(0, new CardCollection());
+        $game->setPlayerScopaCards(1, new CardCollection());
         $game->setLastCapturer(null);
         $game->setPendingPlay(null);
         $game->setTableCards(new CardCollection());
@@ -240,6 +242,7 @@ final class ScopaEngine implements GameEngine
         if (count($tableCards) === 0 && !$isLastPlay) {
             $isScopa = true;
             $game->setPlayerScope($playerIndex, $game->getPlayerScope($playerIndex) + 1);
+            $game->setPlayerScopaCards($playerIndex, $game->getPlayerScopaCards($playerIndex)->withAppended($playedCard));
         }
 
         $sweep = $this->advanceTurn($game);
@@ -365,6 +368,8 @@ final class ScopaEngine implements GameEngine
             roundHistory: $game->getRoundHistory(),
             deckStyle: $game->getDeckStyle(),
             gameType: $game->getGameType(),
+            myScopaCards: $game->getPlayerScopaCards($playerIndex),
+            opponentScopaCards: $game->getPlayerScopaCards($opponentIndex),
         );
     }
 

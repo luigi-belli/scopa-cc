@@ -3,8 +3,8 @@
     <div class="captured-stack">
       <!-- Scopa marker cards: face-up, rotated 90°, behind the deck -->
       <div
-        v-for="(sc, i) in scopaCards"
-        :key="'sc-' + i"
+        v-for="sc in scopaCards"
+        :key="`sc-${sc.suit}-${sc.value}`"
         class="scopa-marker"
       >
         <img :src="cardImagePath(sc, deckStyle)" alt="Scopa" />
@@ -26,18 +26,9 @@ const props = defineProps<{
   deckStyle: DeckStyle
   count: number
   mine: boolean
+  scopaCards: Card[]
 }>()
 
-const scopaCards = ref<Card[]>([])
-
-function addScopa(card: Card) {
-  scopaCards.value.push(card)
-}
-
-function clearScopa() {
-  scopaCards.value = []
-}
-
 const capturedEl = ref<HTMLElement>()
-defineExpose({ capturedEl, addScopa, clearScopa })
+defineExpose({ capturedEl })
 </script>

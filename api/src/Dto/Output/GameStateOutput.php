@@ -43,6 +43,8 @@ final readonly class GameStateOutput
         public GameType $gameType = GameType::Scopa,
         public ?Card $briscolaCard = null,
         public ?LastTrick $lastTrick = null,
+        public CardCollection $myScopaCards = new CardCollection(),
+        public CardCollection $opponentScopaCards = new CardCollection(),
     ) {}
 
     public function withMercureToken(string $mercureToken): self
@@ -72,6 +74,8 @@ final readonly class GameStateOutput
             gameType: $this->gameType,
             briscolaCard: $this->briscolaCard,
             lastTrick: $this->lastTrick,
+            myScopaCards: $this->myScopaCards,
+            opponentScopaCards: $this->opponentScopaCards,
         );
     }
 }
