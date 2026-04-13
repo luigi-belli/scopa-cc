@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: scopa
       POSTGRES_USER: scopa
@@ -19,7 +19,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=17
+      DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=18&charset=utf8
       MERCURE_URL: http://mercure/.well-known/mercure
       MERCURE_JWT_SECRET: "!ChangeThisMercureHubJWTSecretKey!ForScopa2026!"
       APP_ENV: prod
@@ -36,7 +36,7 @@ services:
       php:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=17
+      DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=18
       MERCURE_URL: http://mercure/.well-known/mercure
       MERCURE_JWT_SECRET: "!ChangeThisMercureHubJWTSecretKey!ForScopa2026!"
       APP_ENV: prod
@@ -57,7 +57,7 @@ services:
       php:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=17
+      DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=18
       APP_ENV: prod
     restart: unless-stopped
 
@@ -147,7 +147,7 @@ services:
 
   # Persistent Node.js container for fast frontend tests & builds (dev profile)
   node:
-    image: node:22-alpine
+    image: node:24-alpine
     working_dir: /app
     volumes:
       - ./frontend:/app

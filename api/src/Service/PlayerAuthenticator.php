@@ -10,11 +10,11 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-final class PlayerAuthenticator
+final readonly class PlayerAuthenticator
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
-        private readonly RequestStack $requestStack,
+        private EntityManagerInterface $entityManager,
+        private RequestStack $requestStack,
     ) {}
 
     /** @param array<string, mixed> $uriVariables */

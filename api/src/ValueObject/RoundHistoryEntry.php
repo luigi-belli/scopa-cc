@@ -29,6 +29,7 @@ final readonly class RoundHistoryEntry implements \JsonSerializable
     }
 
     /** @return array{scores: array{0: ScoreRowArray, 1: ScoreRowArray}, totals: array{0: int, 1: int}} */
+    #[\Override]
     public function jsonSerialize(): array
     {
         return [

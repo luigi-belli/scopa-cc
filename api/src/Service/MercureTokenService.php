@@ -15,9 +15,8 @@ final readonly class MercureTokenService
     /** @var non-empty-string */
     private string $mercureSecret;
 
-    public function __construct(
-        string $mercureSecret,
-    ) {
+    public function __construct(string $mercureSecret)
+    {
         if ($mercureSecret === '') {
             throw new \InvalidArgumentException('MERCURE_JWT_SECRET must not be empty.');
         }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-final class PlayerTokenService
+final readonly class PlayerTokenService
 {
     public function generateToken(): string
     {
@@ -13,8 +13,9 @@ final class PlayerTokenService
 
     public function sanitizeName(string $name, int $maxLength = 30): string
     {
-        $name = trim($name);
-        $name = (string) preg_replace('/[\x00-\x1F\x7F]/u', '', $name);
-        return mb_substr($name, 0, $maxLength);
+        return $name
+            |> trim(...)
+            |> (static fn(string $n): string => preg_replace('/[\x00-\x1F\x7F]/u', '', $n))
+            |> (static fn(string $n): string => mb_substr($n, 0, $maxLength));
     }
 }

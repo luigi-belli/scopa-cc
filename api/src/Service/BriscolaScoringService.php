@@ -7,7 +7,7 @@ namespace App\Service;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 
-final class BriscolaScoringService
+final readonly class BriscolaScoringService
 {
     /** Card point values for Briscola (Ace=11, Three=10, King=4, Knight=3, Jack=2, rest=0). */
     private const array CARD_POINTS = [

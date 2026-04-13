@@ -3,6 +3,8 @@
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
          colors="true"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerWarnings="true"
 >
     <testsuites>
         <testsuite name="Unit">
@@ -14,6 +16,6 @@
     </testsuites>
     <php>
         <env name="APP_ENV" value="test"/>
-        <env name="DATABASE_URL" value="postgresql://scopa:scopa@postgres:5432/scopa_test?serverVersion=17"/>
+        <env name="DATABASE_URL" value="postgresql://scopa:scopa@postgres:5432/scopa_test?serverVersion=18"/>
     </php>
 </phpunit>

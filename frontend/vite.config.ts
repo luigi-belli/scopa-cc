@@ -12,10 +12,6 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
-  test: {
-    globals: false,
-    environment: 'node',
-  },
   server: {
     proxy: {
       '/api': 'http://localhost:8080',

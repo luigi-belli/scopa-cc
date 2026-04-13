@@ -13,20 +13,24 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /** @implements ProviderInterface<GameLookupOutput> */
-final class GameLookupProvider implements ProviderInterface
+final readonly class GameLookupProvider implements ProviderInterface
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
-        private readonly RequestStack $requestStack,
+        private EntityManagerInterface $entityManager,
+        private RequestStack $requestStack,
     ) {}
 
     /**
      * @return list<GameLookupOutput>
      */
+    #[\Override]
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): array
     {
         $request = $this->requestStack->getCurrentRequest();
-        $name = mb_substr(mb_strtolower(trim((string) $request?->query->get('name', ''))), 0, 60);
+        $name = (string) $request?->query->get('name', '')
+            |> trim(...)
+            |> mb_strtolower(...)
+            |> (static fn(string $s): string => mb_substr($s, 0, 60));
 
         if ($name === '') {
             return [];

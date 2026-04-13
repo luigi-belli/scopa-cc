@@ -30,11 +30,13 @@ final readonly class CardCollection implements \JsonSerializable, \Countable, \I
     }
 
     /** @return list<array{suit: string, value: int}> */
+    #[\Override]
     public function jsonSerialize(): array
     {
         return array_map(static fn(Card $c): array => $c->jsonSerialize(), $this->cards);
     }
 
+    #[\Override]
     public function count(): int
     {
         return count($this->cards);
@@ -57,6 +59,7 @@ final readonly class CardCollection implements \JsonSerializable, \Countable, \I
     }
 
     /** @return \ArrayIterator<int, Card> */
+    #[\Override]
     public function getIterator(): \ArrayIterator
     {
         return new \ArrayIterator($this->cards);
@@ -134,12 +137,7 @@ final readonly class CardCollection implements \JsonSerializable, \Countable, \I
 
     public function hasCard(Suit $suit, int $value): bool
     {
-        foreach ($this->cards as $card) {
-            if ($card->suit === $suit && $card->value === $value) {
-                return true;
-            }
-        }
-        return false;
+        return array_any($this->cards, static fn(Card $card): bool => $card->suit === $suit && $card->value === $value);
     }
 
     public function shuffle(): self

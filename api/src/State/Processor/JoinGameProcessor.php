@@ -21,16 +21,17 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /** @implements ProcessorInterface<mixed, JoinGameOutput> */
-final class JoinGameProcessor implements ProcessorInterface
+final readonly class JoinGameProcessor implements ProcessorInterface
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
-        private readonly PlayerTokenService $tokenService,
-        private readonly GameEngineFactory $engineFactory,
-        private readonly MercurePublisher $mercurePublisher,
-        private readonly MercureTokenService $mercureTokenService,
+        private EntityManagerInterface $entityManager,
+        private PlayerTokenService $tokenService,
+        private GameEngineFactory $engineFactory,
+        private MercurePublisher $mercurePublisher,
+        private MercureTokenService $mercureTokenService,
     ) {}
 
+    #[\Override]
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): JoinGameOutput
     {
         if (!$data instanceof JoinGameInput) {

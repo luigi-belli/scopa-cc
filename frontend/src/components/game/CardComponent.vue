@@ -1,5 +1,5 @@
 <template>
-  <div class="card" :class="{ playable, glow, 'captured-glow': capturedGlow }" :style="cardStyle">
+  <div class="card" :class="{ playable, glow, 'captured-glow': capturedGlow }">
     <img :src="imagePath" :alt="t('card.alt', { value: card.value, suit: t('suit.' + card.suit) })" />
   </div>
 </template>
@@ -16,12 +16,9 @@ const props = defineProps<{
   playable?: boolean
   glow?: boolean
   capturedGlow?: boolean
-  style?: Record<string, string>
 }>()
 
 const { t } = useI18n()
 
 const imagePath = computed(() => cardImagePath(props.card, props.deckStyle))
-
-const cardStyle = computed(() => props.style || {})
 </script>

@@ -8,7 +8,7 @@ use App\Enum\Suit;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 
-final class DeckService
+final readonly class DeckService
 {
     public function createDeck(): CardCollection
     {

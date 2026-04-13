@@ -29,6 +29,7 @@ final readonly class RoundScores implements \JsonSerializable
     }
 
     /** @return array{0: ScoreRowArray, 1: ScoreRowArray} */
+    #[\Override]
     public function jsonSerialize(): array
     {
         return [

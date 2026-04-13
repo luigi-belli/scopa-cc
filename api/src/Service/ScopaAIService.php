@@ -10,13 +10,14 @@ use App\ValueObject\AIMove;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 
-final class ScopaAIService implements AIService
+final readonly class ScopaAIService implements AIService
 {
     public function __construct(
-        private readonly ScopaEngine $engine,
-        private readonly ScopaScoringService $scoringService,
+        private ScopaEngine $engine,
+        private ScopaScoringService $scoringService,
     ) {}
 
+    #[\Override]
     public function evaluateMove(Game $game, int $aiIndex): AIMove
     {
         $hand = $game->getPlayerHand($aiIndex);
@@ -54,6 +55,7 @@ final class ScopaAIService implements AIService
         return new AIMove(cardIndex: $bestCardIndex, optionIndex: $bestOptionIndex);
     }
 
+    #[\Override]
     public function autoSelectCapture(Game $game): int
     {
         $pending = $game->getPendingPlay();

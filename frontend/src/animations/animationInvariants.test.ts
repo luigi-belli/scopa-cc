@@ -33,6 +33,8 @@ function makeState(overrides: Partial<GameState> = {}): GameState {
     gameType: 'scopa',
     briscolaCard: null,
     lastTrick: null,
+    myScopaCards: [],
+    opponentScopaCards: [],
     ...overrides,
   }
 }

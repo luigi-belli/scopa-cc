@@ -26,6 +26,7 @@ final readonly class PendingPlay implements \JsonSerializable
     }
 
     /** @return array{card: array{suit: string, value: int}, playerIndex: int, options: list<list<int>>, cardIndex?: int} */
+    #[\Override]
     public function jsonSerialize(): array
     {
         $data = [

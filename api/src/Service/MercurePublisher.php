@@ -149,7 +149,7 @@ final class MercurePublisher
 
         if ($game->getState() === GameState::RoundEnd || $game->getState() === GameState::GameOver) {
             $lastHistory = $game->getRoundHistory();
-            $lastEntry = end($lastHistory);
+            $lastEntry = array_last($lastHistory);
             $scores = $lastEntry instanceof RoundHistoryEntry ? $lastEntry->scores : null;
             $sweep = $turnResult->sweep;
             if ($game->getState() === GameState::GameOver) {

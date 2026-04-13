@@ -12,14 +12,15 @@ use App\Service\MercureTokenService;
 use App\Service\PlayerAuthenticator;
 
 /** @implements ProviderInterface<GameStateOutput> */
-final class GameStateProvider implements ProviderInterface
+final readonly class GameStateProvider implements ProviderInterface
 {
     public function __construct(
-        private readonly PlayerAuthenticator $authenticator,
-        private readonly GameEngineFactory $engineFactory,
-        private readonly MercureTokenService $mercureTokenService,
+        private PlayerAuthenticator $authenticator,
+        private GameEngineFactory $engineFactory,
+        private MercureTokenService $mercureTokenService,
     ) {}
 
+    #[\Override]
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): GameStateOutput
     {
         $game = $this->authenticator->loadGame($uriVariables);

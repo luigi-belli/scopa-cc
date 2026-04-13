@@ -10,9 +10,9 @@ use App\ValueObject\CardCollection;
 use App\ValueObject\RoundScores;
 use App\ValueObject\ScoreRow;
 
-final class ScopaScoringService
+final readonly class ScopaScoringService
 {
-    private const PRIMIERA_VALUES = [
+    private const array PRIMIERA_VALUES = [
         7 => 21, 6 => 18, 1 => 16, 5 => 15,
         4 => 14, 3 => 13, 2 => 12,
         8 => 10, 9 => 10, 10 => 10,

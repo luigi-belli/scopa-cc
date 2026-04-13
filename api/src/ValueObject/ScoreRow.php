@@ -49,6 +49,7 @@ final readonly class ScoreRow implements \JsonSerializable
     }
 
     /** @return array{carte: int, denari: int, setteBello: int, primiera: int, scope: int, carteCount: int, denariCount: int, primieraValue: int|null, hasSetteBello: bool, carteCards: list<array{suit: string, value: int}>, denariCards: list<array{suit: string, value: int}>, primieraCards: list<array{suit: string, value: int}>} */
+    #[\Override]
     public function jsonSerialize(): array
     {
         return [

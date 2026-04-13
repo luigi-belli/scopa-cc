@@ -22,16 +22,17 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\Messenger\MessageBusInterface;
 
 /** @implements ProcessorInterface<mixed, CreateGameOutput> */
-final class CreateGameProcessor implements ProcessorInterface
+final readonly class CreateGameProcessor implements ProcessorInterface
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
-        private readonly PlayerTokenService $tokenService,
-        private readonly GameEngineFactory $engineFactory,
-        private readonly MessageBusInterface $messageBus,
-        private readonly MercureTokenService $mercureTokenService,
+        private EntityManagerInterface $entityManager,
+        private PlayerTokenService $tokenService,
+        private GameEngineFactory $engineFactory,
+        private MessageBusInterface $messageBus,
+        private MercureTokenService $mercureTokenService,
     ) {}
 
+    #[\Override]
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): CreateGameOutput
     {
         if (!$data instanceof CreateGameInput) {

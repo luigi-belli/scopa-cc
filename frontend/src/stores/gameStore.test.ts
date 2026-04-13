@@ -25,6 +25,11 @@ function makeState(overrides: Partial<GameState> = {}): GameState {
     pendingChoice: null,
     roundHistory: [],
     deckStyle: 'piacentine',
+    gameType: 'scopa',
+    briscolaCard: null,
+    lastTrick: null,
+    myScopaCards: [],
+    opponentScopaCards: [],
     ...overrides,
   }
 }

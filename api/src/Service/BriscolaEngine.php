@@ -13,13 +13,14 @@ use App\ValueObject\LastTrick;
 use App\ValueObject\TurnResult;
 use App\ValueObject\TurnResultType;
 
-final class BriscolaEngine implements GameEngine
+final readonly class BriscolaEngine implements GameEngine
 {
     public function __construct(
-        private readonly DeckService $deckService,
-        private readonly BriscolaScoringService $scoringService,
+        private DeckService $deckService,
+        private BriscolaScoringService $scoringService,
     ) {}
 
+    #[\Override]
     public function initializeGame(Game $game): void
     {
         $deck = $this->deckService->createDeck();
@@ -39,6 +40,7 @@ final class BriscolaEngine implements GameEngine
         $game->setTrickLeader(null);
     }
 
+    #[\Override]
     public function startGame(Game $game): void
     {
         $deck = $game->getDeck();
@@ -65,6 +67,7 @@ final class BriscolaEngine implements GameEngine
         $game->setState(GameState::Playing);
     }
 
+    #[\Override]
     public function playCard(Game $game, int $playerIndex, int $cardIndex): TurnResult
     {
         $hand = $game->getPlayerHand($playerIndex);
@@ -146,16 +149,19 @@ final class BriscolaEngine implements GameEngine
         );
     }
 
+    #[\Override]
     public function selectCapture(Game $game, int $optionIndex): TurnResult
     {
         throw new \LogicException('Briscola does not support capture selection');
     }
 
+    #[\Override]
     public function nextRound(Game $game): void
     {
         throw new \LogicException('Briscola does not support multiple rounds');
     }
 
+    #[\Override]
     public function getStateForPlayer(Game $game, int $playerIndex): GameStateOutput
     {
         $opponentIndex = $playerIndex === 0 ? 1 : 0;

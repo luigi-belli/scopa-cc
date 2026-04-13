@@ -20,6 +20,7 @@ final readonly class Card implements \JsonSerializable
     }
 
     /** @return array{suit: string, value: int} */
+    #[\Override]
     public function jsonSerialize(): array
     {
         return ['suit' => $this->suit->value, 'value' => $this->value];

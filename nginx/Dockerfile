@@ -1,11 +1,11 @@
-FROM node:22-alpine AS frontend-build
+FROM node:24-alpine AS frontend-build
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.29-alpine
 
 # OpenSSL for runtime self-signed cert generation (kept in image, ~1MB on Alpine)
 RUN apk add --no-cache openssl && mkdir -p /etc/nginx/ssl

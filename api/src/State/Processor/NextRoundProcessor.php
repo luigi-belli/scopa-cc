@@ -19,16 +19,17 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\Messenger\MessageBusInterface;
 
 /** @implements ProcessorInterface<mixed, GameStateOutput> */
-final class NextRoundProcessor implements ProcessorInterface
+final readonly class NextRoundProcessor implements ProcessorInterface
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
-        private readonly PlayerAuthenticator $authenticator,
-        private readonly GameEngineFactory $engineFactory,
-        private readonly MercurePublisher $mercurePublisher,
-        private readonly MessageBusInterface $messageBus,
+        private EntityManagerInterface $entityManager,
+        private PlayerAuthenticator $authenticator,
+        private GameEngineFactory $engineFactory,
+        private MercurePublisher $mercurePublisher,
+        private MessageBusInterface $messageBus,
     ) {}
 
+    #[\Override]
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): GameStateOutput
     {
         $game = $this->authenticator->loadGame($uriVariables);

@@ -22,7 +22,7 @@ import type { Card, DeckStyle } from '@/types/card'
 import { cardImagePath } from '@/types/card'
 import CardBack from './CardBack.vue'
 
-const props = defineProps<{
+defineProps<{
   deckStyle: DeckStyle
   count: number
   mine: boolean

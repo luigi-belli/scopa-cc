@@ -12,6 +12,7 @@ final readonly class SweepData implements \JsonSerializable
     ) {}
 
     /** @return array{remainingCards: list<array{suit: string, value: int}>, lastCapturer: int|null} */
+    #[\Override]
     public function jsonSerialize(): array
     {
         return [

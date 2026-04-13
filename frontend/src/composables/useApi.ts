@@ -138,7 +138,7 @@ export function useApi(): Api {
       return null as T
     }
 
-    return response.json()
+    return response.json() as Promise<T>
   }
 
   async function createGame(

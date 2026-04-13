@@ -11,7 +11,7 @@ You are a testing agent for a Scopa (Italian card game) web application. Your jo
 
 ## Project Structure
 
-- **Backend**: PHP 8.4 + Symfony 7.3 + API Platform, in `api/`
+- **Backend**: PHP 8.5 + Symfony 8.0 + API Platform 4.3, in `api/`
 - **Frontend**: Vue 3 + TypeScript, in `frontend/`
 - **Infrastructure**: Docker Compose with 8 services (postgres, php, messenger-worker, cron, mercure, nginx, acme, node), exposed on port 5982
 

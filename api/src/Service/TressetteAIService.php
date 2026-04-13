@@ -16,6 +16,7 @@ final readonly class TressetteAIService implements AIService
         private TressetteScoringService $scoringService,
     ) {}
 
+    #[\Override]
     public function evaluateMove(Game $game, int $aiIndex): AIMove
     {
         $hand = $game->getPlayerHand($aiIndex);
@@ -47,6 +48,7 @@ final readonly class TressetteAIService implements AIService
         return new AIMove(cardIndex: $bestCardIndex);
     }
 
+    #[\Override]
     public function autoSelectCapture(Game $game): int
     {
         throw new \LogicException('Tressette does not support capture selection');
@@ -136,12 +138,7 @@ final readonly class TressetteAIService implements AIService
 
     private function handHasSuit(CardCollection $hand, Suit $suit): bool
     {
-        foreach ($hand as $card) {
-            if ($card->suit === $suit) {
-                return true;
-            }
-        }
-        return false;
+        return array_any($hand->toArray(), static fn(Card $card): bool => $card->suit === $suit);
     }
 
     private function countSuit(CardCollection $hand, Suit $suit): int

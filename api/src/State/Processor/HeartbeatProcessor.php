@@ -14,14 +14,15 @@ use Doctrine\ORM\OptimisticLockException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /** @implements ProcessorInterface<mixed, null> */
-final class HeartbeatProcessor implements ProcessorInterface
+final readonly class HeartbeatProcessor implements ProcessorInterface
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
-        private readonly PlayerAuthenticator $authenticator,
-        private readonly MercurePublisher $mercurePublisher,
+        private EntityManagerInterface $entityManager,
+        private PlayerAuthenticator $authenticator,
+        private MercurePublisher $mercurePublisher,
     ) {}
 
+    #[\Override]
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): null
     {
         $game = $this->authenticator->loadGame($uriVariables);

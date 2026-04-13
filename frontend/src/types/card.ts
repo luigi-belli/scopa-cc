@@ -1,11 +1,13 @@
+export type Suit = 'Denari' | 'Coppe' | 'Bastoni' | 'Spade'
+
 export interface Card {
-  suit: string
+  suit: Suit
   value: number
 }
 
 export type DeckStyle = 'piacentine' | 'napoletane' | 'toscane' | 'siciliane'
 
-export const SUIT_LETTER: Record<string, string> = {
+export const SUIT_LETTER: Record<Suit, string> = {
   Denari: 'd',
   Coppe: 'c',
   Bastoni: 'b',

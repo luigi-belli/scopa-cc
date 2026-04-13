@@ -1,9 +1,9 @@
 import { watch, type Ref } from 'vue'
-import { type DeckStyle, SUIT_LETTER, cardImagePath, cardBackPath } from '@/types/card'
+import { type DeckStyle, type Suit, SUIT_LETTER, cardImagePath, cardBackPath } from '@/types/card'
 
 const preloaded = new Set<DeckStyle>()
 
-const SUITS = Object.keys(SUIT_LETTER)
+const SUITS = Object.keys(SUIT_LETTER) as Suit[]
 const VALUES = Array.from({ length: 10 }, (_, i) => i + 1)
 
 function preloadDeck(style: DeckStyle): void {

@@ -14,15 +14,16 @@ use App\ValueObject\LastTrick;
 use App\ValueObject\TurnResult;
 use App\ValueObject\TurnResultType;
 
-final class TressetteEngine implements GameEngine
+final readonly class TressetteEngine implements GameEngine
 {
     private const int HAND_SIZE = 10;
 
     public function __construct(
-        private readonly DeckService $deckService,
-        private readonly TressetteScoringService $scoringService,
+        private DeckService $deckService,
+        private TressetteScoringService $scoringService,
     ) {}
 
+    #[\Override]
     public function initializeGame(Game $game): void
     {
         $deck = $this->deckService->createDeck();
@@ -42,6 +43,7 @@ final class TressetteEngine implements GameEngine
         $game->setTrickLeader(null);
     }
 
+    #[\Override]
     public function startGame(Game $game): void
     {
         $deck = $game->getDeck();
@@ -60,6 +62,7 @@ final class TressetteEngine implements GameEngine
         $game->setState(GameState::Playing);
     }
 
+    #[\Override]
     public function playCard(Game $game, int $playerIndex, int $cardIndex): TurnResult
     {
         $hand = $game->getPlayerHand($playerIndex);
@@ -148,16 +151,19 @@ final class TressetteEngine implements GameEngine
         );
     }
 
+    #[\Override]
     public function selectCapture(Game $game, int $optionIndex): TurnResult
     {
         throw new \LogicException('Tressette does not support capture selection');
     }
 
+    #[\Override]
     public function nextRound(Game $game): void
     {
         throw new \LogicException('Tressette does not support multiple rounds');
     }
 
+    #[\Override]
     public function getStateForPlayer(Game $game, int $playerIndex): GameStateOutput
     {
         $opponentIndex = $playerIndex === 0 ? 1 : 0;
@@ -227,7 +233,6 @@ final class TressetteEngine implements GameEngine
         }
 
         $loserIndex = $winnerIndex === 0 ? 1 : 0;
-        $winnerCard = null;
         $loserCard = null;
 
         // Winner draws first
@@ -250,12 +255,7 @@ final class TressetteEngine implements GameEngine
 
     private function hasSuit(CardCollection $hand, Suit $suit): bool
     {
-        foreach ($hand as $card) {
-            if ($card->suit === $suit) {
-                return true;
-            }
-        }
-        return false;
+        return array_any($hand->toArray(), static fn(Card $card): bool => $card->suit === $suit);
     }
 
     private function isGameOver(Game $game): bool

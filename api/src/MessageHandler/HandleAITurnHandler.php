@@ -18,18 +18,18 @@ use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Messenger\MessageBusInterface;
 
 #[AsMessageHandler]
-final class HandleAITurnHandler
+final readonly class HandleAITurnHandler
 {
     private const int AI_PLAYER_INDEX = 1;
     private const int AI_DELAY_MICROSECONDS = 1_500_000;
 
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
-        private readonly GameEngineFactory $engineFactory,
-        private readonly AIServiceFactory $aiFactory,
-        private readonly MercurePublisher $mercurePublisher,
-        private readonly MessageBusInterface $messageBus,
-        private readonly LoggerInterface $logger,
+        private EntityManagerInterface $entityManager,
+        private GameEngineFactory $engineFactory,
+        private AIServiceFactory $aiFactory,
+        private MercurePublisher $mercurePublisher,
+        private MessageBusInterface $messageBus,
+        private LoggerInterface $logger,
     ) {}
 
     public function __invoke(HandleAITurnMessage $message): void

@@ -9,10 +9,10 @@ use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\Event\TerminateEvent;
 
-final class MercureTerminateListener
+final readonly class MercureTerminateListener
 {
     public function __construct(
-        private readonly MercurePublisher $mercurePublisher,
+        private MercurePublisher $mercurePublisher,
     ) {}
 
     #[AsEventListener(event: RequestEvent::class, priority: 255)]

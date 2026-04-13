@@ -7,7 +7,7 @@ namespace App\Service;
 use App\ValueObject\Card;
 use App\ValueObject\CardCollection;
 
-final class TressetteScoringService
+final readonly class TressetteScoringService
 {
     /**
      * Card point values for Tressette (×3 integer system).

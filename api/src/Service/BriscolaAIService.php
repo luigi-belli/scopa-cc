@@ -9,12 +9,13 @@ use App\Enum\Suit;
 use App\ValueObject\AIMove;
 use App\ValueObject\Card;
 
-final class BriscolaAIService implements AIService
+final readonly class BriscolaAIService implements AIService
 {
     public function __construct(
-        private readonly BriscolaScoringService $scoringService,
+        private BriscolaScoringService $scoringService,
     ) {}
 
+    #[\Override]
     public function evaluateMove(Game $game, int $aiIndex): AIMove
     {
         $hand = $game->getPlayerHand($aiIndex);
@@ -40,6 +41,7 @@ final class BriscolaAIService implements AIService
         return new AIMove(cardIndex: $bestCardIndex);
     }
 
+    #[\Override]
     public function autoSelectCapture(Game $game): int
     {
         throw new \LogicException('Briscola does not support capture selection');

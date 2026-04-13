@@ -8,7 +8,7 @@ interface UseDeckStyleReturn {
 }
 
 const STORAGE_KEY = 'scopa-deck-style'
-const VALID_STYLES: DeckStyle[] = ['piacentine', 'napoletane', 'toscane', 'siciliane']
+const VALID_STYLES: readonly DeckStyle[] = ['piacentine', 'napoletane', 'toscane', 'siciliane'] as const
 
 const selectedDeck = ref<DeckStyle>(loadSaved())
 

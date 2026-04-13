@@ -23,6 +23,7 @@ final readonly class TurnResult implements \JsonSerializable
     ) {}
 
     /** @return array<string, mixed> */
+    #[\Override]
     public function jsonSerialize(): array
     {
         $data = [

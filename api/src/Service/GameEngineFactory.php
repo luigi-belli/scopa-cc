@@ -7,12 +7,12 @@ namespace App\Service;
 use App\Entity\Game;
 use App\Enum\GameType;
 
-final class GameEngineFactory
+final readonly class GameEngineFactory
 {
     public function __construct(
-        private readonly ScopaEngine $scopaEngine,
-        private readonly BriscolaEngine $briscolaEngine,
-        private readonly TressetteEngine $tressetteEngine,
+        private ScopaEngine $scopaEngine,
+        private BriscolaEngine $briscolaEngine,
+        private TressetteEngine $tressetteEngine,
     ) {}
 
     public function forGame(Game $game): GameEngine

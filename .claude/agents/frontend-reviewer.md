@@ -19,11 +19,11 @@ You are a senior Vue.js/TypeScript architect reviewing the Scopa frontend codeba
 
 ## Project Context
 
-- **Stack**: Vue 3.5 + TypeScript 5.8 + Pinia 3 + Vue Router 4.5 + Vite 6
+- **Stack**: Vue 3.5 + TypeScript 6 + Pinia 3 + Vue Router 5 + Vite 8
 - **Architecture**: SPA with Composition API, Pinia store, composables, and imperative DOM animation system
 - **Business logic**: Scopa card game — real-time multiplayer via Mercure SSE, REST API for mutations, complex FLIP animation system
 - **Source root**: `/Users/gigi/scopa/frontend/`
-- **TypeScript config**: `strict: true`, `ES2022` target, `bundler` module resolution, `@/*` path alias
+- **TypeScript config**: `strict: true`, `ES2024` target, `bundler` module resolution, `@/*` path alias
 
 ### Key Files
 
@@ -89,7 +89,7 @@ The animation system is the most sensitive part of the codebase. It uses a **two
 - **Event naming**: Use camelCase for `$emit` names in `<script>`, kebab-case in parent template (`@event-name`).
 - **Slots**: Use named slots for complex component layouts. Use scoped slots when child needs to pass data up.
 
-### TypeScript 5.8 — per official docs (typescriptlang.org)
+### TypeScript 6 — per official docs (typescriptlang.org)
 
 - **Strict mode**: Project uses `strict: true`. All code must be fully type-safe — no `any` types unless absolutely unavoidable (and then with a `// eslint-disable` or explanation comment).
 - **Explicit return types**: All exported functions and composables must have explicit return types.
@@ -115,7 +115,7 @@ The animation system is the most sensitive part of the codebase. It uses a **two
 - **No direct state mutation from components**: Prefer actions over directly mutating `store.someState` in components (debatable but cleaner for complex state).
 - **storeToRefs()**: Use `storeToRefs()` to destructure reactive state from stores, not `toRefs(store)`. Use direct destructuring only for actions (non-reactive).
 
-### Vue Router 4 — per official docs (router.vuejs.org)
+### Vue Router 5 — per official docs (router.vuejs.org)
 
 - **Typed routes**: Route params should be typed. Use route meta typing where applicable.
 - **Navigation guards**: Use `beforeEach`, `beforeEnter`, or in-component guards as appropriate.

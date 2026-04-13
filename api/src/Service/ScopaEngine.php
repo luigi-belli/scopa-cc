@@ -16,13 +16,14 @@ use App\ValueObject\SweepData;
 use App\ValueObject\TurnResult;
 use App\ValueObject\TurnResultType;
 
-final class ScopaEngine implements GameEngine
+final readonly class ScopaEngine implements GameEngine
 {
     public function __construct(
-        private readonly DeckService $deckService,
-        private readonly ScopaScoringService $scoringService,
+        private DeckService $deckService,
+        private ScopaScoringService $scoringService,
     ) {}
 
+    #[\Override]
     public function initializeGame(Game $game): void
     {
         $deck = $this->deckService->createDeck();
@@ -41,6 +42,7 @@ final class ScopaEngine implements GameEngine
         $game->setPlayer2Hand(new CardCollection());
     }
 
+    #[\Override]
     public function startGame(Game $game): void
     {
         $deck = $game->getDeck();
@@ -126,7 +128,8 @@ final class ScopaEngine implements GameEngine
             return;
         }
 
-        for ($i = $start; $i < count($cards); $i++) {
+        $cardCount = count($cards);
+        for ($i = $start; $i < $cardCount; $i++) {
             $cardValue = $cards[$i]->value;
             if ($cardValue <= $remaining) {
                 $current[] = $indices[$i];
@@ -136,6 +139,7 @@ final class ScopaEngine implements GameEngine
         }
     }
 
+    #[\Override]
     public function playCard(Game $game, int $playerIndex, int $cardIndex): TurnResult
     {
         $hand = $game->getPlayerHand($playerIndex);
@@ -190,6 +194,7 @@ final class ScopaEngine implements GameEngine
         );
     }
 
+    #[\Override]
     public function selectCapture(Game $game, int $optionIndex): TurnResult
     {
         $pending = $game->getPendingPlay();
@@ -213,6 +218,7 @@ final class ScopaEngine implements GameEngine
         );
     }
 
+    #[\Override]
     public function nextRound(Game $game): void
     {
         $game->setDealerIndex($game->getDealerIndex() === 0 ? 1 : 0);
@@ -331,6 +337,7 @@ final class ScopaEngine implements GameEngine
         return new SweepData(remainingCards: $remainingCards, lastCapturer: $lastCapturer);
     }
 
+    #[\Override]
     public function getStateForPlayer(Game $game, int $playerIndex): GameStateOutput
     {
         $opponentIndex = $playerIndex === 0 ? 1 : 0;

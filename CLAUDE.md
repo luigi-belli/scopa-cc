@@ -6,12 +6,12 @@ Web-based two-player Italian card games with real-time multiplayer and single-pl
 
 ## Tech Stack
 
-- **Backend**: PHP 8.4 + Symfony 7.3 + API Platform 4.1
-- **Frontend**: Vue 3.5 + TypeScript 5.8 + Pinia 3 + Vue Router 4.5 (SPA)
-- **Database**: PostgreSQL 17 via Doctrine ORM 3 (JSONB for card arrays)
+- **Backend**: PHP 8.5 + Symfony 8.0 + API Platform 4.3
+- **Frontend**: Vue 3.5 + TypeScript 6 + Pinia 3 + Vue Router 5 (SPA)
+- **Database**: PostgreSQL 18 via Doctrine ORM 3.6 (JSONB for card arrays)
 - **Real-time**: Mercure SSE (server→client push), REST API (client→server)
 - **AI**: Symfony Messenger async handler with 1.5s delay
-- **Containerization**: Docker Compose — 7 services, HTTPS on configurable port (default 5982)
+- **Containerization**: Docker Compose — 7 services, Node 24, nginx 1.29, HTTPS on configurable port (default 5982)
 - **Card assets**: 4 deck styles, each with 40 card face images + card back
 
 ## How to Run
@@ -58,7 +58,7 @@ scopa/
   .env                         # Local deploy config (gitignored)
   
   api/                         # API Platform (PHP/Symfony)
-    Dockerfile                 # PHP 8.4 FPM + composer + entrypoint
+    Dockerfile                 # PHP 8.5 FPM + composer + entrypoint
     entrypoint.sh              # cache:clear, migrations, messenger:setup-transports
     composer.json
     .env                       # DATABASE_URL, MERCURE_*, APP_SECRET
@@ -606,7 +606,7 @@ mercure              → SSE hub (anonymous mode, CORS *)
 acme (optional)      → Let's Encrypt cert via acme.sh + Dynu DNS (profile: letsencrypt)
 ```
 
-Nginx Dockerfile is multi-stage: builds Vue frontend with Node 22, then copies dist into nginx 1.27 image along with config template. The config (`default.conf.template`) is processed by `envsubst` at container startup — only `EXTERNAL_HOSTNAME` and `EXTERNAL_PORT` are substituted (filtered by `NGINX_ENVSUBST_FILTER=^EXTERNAL_`). TLS certificates are loaded from the `ssl/` bind mount (user-provided, acme.sh-managed, or auto-generated self-signed). Card assets are part of the frontend build output.
+Nginx Dockerfile is multi-stage: builds Vue frontend with Node 24, then copies dist into nginx 1.29 image along with config template. The config (`default.conf.template`) is processed by `envsubst` at container startup — only `EXTERNAL_HOSTNAME` and `EXTERNAL_PORT` are substituted (filtered by `NGINX_ENVSUBST_FILTER=^EXTERNAL_`). TLS certificates are loaded from the `ssl/` bind mount (user-provided, acme.sh-managed, or auto-generated self-signed). Card assets are part of the frontend build output.
 
 Full deployment instructions: **[Deployment Guide](docs/deployment.md)**
 

@@ -19,7 +19,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 final class CleanupGamesCommand extends Command
 {
-    private const INACTIVE_THRESHOLD_MINUTES = 10;
+    private const int INACTIVE_THRESHOLD_MINUTES = 10;
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -27,6 +27,7 @@ final class CleanupGamesCommand extends Command
         parent::__construct();
     }
 
+    #[\Override]
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);

@@ -25,6 +25,7 @@ final readonly class LastTrick implements JsonSerializable
     }
 
     /** @return array{leaderCard: array{suit: string, value: int}, followerCard: array{suit: string, value: int}, winnerIndex: int} */
+    #[\Override]
     public function jsonSerialize(): array
     {
         return [
