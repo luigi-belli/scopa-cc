@@ -537,6 +537,12 @@ const { connected: mercureConnected, connect, disconnect: disconnectMercure } = 
       }
       return
     }
+    // Close round-end overlay if the game has moved past it (opponent clicked
+    // "Next Round" first — their next-round request published this game-state).
+    if (showRoundEnd.value && data.state !== 'round-end' && data.state !== 'game-over') {
+      showRoundEnd.value = false
+      lastRoundScores.value = null
+    }
     // Re-enable capture choice overlay when entering choosing state
     if (data.state === 'choosing') showCaptureChoice.value = true
     maybeCommitOrDeal(data)
@@ -1571,6 +1577,10 @@ async function processQueue() {
     }
   }
   else if (ev.type === 'game-state') {
+    if (showRoundEnd.value && ev.data.state !== 'round-end' && ev.data.state !== 'game-over') {
+      showRoundEnd.value = false
+      lastRoundScores.value = null
+    }
     if (ev.data.state === 'choosing') showCaptureChoice.value = true
     maybeCommitOrDeal(ev.data)
     // Chain: process next event unless a deal animation started
@@ -1627,7 +1637,15 @@ async function handleNextRound() {
   try { await api.nextRound(props.gameId) }
   catch (e: unknown) {
     console.error('Next round error:', e)
-    // Restore the overlay so the player can retry — without this the game hangs
+    // If the game has already moved past round-end (opponent clicked "Next Round"
+    // first and the game-state event was already processed), don't re-show the
+    // overlay — just reconcile to pick up the current state.
+    const currentState = store.serverState?.state
+    if (currentState && currentState !== 'round-end') {
+      scheduleReconcile()
+      return
+    }
+    // Genuine error while still in round-end — restore overlay so player can retry.
     showRoundEnd.value = true
     lastRoundScores.value = lastRoundScoresBackup
     reconnecting.value = true
@@ -1657,6 +1675,11 @@ function reconcileState(freshState: GameState) {
   // If the server has moved past the choosing state, clear the overlay data
   // so it doesn't persist after a successful-but-lost select-capture response.
   if (freshState.state !== 'choosing') choosingOptions.value = null
+  // Close round-end overlay if the game has moved past it.
+  if (showRoundEnd.value && freshState.state !== 'round-end' && freshState.state !== 'game-over') {
+    showRoundEnd.value = false
+    lastRoundScores.value = null
+  }
   if (isBusy()) {
     store.queueEvent({ type: 'game-state', data: freshState })
   } else {
@@ -1689,8 +1712,8 @@ async function pollForMissedState() {
   // Don't poll during animations — we'd just queue it anyway and the
   // animation pipeline will finish and process the queue on its own.
   if (store.animating || disconnected.value) return
-  // Don't poll if game is over or we're showing an overlay
-  if (showGameOver.value || showRoundEnd.value) return
+  // Don't poll if game is over (terminal state)
+  if (showGameOver.value) return
 
   try {
     const fresh = await api.getState(props.gameId)

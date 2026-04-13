@@ -410,6 +410,25 @@ grep -n 'restoreSession' frontend/src/components/screens/GameScreen.vue
 # RC11. myIndex synced from API response on reload
 grep -n 'myIndex.*state.myIndex\|state\.myIndex' frontend/src/components/screens/GameScreen.vue
 # PASS if store.myIndex is set from API state response
+
+# RC14. Round-end overlay closed when game-state moves past round-end
+# Prevents hang where opponent clicks "Next Round" first and this player's overlay
+# stays permanently visible. Must clear overlay in onGameState, processQueue, and
+# reconcileState when incoming state is not round-end.
+grep -n 'showRoundEnd.value = false' frontend/src/components/screens/GameScreen.vue | grep -v 'handleNextRound\|catch'
+# PASS if at least 3 locations clear the overlay (onGameState, processQueue, reconcileState)
+
+# RC15. handleNextRound does not re-show overlay when game has already advanced
+# When api.nextRound() fails because opponent already advanced the round,
+# the catch block must check serverState before re-showing the overlay.
+grep -n -A5 'catch.*handleNextRound\|Next round error' frontend/src/components/screens/GameScreen.vue | grep 'serverState'
+# PASS if serverState is checked in the catch block of handleNextRound
+
+# RC16. pollForMissedState does not skip when round-end overlay is showing
+# The poll must detect state divergence even during round-end to catch missed SSE events.
+grep -n 'showRoundEnd' frontend/src/components/screens/GameScreen.vue | grep 'pollForMissedState' -A5 || \
+grep -n -A3 'function pollForMissedState' frontend/src/components/screens/GameScreen.vue | grep -v 'showRoundEnd'
+# PASS if pollForMissedState does NOT have showRoundEnd in its skip conditions
 ```
 
 ### Security Checks
@@ -533,6 +552,7 @@ These are manual/visual tests to verify when doing significant changes. Report w
 - **Deal animation with no deck visual**: Edge case where deck rect is missing. Verify game doesn't hang (processQueue still runs).
 - **Session resume after reload**: Reload during playing, choosing, round-end states. Verify the game resumes correctly in each case.
 - **Exit button**: Click exit during game. Verify leave API is called, session cleared, redirected to lobby.
+- **Opponent clicks Next Round first (Scopa)**: In multiplayer Scopa, opponent clicks "Next Round" before you do. Verify: (a) the round-end overlay closes when the new round's game-state arrives, (b) clicking "Next Round" after opponent already advanced does not permanently hang the overlay, (c) the periodic poll detects state divergence even while the overlay is showing.
 
 ### Animation & Visual Integrity Tests
 - Deal animation fires on initial game load (cards fly from deck to positions)
