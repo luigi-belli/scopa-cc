@@ -207,6 +207,8 @@ final class MercurePublisher
             'gameType' => $state->gameType->value,
             'briscolaCard' => $state->briscolaCard?->jsonSerialize(),
             'lastTrick' => $state->lastTrick?->jsonSerialize(),
+            'myScopaCards' => $state->myScopaCards->jsonSerialize(),
+            'opponentScopaCards' => $state->opponentScopaCards->jsonSerialize(),
         ];
     }
 }
