@@ -31,7 +31,7 @@ RUN CGO_ENABLED=1 \
 FROM dunglas/frankenphp:1.12.2-php8.5-bookworm
 
 # Install PHP extensions
-RUN install-php-extensions pdo_pgsql intl opcache
+RUN install-php-extensions pdo_pgsql intl opcache zip
 
 # Replace FrankenPHP binary with custom build (includes rate limiting module)
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
@@ -41,7 +41,7 @@ RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY api/opcache-prod.ini /usr/local/etc/php/conf.d/opcache-prod.ini
 
 # curl for healthcheck, cron for the cron service (shares this image)
-RUN apt-get update && apt-get install -y --no-install-recommends curl cron \
+RUN apt-get update && apt-get install -y --no-install-recommends curl cron unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Composer and app dependencies
