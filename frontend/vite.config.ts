@@ -6,6 +6,20 @@ export default defineConfig({
   plugins: [vue()],
   build: {
     modulePreload: { polyfill: false },
+    target: 'es2022',
+    cssMinify: 'lightningcss',
+    rollupOptions: {
+      output: {
+        manualChunks(id: string): string | undefined {
+          if (id.includes('node_modules/vue/') ||
+              id.includes('node_modules/@vue/') ||
+              id.includes('node_modules/vue-router/') ||
+              id.includes('node_modules/pinia/')) {
+            return 'vue-vendor'
+          }
+        },
+      },
+    },
   },
   resolve: {
     alias: {

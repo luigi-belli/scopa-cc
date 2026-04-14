@@ -221,6 +221,9 @@ class Game
     /** Transient (not persisted) — set by ScopaEngine when sequential counting resolves a tie */
     private ?int $resolvedWinner = null;
 
+    /** @var array<string, CardCollection> Transient cache for hydrated CardCollection objects */
+    private array $cardCache = [];
+
     #[ORM\Version]
     #[ORM\Column(type: 'integer')]
     private int $version = 1;
@@ -313,23 +316,25 @@ class Game
 
     public function getPlayer1Hand(): CardCollection
     {
-        return CardCollection::fromArray($this->player1Hand);
+        return $this->cardCache['p1hand'] ??= CardCollection::fromArray($this->player1Hand);
     }
 
     public function setPlayer1Hand(CardCollection $hand): self
     {
         $this->player1Hand = $hand->jsonSerialize();
+        $this->cardCache['p1hand'] = $hand;
         return $this;
     }
 
     public function getPlayer2Hand(): CardCollection
     {
-        return CardCollection::fromArray($this->player2Hand);
+        return $this->cardCache['p2hand'] ??= CardCollection::fromArray($this->player2Hand);
     }
 
     public function setPlayer2Hand(CardCollection $hand): self
     {
         $this->player2Hand = $hand->jsonSerialize();
+        $this->cardCache['p2hand'] = $hand;
         return $this;
     }
 
@@ -350,23 +355,25 @@ class Game
 
     public function getTableCards(): CardCollection
     {
-        return CardCollection::fromArray($this->tableCards);
+        return $this->cardCache['table'] ??= CardCollection::fromArray($this->tableCards);
     }
 
     public function setTableCards(CardCollection $cards): self
     {
         $this->tableCards = $cards->jsonSerialize();
+        $this->cardCache['table'] = $cards;
         return $this;
     }
 
     public function getDeck(): CardCollection
     {
-        return CardCollection::fromArray($this->deck);
+        return $this->cardCache['deck'] ??= CardCollection::fromArray($this->deck);
     }
 
     public function setDeck(CardCollection $deck): self
     {
         $this->deck = $deck->jsonSerialize();
+        $this->cardCache['deck'] = $deck;
         return $this;
     }
 
@@ -419,23 +426,25 @@ class Game
 
     public function getPlayer1Captured(): CardCollection
     {
-        return CardCollection::fromArray($this->player1Captured);
+        return $this->cardCache['p1cap'] ??= CardCollection::fromArray($this->player1Captured);
     }
 
     public function setPlayer1Captured(CardCollection $captured): self
     {
         $this->player1Captured = $captured->jsonSerialize();
+        $this->cardCache['p1cap'] = $captured;
         return $this;
     }
 
     public function getPlayer2Captured(): CardCollection
     {
-        return CardCollection::fromArray($this->player2Captured);
+        return $this->cardCache['p2cap'] ??= CardCollection::fromArray($this->player2Captured);
     }
 
     public function setPlayer2Captured(CardCollection $captured): self
     {
         $this->player2Captured = $captured->jsonSerialize();
+        $this->cardCache['p2cap'] = $captured;
         return $this;
     }
 
@@ -493,15 +502,18 @@ class Game
 
     public function getPlayerScopaCards(int $index): CardCollection
     {
-        return CardCollection::fromArray($index === 0 ? $this->player1ScopaCards : $this->player2ScopaCards);
+        $key = $index === 0 ? 'p1scopa' : 'p2scopa';
+        return $this->cardCache[$key] ??= CardCollection::fromArray($index === 0 ? $this->player1ScopaCards : $this->player2ScopaCards);
     }
 
     public function setPlayerScopaCards(int $index, CardCollection $cards): self
     {
         if ($index === 0) {
             $this->player1ScopaCards = $cards->jsonSerialize();
+            $this->cardCache['p1scopa'] = $cards;
         } else {
             $this->player2ScopaCards = $cards->jsonSerialize();
+            $this->cardCache['p2scopa'] = $cards;
         }
         return $this;
     }

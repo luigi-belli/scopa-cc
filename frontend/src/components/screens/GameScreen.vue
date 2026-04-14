@@ -327,33 +327,45 @@ function capturedR(pi: number): DOMRect | null {
 
 // ─── Table slot position helper ───
 
+/** Cached grid geometry to avoid repeated getComputedStyle calls during animations */
+let cachedGrid: SlotGridParams | null = null
+
+function readGridGeometry(): SlotGridParams | null {
+  const tc = tableCenterEl.value
+  if (!tc) return null
+  const style = getComputedStyle(tc)
+  const cols = style.gridTemplateColumns.split(' ')
+  const rows = style.gridTemplateRows.split(' ')
+  const colW = parseFloat(cols[0])
+  const rowH = parseFloat(rows[0])
+  if (!colW || !rowH) return null
+  const gap = parseFloat(style.gap) || 6
+  const padLeft = parseFloat(style.paddingLeft) || 0
+  cachedGrid = { colW, rowH, gap, padLeft, rowCount: rows.length, colCount: cols.length }
+  return cachedGrid
+}
+
+/** Invalidate cached grid geometry on resize */
+function invalidateGridCache() { cachedGrid = null }
+
 /** Compute the bounding rect for slot `index` in the table grid.
- *  Reads grid geometry from computed style (works for both Scopa 2×5 and Briscola 1×1). */
+ *  Uses cached grid geometry to avoid getComputedStyle during animations. */
 function getSlotRect(index: number, cardW: number, cardH: number): DOMRect | null {
   const tc = tableCenterEl.value
   if (!tc) return null
 
-  const tcR = tc.getBoundingClientRect()
-  const style = getComputedStyle(tc)
-  const cols = style.gridTemplateColumns.split(' ')
-  const rows = style.gridTemplateRows.split(' ')
-  const colW = parseFloat(cols[0]) || cardW
-  const rowH = parseFloat(rows[0]) || cardH
-  const gap = parseFloat(style.gap) || 6
-  const padLeft = parseFloat(style.paddingLeft) || 0
+  const grid = cachedGrid ?? readGridGeometry()
+  if (!grid) return null
 
-  const grid: SlotGridParams = { colW, rowH, gap, padLeft, rowCount: rows.length, colCount: cols.length }
+  const tcR = tc.getBoundingClientRect()
   return computeSlotRect(index, cardW, cardH, tcR, grid)
 }
 
 /** Return the table grid cell size (slot dimensions, independent of source card size) */
 function getTableSlotSize(): { w: number; h: number } | null {
-  const tc = tableCenterEl.value
-  if (!tc) return null
-  const style = getComputedStyle(tc)
-  const cols = style.gridTemplateColumns.split(' ')
-  const rows = style.gridTemplateRows.split(' ')
-  return { w: parseFloat(cols[0]) || 75, h: parseFloat(rows[0]) || 133 }
+  const grid = cachedGrid ?? readGridGeometry()
+  if (!grid) return null
+  return { w: grid.colW, h: grid.rowH }
 }
 
 // ─── Animation-layer helpers ───
@@ -1755,6 +1767,8 @@ async function pollForMissedState() {
 let heartbeatInterval: ReturnType<typeof setInterval> | undefined
 
 onMounted(async () => {
+  window.addEventListener('resize', invalidateGridCache)
+
   // Restore session from localStorage if store is empty (e.g. page reload)
   if (!store.playerToken) {
     store.restoreSession()
@@ -1793,5 +1807,6 @@ onUnmounted(() => {
   if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null }
   if (choosingSafety) { clearTimeout(choosingSafety); choosingSafety = null }
   clearNudge()
+  window.removeEventListener('resize', invalidateGridCache)
 })
 </script>

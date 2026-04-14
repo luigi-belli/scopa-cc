@@ -2,6 +2,6 @@ framework:
     messenger:
         transports:
             async:
-                dsn: 'doctrine://default?queue_name=async'
+                dsn: 'doctrine://default?queue_name=async&auto_setup=false&poll_interval=200'
         routing:
             'App\Message\HandleAITurnMessage': async
