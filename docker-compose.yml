@@ -7,6 +7,16 @@ services:
       POSTGRES_PASSWORD: scopa
     volumes:
       - ./db:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "effective_cache_size=256MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "synchronous_commit=off"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U scopa"]
       interval: 3s
