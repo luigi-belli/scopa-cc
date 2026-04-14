@@ -13,27 +13,45 @@ services:
       timeout: 3s
       retries: 10
 
-  php:
-    build: ./api
-    depends_on:
-      postgres:
-        condition: service_healthy
+  frankenphp:
+    build:
+      context: .
+      dockerfile: frankenphp/Dockerfile
+    ports:
+      - "${INTERNAL_PORT:-5982}:443/tcp"   # HTTPS + HTTP/2
+      - "${INTERNAL_PORT:-5982}:443/udp"   # HTTP/3 (QUIC)
     environment:
+      SERVER_NAME: ${EXTERNAL_HOSTNAME:-localhost}
+      EXTERNAL_PORT: ${EXTERNAL_PORT:-5982}
+      TLS_MODE: ${TLS_MODE:-selfsigned}
       DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=18
       MERCURE_URL: http://mercure/.well-known/mercure
       MERCURE_JWT_SECRET: "!ChangeThisMercureHubJWTSecretKey!ForScopa2026!"
       APP_ENV: prod
+    volumes:
+      - ./ssl:/ssl
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mercure:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "php-fpm -t 2>/dev/null && test -f /app/vendor/autoload.php"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/health -o /dev/null"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   messenger-worker:
-    build: ./api
-    command: php bin/console messenger:consume async --time-limit=3600 --env=prod
+    build:
+      context: .
+      dockerfile: frankenphp/Dockerfile
+    entrypoint: ["php"]
+    command: ["bin/console", "messenger:consume", "async", "--time-limit=3600", "--env=prod"]
+    working_dir: /app
     depends_on:
-      php:
+      frankenphp:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=18
@@ -43,7 +61,9 @@ services:
     restart: unless-stopped
 
   cron:
-    build: ./api
+    build:
+      context: .
+      dockerfile: frankenphp/Dockerfile
     entrypoint: ["sh", "-c"]
     command:
       - |
@@ -53,8 +73,9 @@ services:
         crontab /etc/cron.d/scopa
         # Run cron in foreground
         exec cron -f
+    working_dir: /app
     depends_on:
-      php:
+      frankenphp:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://scopa:scopa@postgres:5432/scopa?serverVersion=18
@@ -73,28 +94,6 @@ services:
       interval: 3s
       timeout: 3s
       retries: 5
-
-  nginx:
-    build:
-      context: .
-      dockerfile: nginx/Dockerfile
-    ports:
-      - "${INTERNAL_PORT:-5982}:443/tcp"   # HTTPS + HTTP/2
-      - "${INTERNAL_PORT:-5982}:443/udp"   # HTTP/3 (QUIC)
-    environment:
-      EXTERNAL_HOSTNAME: ${EXTERNAL_HOSTNAME:-localhost}
-      EXTERNAL_PORT: ${EXTERNAL_PORT:-5982}
-      TLS_MODE: ${TLS_MODE:-selfsigned}
-      # Only substitute these two variables in the nginx template;
-      # leave nginx-native $variables (e.g. $host, $uri) untouched.
-      NGINX_ENVSUBST_FILTER: "^EXTERNAL_"
-    volumes:
-      - ./ssl:/etc/nginx/ssl
-    depends_on:
-      php:
-        condition: service_healthy
-      mercure:
-        condition: service_healthy
 
   # Automated Let's Encrypt via acme.sh + Dynu DNS-01 (profile: letsencrypt)
   # Start with:  docker compose --profile letsencrypt up -d
@@ -158,3 +157,5 @@ services:
 
 volumes:
   frontend_node_modules:
+  caddy_data:
+  caddy_config:

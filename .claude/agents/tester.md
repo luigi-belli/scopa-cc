@@ -87,13 +87,13 @@ docker compose --profile dev exec node sh -c "test -d node_modules/.package-lock
 **When**: Any `api/` file changed.
 
 ```bash
-docker compose exec php php vendor/bin/phpunit
+docker compose exec frankenphp php vendor/bin/phpunit
 ```
 
 If PHPUnit is not installed:
 ```bash
-docker compose exec php composer require --dev phpunit/phpunit
-docker compose exec php php vendor/bin/phpunit
+docker compose exec frankenphp composer require --dev phpunit/phpunit
+docker compose exec frankenphp php vendor/bin/phpunit
 ```
 
 Test suites are configured in `api/phpunit.xml` with `APP_ENV=test`.

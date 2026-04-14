@@ -33,7 +33,7 @@ node-install:
 test: test-back test-front
 
 test-back:
-	docker compose exec php bin/phpunit
+	docker compose exec frankenphp php bin/phpunit
 
 test-front: node-up
 	docker compose --profile dev exec node npx vitest run
@@ -46,7 +46,7 @@ build-front: node-up
 	docker compose --profile dev exec node npm run build
 
 shell:
-	docker compose exec php sh
+	docker compose exec frankenphp sh
 
 db:
 	docker compose exec postgres psql -U scopa scopa
