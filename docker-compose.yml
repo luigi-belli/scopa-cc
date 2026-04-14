@@ -58,7 +58,7 @@ services:
       context: .
       dockerfile: frankenphp/Dockerfile
     entrypoint: ["php"]
-    command: ["bin/console", "messenger:consume", "async", "--time-limit=3600", "--env=prod"]
+    command: ["bin/console", "messenger:consume", "async", "--time-limit=3600", "--sleep=0.2", "--env=prod"]
     working_dir: /app
     depends_on:
       frankenphp:
