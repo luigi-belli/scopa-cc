@@ -145,9 +145,10 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/gameStore'
 import { useApi } from '@/composables/useApi'
+import { useDeckStyle } from '@/composables/useDeckStyle'
 import { useMercure, setMercureCookie } from '@/composables/useMercure'
 import { useI18n } from '@/i18n'
-import type { Card, DeckStyle } from '@/types/card'
+import type { Card } from '@/types/card'
 import { cardImagePath, cardBackPath, formatTressetteScore } from '@/types/card'
 import type { GameState, TurnResult, RoundScores, RoundEndData, GameOverData, SweepData } from '@/types/game'
 import { cardKey, sleep, computeSlotRect, computeFlyToDelta } from '@/animations/flipUtils'
@@ -237,7 +238,7 @@ const choosingOptions  = ref<Card[][] | null>(null)
 let choosingSafety: ReturnType<typeof setTimeout> | null = null
 
 const gs = computed(() => store.displayState)
-const currentDeckStyle = computed<DeckStyle>(() => (gs.value?.deckStyle as DeckStyle) || 'piacentine')
+const { selectedDeck: currentDeckStyle } = useDeckStyle()
 const isBriscola = computed(() => gs.value?.gameType === 'briscola')
 const isTressette = computed(() => gs.value?.gameType === 'tressette')
 const isTrickGame = computed(() => isBriscola.value || isTressette.value)
