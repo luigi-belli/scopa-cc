@@ -1,0 +1,140 @@
+{
+	# Disable admin API (not needed in production)
+	admin off
+
+	# Don't install local CA trust store (running in Docker)
+	skip_install_trust
+
+	# Disable automatic HTTP→HTTPS redirects (only :443 is exposed)
+	auto_https disable_redirects
+
+	servers {
+		protocols h1 h2 h3
+		# Required for Mercure SSE over HTTP/1.1
+		enable_full_duplex
+	}
+
+	frankenphp {
+		# Worker mode: boot Symfony once, serve requests from memory
+		worker /app/public/index.php
+	}
+
+	# Rate limit module ordering (must come before basicauth)
+	order rate_limit before basicauth
+}
+
+# ─── Health check endpoint (internal only, HTTP, not exposed via Docker) ───
+http://:8080 {
+	respond /health 200
+}
+
+# ─── Main HTTPS server ───
+{$SERVER_NAME:localhost} {
+	# TLS configuration (set by entrypoint: "tls internal" or "tls /ssl/cert.pem /ssl/key.pem")
+	{$TLS_CONFIG:tls internal}
+
+	root * /app/public
+
+	# ─── Compression (zstd, brotli, gzip) ───
+	encode zstd br gzip
+
+	# ─── Security headers ───
+	header {
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';"
+	}
+
+	# ─── HTTP/3 Alt-Svc advertisement ───
+	# Tells browsers to try QUIC on the external port for subsequent requests
+	header Alt-Svc `h3=":{$EXTERNAL_PORT:443}"; ma=86400`
+
+	# ─── Rate limiting (keyed by client IP) ───
+	rate_limit {
+		# Game creation: 50 req/min
+		zone api_create {
+			match {
+				method POST
+				path /api/games
+			}
+			key {remote_host}
+			events 50
+			window 1m
+		}
+
+		# Heartbeat: 200 req/min
+		zone api_heartbeat {
+			match {
+				path /api/games/*/heartbeat
+			}
+			key {remote_host}
+			events 200
+			window 1m
+		}
+
+		# Game actions (play-card, select-capture, join, leave, next-round): 300 req/min
+		zone api_action {
+			match {
+				path /api/games/*/play-card /api/games/*/select-capture /api/games/*/join /api/games/*/leave /api/games/*/next-round
+			}
+			key {remote_host}
+			events 300
+			window 1m
+		}
+
+		# Read endpoints and general API: 600 req/min
+		zone api_read {
+			match {
+				path /api/*
+			}
+			key {remote_host}
+			events 600
+			window 1m
+		}
+	}
+
+	# ─── Cache control ───
+
+	# Vite hashed JS/CSS bundles — content-hashed filenames, cache forever
+	@hashedAssets path /assets/*
+	header @hashedAssets Cache-Control "public, max-age=31536000, immutable"
+
+	# Static files at root (favicon, icons, fonts) — cache 7 days
+	@rootStatic path_regexp \.(svg|ico|png|jpg|webp|woff2?)$
+	header @rootStatic Cache-Control "public, max-age=604800"
+
+	# ─── Mercure SSE (proxied to separate Mercure container) ───
+	reverse_proxy /.well-known/mercure* mercure:80 {
+		transport http {
+			read_timeout 24h
+		}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto https
+		# Disable buffering — stream SSE events immediately
+		flush_interval -1
+	}
+
+	# ─── API routes → Symfony front controller ───
+	@api path /api/*
+	rewrite @api /index.php
+
+	# ─── SPA fallback ───
+	# Non-API, non-Mercure, non-file paths → Vue SPA index.html
+	@spa {
+		not path /api/*
+		not path /.well-known/mercure*
+		not file
+	}
+	rewrite @spa /index.html
+
+	# ─── PHP handler (FrankenPHP worker mode) ───
+	@frontController path /index.php
+	php @frontController
+
+	# ─── Static file server ───
+	file_server {
+		hide *.php
+	}
+}
