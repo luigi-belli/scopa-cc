@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Build custom FrankenPHP binary with rate_limit module
-FROM dunglas/frankenphp:1.12-builder-php8.5-bookworm AS builder
+FROM dunglas/frankenphp:1.12.2-builder-php8.5-bookworm AS builder
 
 COPY --from=caddy:builder /usr/bin/xcaddy /usr/bin/xcaddy
 
@@ -28,7 +28,7 @@ RUN CGO_ENABLED=1 \
         --with github.com/mholt/caddy-ratelimit
 
 # Stage 3: Final image
-FROM dunglas/frankenphp:1.12-php8.5-bookworm
+FROM dunglas/frankenphp:1.12.2-php8.5-bookworm
 
 # Install PHP extensions
 RUN install-php-extensions pdo_pgsql intl opcache
