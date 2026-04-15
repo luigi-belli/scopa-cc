@@ -1732,8 +1732,11 @@ async function smoothCommit(state: GameState) {
     maybeCommitOrDeal(state)
     return
   }
-  // Deal state — delegate to deal animation
-  if (isDealState(store.displayState, state)) {
+  // Only trigger deal animation for genuine new rounds (hands empty → populated).
+  // Do NOT use the generic isDealState check here — its deckCount heuristic
+  // false-triggers on trick draws (Briscola/Tressette), causing cards to animate
+  // from the draw pile instead of showing a smooth FLIP transition.
+  if (store.displayState.myHand.length === 0 && state.myHand.length > 0) {
     runDealAnimation(state)
     return
   }
@@ -1748,6 +1751,12 @@ async function smoothCommit(state: GameState) {
   } catch (e) {
     console.error('smoothCommit animation error:', e)
   }
+  // Flush events queued during the animation — they are likely stale SSE events
+  // re-delivered after reconnection (via Last-Event-ID), already reflected in
+  // the reconciled state. Processing them would cause wrong animations and
+  // state regressions. Fresh events will be caught by the 5s poll interval.
+  store.pendingEvents.length = 0
+  store.pendingState = null
   store.animating = false
   processQueue()
 }
@@ -1769,6 +1778,12 @@ function reconcileState(freshState: GameState) {
     store.queueEvent({ type: 'game-state', data: freshState })
     return
   }
+  // Flush any stale events in the queue. The API-fetched state supersedes
+  // anything that was buffered (e.g. leftover SSE events from a previous
+  // connection). Without this, stale turn-results could animate against the
+  // wrong display state or regress to an older game-state.
+  store.pendingEvents.length = 0
+  store.pendingState = null
 
   // If the server is in round-end but we never got the SSE event, show the overlay.
   // Extract scores from roundHistory (the latest entry has this round's scores).
