@@ -113,10 +113,6 @@
   flex-shrink: 0;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 /* Action spinner overlay (centered on table area during slow API calls) */
 .action-spinner-overlay {
   position: fixed;

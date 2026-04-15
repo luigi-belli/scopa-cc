@@ -194,6 +194,8 @@ const DEAL_FLIP_MS = 300
 const DRAW_REVEAL_MS = 800  // Tressette: pause to show drawn card face before proceeding
 const POST_ANIM   = 200
 const SAFETY_MS   = 10000
+/** Delay before showing the action spinner overlay (avoids flashing on fast API calls) */
+const ACTION_SPINNER_DELAY = 400
 
 const props = defineProps<{ gameId: string }>()
 const router = useRouter()
@@ -221,8 +223,6 @@ const showCaptureChoice = ref(true)
 const showRoundEnd     = ref(false)
 const showGameOver     = ref(false)
 const lastRoundScores  = ref<[RoundScores, RoundScores] | null>(null)
-/** Backup of lastRoundScores for retry on nextRound API failure */
-let lastRoundScoresBackup: [RoundScores, RoundScores] | null = null
 const gameOverWinner   = ref(0)
 const gameOverCapturedCards = ref<[Card[], Card[]] | null>(null)
 /** true while inside handleTurnResult's post-animation delay — prevents
@@ -285,13 +285,13 @@ const tressettePlayableIndices = computed<Set<number> | null>(() => {
   return matching.length > 0 ? new Set(matching) : null
 })
 
-// ─── Action spinner: shows after 400ms delay when an API action is in flight ───
+// ─── Action spinner: shows after ACTION_SPINNER_DELAY when an API action is in flight ───
 const actionInFlight = computed(() => playInFlight.value || selectInFlight.value || nextRoundInFlight.value)
 const showActionSpinner = ref(false)
 let actionSpinnerTimer: ReturnType<typeof setTimeout> | null = null
 watch(actionInFlight, (inFlight) => {
   if (inFlight) {
-    actionSpinnerTimer = setTimeout(() => { showActionSpinner.value = true }, 400)
+    actionSpinnerTimer = setTimeout(() => { showActionSpinner.value = true }, ACTION_SPINNER_DELAY)
   } else {
     if (actionSpinnerTimer) { clearTimeout(actionSpinnerTimer); actionSpinnerTimer = null }
     showActionSpinner.value = false
@@ -744,7 +744,6 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
 
 async function handleRoundEnd(data: RoundEndData): Promise<void> {
   lastRoundScores.value = data.scores
-  lastRoundScoresBackup = data.scores
   if (data.gameState) await animateEndOfRoundSweep(data.gameState, data.sweep)
   showRoundEnd.value = true
 }
