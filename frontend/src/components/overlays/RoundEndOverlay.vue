@@ -10,7 +10,8 @@
         :globalScores="{ my: myTotalScore, opp: opponentTotalScore }"
         @rowClick="selectedCategory = $event"
       />
-      <button class="btn btn-primary" @click="$emit('nextRound')">
+      <button class="btn btn-primary" :disabled="loading" @click="$emit('nextRound')">
+        <span class="btn-spinner" v-if="loading"></span>
         {{ t('round.next') }}
       </button>
     </div>
@@ -43,6 +44,7 @@ defineProps<{
   myTotalScore: number
   opponentTotalScore: number
   deckStyle: DeckStyle
+  loading?: boolean
 }>()
 
 defineEmits<{
