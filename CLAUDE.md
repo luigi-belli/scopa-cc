@@ -673,3 +673,4 @@ All test knowledge, checklists, and verification procedures live in the agent de
 - Heartbeat system: frontend sends every 10s, backend checks opponent staleness (>30s = disconnected)
 - Browser reload resumes game (session persisted in localStorage, no beforeunload leave beacon)
 - Exit button (×) in top-right corner of game board explicitly leaves the game
+- **Architectural documentation must always be updated with every code change.** When modifying code that is described in the `docs/` files (animation system, communication layer, game rules, deployment, etc.) or in this CLAUDE.md, the corresponding documentation MUST be updated in the same commit. Outdated documentation is a bug.

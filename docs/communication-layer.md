@@ -213,6 +213,8 @@ function isDealState(prev, next): boolean {
 }
 ```
 
+Used by `maybeCommitOrDeal()` in the normal SSE event path. **Not** used in the reconciliation path — see `smoothCommit` below.
+
 ## API Action Handlers
 
 ### `handlePlayCard`
@@ -225,20 +227,35 @@ function isDealState(prev, next): boolean {
 - On API failure: **restores `showCaptureChoice` overlay** so the player can retry
 
 ### `handleNextRound`
-- Hides overlay BEFORE API call (optimistic UI)
-- On API failure: **restores `showRoundEnd` overlay + `lastRoundScoresBackup`** so the player can retry
+- Checks `serverState` first — if the opponent already advanced, skips the API call entirely
+- On success: dismisses overlay + `lastRoundScores`, consumes any stashed state
+- On API failure: re-checks `serverState` (event may have arrived during the call); if still stuck, overlay stays visible for retry
 
 ## State Reconciliation (Safety Net)
 
 ### `reconcileState(freshState)`
-Routes a fresh server state through the existing busy/queue pipeline:
-- If busy → queues as `game-state` event
-- If not busy → re-enables capture choice overlay if needed, then `maybeCommitOrDeal()`
+Routes a fresh API-fetched state through the pipeline, superseding any buffered events:
+1. If busy → queues as `game-state` event (will be processed when animation finishes)
+2. **Flushes stale events**: Clears `pendingEvents` and `pendingState` — the API-fetched state is authoritative and supersedes anything buffered (e.g. leftover SSE events from a previous connection)
+3. Detects `round-end` / `game-over` states that were missed — shows the appropriate overlay
+4. Re-enables capture choice overlay if server is in `choosing` state
+5. Delegates to `smoothCommit(freshState)` for smooth FLIP-based transition
+
+### `smoothCommit(state)`
+Used exclusively by `reconcileState` for smooth state transitions during recovery:
+- **No previous state**: Falls through to `maybeCommitOrDeal()` (initial load / deal animation)
+- **Genuine new round** (hands empty → populated): Triggers `runDealAnimation()`
+- **Normal state change**: FLIP-based commit — snapshots positions, commits state, animates surviving cards from old→new positions
+- **Stale event flush**: After FLIP animation completes, flushes `pendingEvents` and `pendingState` before calling `processQueue()`. This prevents stale SSE events (re-delivered via `Last-Event-ID` after reconnection, already reflected in the reconciled state) from causing wrong animations or state regressions.
+
+**Important**: `smoothCommit` does NOT use `isDealState()`. The generic `isDealState` check includes a `deckCount` heuristic that false-triggers on Briscola/Tressette trick draws (deck shrinks after every trick), causing cards to incorrectly animate from the draw pile. Only the hand-empty→populated check is used for deal detection in reconciliation.
 
 ### `scheduleReconcile(delayMs = 3000)`
 Schedules a deferred state reconciliation. Used by:
 - `onReconnect` when the initial `getState()` fetch fails
 - `handlePlayCard` on API error (server may have processed the move)
+- `handleSelectCapture` on API error
+- `handleNextRound` on API error
 
 De-duped: only one pending reconcile at a time.
 
@@ -248,7 +265,7 @@ Runs every **5 seconds** via `setInterval` (started in `onMounted`, cleared in `
 **Guards** (skip poll when):
 - Animation is running (`store.animating`)
 - Game is disconnected (`disconnected.value`)
-- Game over or round end overlay is showing
+- Game over overlay is showing (`showGameOver`)
 
 **Divergence detection** — compares server response against `store.serverState`:
 - `state` (e.g. playing → choosing)

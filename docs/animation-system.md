@@ -96,6 +96,21 @@ Events that arrive while busy (`store.animating || inPostAnimDelay`) are queued 
 | afterAnimation delay | 200ms | — |
 | Safety timeout | 10000ms | — |
 
+## Reconciliation Animation (`smoothCommit`)
+
+When the client recovers from a missed SSE event (reconnection, polling divergence), `reconcileState` → `smoothCommit` provides a smooth visual transition using FLIP:
+
+1. Snapshot current card positions by identity (table: `t:value-suit`, hand: `h:value-suit`, opponent: `o:N`)
+2. `commitState(freshState)` — Vue re-renders to the new state
+3. `flipRearrange(before)` — animate surviving cards from old→new positions (new cards pop in, removed cards disappear)
+
+**Key constraints:**
+- **No deal animation for trick draws**: Only triggers `runDealAnimation` when hands go from empty to populated (genuine new round). The `isDealState` deckCount heuristic is NOT used — it false-triggers on Briscola/Tressette trick draws, making cards incorrectly fly from the draw pile.
+- **Stale event flush**: After FLIP completes, `pendingEvents` and `pendingState` are flushed. SSE reconnection may re-deliver events (via `Last-Event-ID`) that are already reflected in the reconciled state. Processing them would cause wrong animations and state regressions.
+- **`oppPlayedIdx` not available**: Unlike normal turn-result animations, reconciliation has no `TurnResult` data, so `flipRearrange` runs without `oppPlayedIdx`. Opponent hand cards don't slide to fill gaps — they snap into position. This is a cosmetic trade-off for the recovery path.
+
+See `communication-layer.md` § "State Reconciliation" for the full pipeline.
+
 ## FLIP Utilities (flipUtils.ts)
 
 Helper functions for the animation system:
