@@ -214,7 +214,7 @@ body {
   color: #1a3a1a;
 }
 @media (hover: hover) {
-  .btn-primary:hover {
+  .btn-primary:hover:not(:disabled) {
     background: #ffe44d;
     transform: translateY(-1px);
   }
@@ -232,10 +232,16 @@ body {
   border: 2px solid #ffd700;
 }
 @media (hover: hover) {
-  .btn-secondary:hover {
+  .btn-secondary:hover:not(:disabled) {
     background: rgba(255, 215, 0, 0.25);
     transform: translateY(-1px);
   }
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .error-message {
@@ -272,11 +278,17 @@ body {
 }
 
 @media (hover: hover) {
-  .btn-single:hover {
+  .btn-single:hover:not(:disabled) {
     background: rgba(139, 92, 246, 0.35);
     border-color: #c4a5ff;
     transform: translateY(-1px);
   }
+}
+
+.btn-single:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* Waiting Screen */

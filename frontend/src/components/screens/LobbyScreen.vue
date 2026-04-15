@@ -71,13 +71,20 @@
         </div>
 
         <div class="lobby-buttons">
-          <button class="btn btn-primary" @click="createGame">{{ t('lobby.newGame') }}</button>
-          <button class="btn btn-secondary" @click="joinGame">{{ t('lobby.join') }}</button>
+          <button class="btn btn-primary" :disabled="loading" @click="createGame">
+            <span class="btn-spinner" v-if="loading"></span>
+            {{ t('lobby.newGame') }}
+          </button>
+          <button class="btn btn-secondary" :disabled="loading" @click="joinGame">
+            <span class="btn-spinner" v-if="loading"></span>
+            {{ t('lobby.join') }}
+          </button>
         </div>
 
         <div class="lobby-divider"><span>{{ t('lobby.onePlayer') }}</span></div>
 
-        <button class="btn btn-single" @click="startSinglePlayer">
+        <button class="btn btn-single" :disabled="loading" @click="startSinglePlayer">
+          <span class="btn-spinner" v-if="loading"></span>
           {{ t('lobby.playClaude') }}
         </button>
 
@@ -110,6 +117,7 @@ const playerName = ref('')
 const gameName = ref('')
 const gameType = ref<GameType>('scopa')
 const error = ref('')
+const loading = ref(false)
 
 onMounted(() => {
   // If there's an active game session, resume it instead of showing lobby
@@ -147,6 +155,8 @@ function validate(requireGameName = true): boolean {
 
 async function createGame() {
   if (!validate()) return
+  loading.value = true
+  error.value = ''
   try {
     const result = await api.createGame(
       playerName.value.trim(),
@@ -161,10 +171,13 @@ async function createGame() {
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
   }
+  finally { loading.value = false }
 }
 
 async function joinGame() {
   if (!validate()) return
+  loading.value = true
+  error.value = ''
   try {
     const lookup = await api.lookupGame(gameName.value.trim())
     if (lookup.length === 0) {
@@ -180,10 +193,13 @@ async function joinGame() {
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
   }
+  finally { loading.value = false }
 }
 
 async function startSinglePlayer() {
   if (!validate(false)) return
+  loading.value = true
+  error.value = ''
   try {
     const result = await api.createGame(
       playerName.value.trim(),
@@ -202,5 +218,6 @@ async function startSinglePlayer() {
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
   }
+  finally { loading.value = false }
 }
 </script>

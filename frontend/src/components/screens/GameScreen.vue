@@ -114,6 +114,7 @@
       :myTotalScore="gs?.myTotalScore ?? 0"
       :opponentTotalScore="gs?.opponentTotalScore ?? 0"
       :deckStyle="currentDeckStyle"
+      :loading="nextRoundInFlight"
       @nextRound="handleNextRound"
     />
 
@@ -135,6 +136,11 @@
     <!-- Effects -->
     <ScopaFlash ref="scopaFlashRef" />
     <ConfettiCanvas ref="confettiRef" />
+    <Transition name="fade">
+      <div class="action-spinner-overlay" v-if="showActionSpinner">
+        <span class="action-spinner"></span>
+      </div>
+    </Transition>
     <DisconnectBanner :visible="disconnected" />
     <ReconnectBanner :visible="reconnecting && !disconnected" />
   </div>
@@ -188,6 +194,8 @@ const DEAL_FLIP_MS = 300
 const DRAW_REVEAL_MS = 800  // Tressette: pause to show drawn card face before proceeding
 const POST_ANIM   = 200
 const SAFETY_MS   = 10000
+/** Delay before showing the action spinner overlay (avoids flashing on fast API calls) */
+const ACTION_SPINNER_DELAY = 400
 
 const props = defineProps<{ gameId: string }>()
 const router = useRouter()
@@ -215,8 +223,6 @@ const showCaptureChoice = ref(true)
 const showRoundEnd     = ref(false)
 const showGameOver     = ref(false)
 const lastRoundScores  = ref<[RoundScores, RoundScores] | null>(null)
-/** Backup of lastRoundScores for retry on nextRound API failure */
-let lastRoundScoresBackup: [RoundScores, RoundScores] | null = null
 const gameOverWinner   = ref(0)
 const gameOverCapturedCards = ref<[Card[], Card[]] | null>(null)
 /** true while inside handleTurnResult's post-animation delay — prevents
@@ -224,6 +230,10 @@ const gameOverCapturedCards = ref<[Card[], Card[]] | null>(null)
 const inPostAnimDelay  = ref(false)
 /** true while a playCard API call is in flight — prevents duplicate requests */
 const playInFlight     = ref(false)
+/** true while a selectCapture API call is in flight */
+const selectInFlight   = ref(false)
+/** true while a nextRound API call is in flight */
+const nextRoundInFlight = ref(false)
 /** index of the card just clicked — keeps it visually lifted until animation starts */
 const playedCardIdx    = ref<number | null>(null)
 /** True when a choosing turn-result saved the card's hand origin.
@@ -273,6 +283,19 @@ const tressettePlayableIndices = computed<Set<number> | null>(() => {
   const matching = myHand.reduce<number[]>((acc, c, i) => { if (c.suit === ledSuit) acc.push(i); return acc }, [])
   // If we have matching cards, only those are playable; otherwise all are playable
   return matching.length > 0 ? new Set(matching) : null
+})
+
+// ─── Action spinner: shows after ACTION_SPINNER_DELAY when an API action is in flight ───
+const actionInFlight = computed(() => playInFlight.value || selectInFlight.value || nextRoundInFlight.value)
+const showActionSpinner = ref(false)
+let actionSpinnerTimer: ReturnType<typeof setTimeout> | null = null
+watch(actionInFlight, (inFlight) => {
+  if (inFlight) {
+    actionSpinnerTimer = setTimeout(() => { showActionSpinner.value = true }, ACTION_SPINNER_DELAY)
+  } else {
+    if (actionSpinnerTimer) { clearTimeout(actionSpinnerTimer); actionSpinnerTimer = null }
+    showActionSpinner.value = false
+  }
 })
 
 // ─── Turn nudge: pulse hand cards after 5s of inactivity, repeat every 5s ───
@@ -721,7 +744,6 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
 
 async function handleRoundEnd(data: RoundEndData): Promise<void> {
   lastRoundScores.value = data.scores
-  lastRoundScoresBackup = data.scores
   if (data.gameState) await animateEndOfRoundSweep(data.gameState, data.sweep)
   showRoundEnd.value = true
 }
@@ -1637,6 +1659,7 @@ async function handleSelectCapture(optionIndex: number) {
   if (choosingSafety) { clearTimeout(choosingSafety); choosingSafety = null }
   showCaptureChoice.value = false
   store.animating = false
+  selectInFlight.value = true
   try {
     await api.selectCapture(props.gameId, optionIndex)
     choosingOptions.value = null
@@ -1647,31 +1670,41 @@ async function handleSelectCapture(optionIndex: number) {
     reconnecting.value = true
     scheduleReconcile()
   }
+  finally { selectInFlight.value = false }
 }
 async function handleNextRound() {
-  showRoundEnd.value = false; lastRoundScores.value = null
   // If the opponent already clicked "Next Round" and the game-state for the new
   // round was stashed in serverState, skip the API call and commit that state.
   const ss = store.serverState
   if (ss && ss.state !== 'round-end' && ss.state !== 'game-over') {
+    showRoundEnd.value = false; lastRoundScores.value = null
     maybeCommitOrDeal(ss)
     return
   }
-  try { await api.nextRound(props.gameId) }
+  nextRoundInFlight.value = true
+  try {
+    await api.nextRound(props.gameId)
+    showRoundEnd.value = false; lastRoundScores.value = null
+    // Consume any state that was stashed while the overlay was visible
+    const stashed = store.serverState
+    if (stashed && stashed.state !== 'round-end' && stashed.state !== 'game-over') {
+      maybeCommitOrDeal(stashed)
+    }
+  }
   catch (e: unknown) {
     console.error('Next round error:', e)
     // Re-check: the game-state event may have arrived while the API call was in flight.
     const currentState = store.serverState?.state
     if (currentState && currentState !== 'round-end' && currentState !== 'game-over') {
+      showRoundEnd.value = false; lastRoundScores.value = null
       maybeCommitOrDeal(store.serverState!)
       return
     }
-    // Genuine error while still in round-end — restore overlay so player can retry.
-    showRoundEnd.value = true
-    lastRoundScores.value = lastRoundScoresBackup
+    // Genuine error — overlay stays visible, button returns to normal for retry.
     reconnecting.value = true
     scheduleReconcile()
   }
+  finally { nextRoundInFlight.value = false }
 }
 function handleBackToLobby() {
   api.leaveGame(props.gameId).catch(() => {})
@@ -1690,6 +1723,31 @@ function handleExit() {
 // State reconciliation — periodic polling safety net
 // ════════════════════════════════════════════════════
 
+/** Smooth state commit: uses FLIP animation for surviving cards so reconnection
+ *  state jumps look like smooth rearrangements instead of jarring flickers.
+ *  Falls through to deal animation or plain commit as appropriate. */
+async function smoothCommit(state: GameState) {
+  // No previous state — use normal path (will run deal animation on first load)
+  if (!store.displayState) {
+    maybeCommitOrDeal(state)
+    return
+  }
+  // Deal state — delegate to deal animation
+  if (isDealState(store.displayState, state)) {
+    runDealAnimation(state)
+    return
+  }
+
+  // FLIP-based commit: snapshot positions, commit, animate surviving cards
+  store.animating = true
+  const before = snapshotByIdentity()
+  store.commitState(state)
+  await nextTick()
+  await flipRearrange(before)
+  store.animating = false
+  processQueue()
+}
+
 /** Apply a fresh server state to the pipeline, respecting busy/queue semantics. */
 function reconcileState(freshState: GameState) {
   reconnecting.value = false
@@ -1705,7 +1763,8 @@ function reconcileState(freshState: GameState) {
     store.queueEvent({ type: 'game-state', data: freshState })
   } else {
     if (freshState.state === 'choosing') showCaptureChoice.value = true
-    maybeCommitOrDeal(freshState)
+    // Use smooth FLIP-based commit so reconnection state changes don't flicker
+    smoothCommit(freshState)
   }
 }
 
@@ -1807,6 +1866,7 @@ onUnmounted(() => {
   clearInterval(pollInterval)
   if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null }
   if (choosingSafety) { clearTimeout(choosingSafety); choosingSafety = null }
+  if (actionSpinnerTimer) { clearTimeout(actionSpinnerTimer); actionSpinnerTimer = null }
   clearNudge()
   window.removeEventListener('resize', invalidateGridCache)
 })
