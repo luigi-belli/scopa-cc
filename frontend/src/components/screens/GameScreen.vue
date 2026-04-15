@@ -1740,15 +1740,21 @@ async function smoothCommit(state: GameState) {
 
   // FLIP-based commit: snapshot positions, commit, animate surviving cards
   store.animating = true
-  const before = snapshotByIdentity()
-  store.commitState(state)
-  await nextTick()
-  await flipRearrange(before)
+  try {
+    const before = snapshotByIdentity()
+    store.commitState(state)
+    await nextTick()
+    await flipRearrange(before)
+  } catch (e) {
+    console.error('smoothCommit animation error:', e)
+  }
   store.animating = false
   processQueue()
 }
 
-/** Apply a fresh server state to the pipeline, respecting busy/queue semantics. */
+/** Apply a fresh server state to the pipeline, respecting busy/queue semantics.
+ *  Handles round-end and game-over states specially — if the SSE event was lost,
+ *  the overlay would never appear without explicit detection here. */
 function reconcileState(freshState: GameState) {
   reconnecting.value = false
   // If the server has moved past the choosing state, clear the overlay data
@@ -1761,11 +1767,40 @@ function reconcileState(freshState: GameState) {
   }
   if (isBusy()) {
     store.queueEvent({ type: 'game-state', data: freshState })
-  } else {
-    if (freshState.state === 'choosing') showCaptureChoice.value = true
-    // Use smooth FLIP-based commit so reconnection state changes don't flicker
-    smoothCommit(freshState)
+    return
   }
+
+  // If the server is in round-end but we never got the SSE event, show the overlay.
+  // Extract scores from roundHistory (the latest entry has this round's scores).
+  if (freshState.state === 'round-end' && !showRoundEnd.value) {
+    const lastEntry = freshState.roundHistory[freshState.roundHistory.length - 1]
+    if (lastEntry) {
+      lastRoundScores.value = lastEntry.scores
+      store.commitState(freshState)
+      showRoundEnd.value = true
+      return
+    }
+  }
+
+  // If the server is in game-over but we never got the SSE event, show the overlay.
+  // Determine winner from scores and extract round scores from history.
+  if ((freshState.state === 'game-over' || freshState.state === 'finished') && !showGameOver.value) {
+    const lastEntry = freshState.roundHistory[freshState.roundHistory.length - 1]
+    lastRoundScores.value = lastEntry?.scores ?? null
+    gameOverWinner.value = freshState.myTotalScore > freshState.opponentTotalScore
+      ? freshState.myIndex
+      : 1 - freshState.myIndex
+    gameOverCapturedCards.value = null
+    store.commitState(freshState)
+    showGameOver.value = true
+    store.clearSession()
+    if (gameOverWinner.value === store.myIndex) nextTick(() => confettiRef.value?.start())
+    return
+  }
+
+  if (freshState.state === 'choosing') showCaptureChoice.value = true
+  // Use smooth FLIP-based commit so reconnection state changes don't flicker
+  smoothCommit(freshState)
 }
 
 let reconcileTimer: ReturnType<typeof setTimeout> | null = null
