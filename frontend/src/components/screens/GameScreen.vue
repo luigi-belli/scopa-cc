@@ -485,7 +485,8 @@ function applyRect(el: HTMLElement, r: DOMRect) {
 /** Sweep face-up cards to a captured deck with staggered face-to-back flip.
  *  Each card clone starts face-up, flips to back at 40% of the sweep, then flies
  *  to the captured-deck rect and is removed on arrival.
- *  When scopaIndex is set, that card stays face-up and rotates 90° instead of flipping. */
+ *  When scopaIndex is set, that card flies first (face-up, rotating 90°), then the
+ *  remaining cards sweep with the standard flip animation on top of it. */
 function sweepToCaptured(
   items: { card: Card; rect: DOMRect }[],
   capR: DOMRect,
@@ -493,16 +494,29 @@ function sweepToCaptured(
   topIndex?: number,
   scopaIndex?: number,
 ): Promise<void> {
+  // Scopa: capturer card flies first with 90° rotation, then the rest sweep normally
+  if (scopaIndex != null) {
+    const si = items[scopaIndex]
+    const cl = mkFace(si.card, si.rect)
+    cl.style.zIndex = '53'
+    aLayer().appendChild(cl)
+    return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale, 90).then(() => {
+      if (cl.parentNode) cl.remove()
+      const rest = items.filter((_, idx) => idx !== scopaIndex)
+      if (rest.length === 0) return
+      return sweepToCaptured(rest, capR, scale)
+    })
+  }
+
   const ps: Promise<void>[] = []
   items.forEach((si, i) => {
-    const isScopa = i === scopaIndex
-    const cl = isScopa ? mkFace(si.card, si.rect) : mkFlippable(si.card, si.rect, true)
+    const cl = mkFlippable(si.card, si.rect, true)
     if (i === topIndex) cl.style.zIndex = '53'
     aLayer().appendChild(cl)
     ps.push(
       sleep(i * SWEEP_LAG).then(() => {
-        if (!isScopa) setTimeout(() => flipToBack(cl), SWEEP_MS * 0.4)
-        return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale, isScopa ? 90 : undefined).then(() => {
+        setTimeout(() => flipToBack(cl), SWEEP_MS * 0.4)
+        return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
           if (cl.parentNode) cl.remove()
         })
       })
