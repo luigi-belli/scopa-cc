@@ -1498,7 +1498,8 @@ describe('captured-glow must not have CSS transition', () => {
     const removalPattern = /el\.style\.transition\s*=\s*'none'[\s\S]{0,50}classList\.remove\(\s*'captured-glow'\s*\)/g
     const matches = src.match(removalPattern)
     expect(matches).not.toBeNull()
-    // Two call sites: animCapture and animateEndOfRoundSweep
-    expect(matches!.length).toBe(2)
+    // animateEndOfRoundSweep is the remaining glow call site
+    // (animCapture no longer uses glow — cards go straight to sweep)
+    expect(matches!.length).toBeGreaterThanOrEqual(1)
   })
 })

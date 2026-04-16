@@ -1167,24 +1167,6 @@ async function animCapture(result: TurnResult) {
   // 3. Pause
   await sleep(CAP_PAUSE)
 
-  // 4. Glow (non-scopa only — scopa clears the entire table so the glow is
-  //    redundant and would require extra work to avoid residual styling).
-  if (!result.scopa) {
-    const glowEls: HTMLElement[] = []
-    for (const cc of captured) {
-      const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
-      if (idx >= 0) {
-        const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
-        if (el) { el.classList.add('captured-glow'); glowEls.push(el) }
-      }
-    }
-    await sleep(GLOW_MS)
-    glowEls.forEach(el => {
-      el.style.transition = 'none'
-      el.classList.remove('captured-glow')
-    })
-  }
-
   // 5. Fly playClone directly to captured deck + sweep captured cards.
   //    playClone is NEVER removed — it flies continuously from the table to capR.
   //    This eliminates any remove→recreate gap that could cause flicker.
