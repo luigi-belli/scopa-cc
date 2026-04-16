@@ -1167,20 +1167,29 @@ async function animCapture(result: TurnResult) {
   // 3. Pause
   await sleep(CAP_PAUSE)
 
-  // 4. Glow captured cards, then hide them in the SAME loop iteration as the
-  //    glow removal.  This guarantees the glow never appears without hiding —
-  //    the user sees glow ON → glow OFF + card gone in a single paint frame.
-  const glowEls: HTMLElement[] = []
+  // 4. Glow captured cards
   for (const cc of captured) {
     const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
     if (idx >= 0) {
       const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
-      if (el) { el.classList.add('captured-glow'); glowEls.push(el) }
+      if (el) el.classList.add('captured-glow')
     }
   }
   await sleep(GLOW_MS)
 
-  // Snapshot positions, remove glow, and hide each card atomically.
+  // Remove glow — the cards stay visible so the user sees one clean frame
+  // without glow BEFORE the capture animation hides/moves them.
+  for (const cc of captured) {
+    const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
+    if (idx >= 0) {
+      const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
+      if (el) el.classList.remove('captured-glow')
+    }
+  }
+  // Force a paint frame with glow removed before any animation starts
+  await new Promise<void>(r => requestAnimationFrame(r))
+
+  // 5. Snapshot positions, hide cards, prepare sweep.
   // For scopa: also place a face-up clone so the card stays visible during
   // the scopa marker flight (the clone has no glow — it's a fresh element).
   const sweepItems: { card: Card; rect: DOMRect }[] = []
@@ -1191,10 +1200,7 @@ async function animCapture(result: TurnResult) {
       if (el) {
         const rect = el.getBoundingClientRect()
         sweepItems.push({ card: cc, rect })
-        // Atomic: remove glow + hide in same statement block — no frame between
-        el.classList.remove('captured-glow')
         setStyle(el, 'visibility', 'hidden')
-        // Scopa: place a clean clone so the card stays visible on the table
         if (result.scopa) {
           const stand = mkFace(cc, rect)
           stand.style.zIndex = '50'
@@ -1204,7 +1210,7 @@ async function animCapture(result: TurnResult) {
     }
   }
 
-  // 5. Fly playClone directly to captured deck + sweep captured cards.
+  // 6. Fly playClone directly to captured deck + sweep captured cards.
   //    playClone is NEVER removed — it flies continuously from the table to capR.
   const capR = capturedR(result.playerIndex)
   if (capR) {
