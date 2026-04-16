@@ -193,6 +193,9 @@ These constraints MUST be respected after EVERY change. Verify all of them befor
 
 ### Animation Constraints
 
+**HARD RULE — NO VISUAL FLICKER, POP-IN, OR ABRUPT APPEARANCE/DISAPPEARANCE OF CARDS:**
+Cards must NEVER appear, disappear, or flicker abruptly at any point during any animation sequence. Every card must be continuously visible from the moment it starts moving until either (a) it is intentionally hidden by a completed animation step, or (b) `clearLayer()` + `commitState()` replaces clones with the Vue-rendered final state. Specifically: animation clones that arrive at a destination (e.g. captured deck) must NOT be removed individually — they stay at the destination until `clearLayer()` runs after the full animation sequence. When reviewing animation code, **check every `.remove()` call on animation clones**: if a clone is removed before the entire animation function returns, verify there is a synchronously-created replacement at the exact same position. If not, it is a flicker bug.
+
 **HARD RULE — NO FINAL STATE BEFORE ANIMATION COMPLETES:**
 The user must NEVER see the final/new state before the animation that transitions to it has finished. The visual flow is always: **previous state displayed → animation plays → final state revealed**. This applies to ALL game elements without exception: cards in hand, table cards, scores, deck count, briscola card, captured counts, turn indicator, trick results. Any element that appears, disappears, or changes value must do so ONLY after the corresponding animation completes. Violating this (e.g., a card appearing in hand before deal animation, briscola card visible before initial deal finishes, scores updating before sweep completes) is a **critical bug** that must be flagged and fixed.
 
@@ -206,6 +209,7 @@ The user must NEVER see the final/new state before the animation that transition
 13d. **nextTick between clearing dealHiding and clearing imperative opacity** — in `runDealAnimation` cleanup, `dealHiding = false` must be followed by `await nextTick()` BEFORE `allEls.forEach(el => el.style.opacity = '')`. Without this, clearing the imperative `opacity: 1` exposes Vue's stale reactive `opacity: 0` for one frame, causing a flash.
 14. **Vue-managed DOM NEVER modified by animation code** — no `appendChild`/`remove` on `.table-center` or `.hand-row`. Only `visibility:hidden` via tracked `setStyle()`. All tracked styles restored via `restoreStyles()` BEFORE commitState.
 15. **No stale clones after animation** — `clearLayer()` called after every animation, before commitState
+15b. **Sweep clones stay at destination** — clones that arrive at the captured deck (or any destination) must NOT be individually removed. They accumulate at the destination and are cleaned up by `clearLayer()`. Removing a clone on arrival causes a single-frame flicker when the next staggered clone hasn't arrived yet.
 16. **Post-animation delay blocks events** — `inPostAnimDelay` flag keeps events queued during the 600ms post-animation gap, preventing visual jumps
 17. **Deal animation on every entry** — deal animation runs on first game load, re-deal mid-round, and new round (not just Mercure events)
 18. **GPU-composited motion** — `flyTo()` uses `transform: translate() scale()` instead of animating `left`/`top` for smooth 60fps

@@ -484,7 +484,7 @@ function applyRect(el: HTMLElement, r: DOMRect) {
 
 /** Sweep face-up cards to a captured deck with staggered face-to-back flip.
  *  Each card clone starts face-up, flips to back at 40% of the sweep, then flies
- *  to the captured-deck rect and is removed on arrival.
+ *  to the captured-deck rect and stays there until clearLayer() cleans up.
  *  When scopaIndex is set, that card flies first (face-up, rotating 90°), then the
  *  remaining cards sweep with the standard flip animation on top of it. */
 function sweepToCaptured(
@@ -501,7 +501,9 @@ function sweepToCaptured(
     cl.style.zIndex = '53'
     aLayer().appendChild(cl)
     return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale, 90).then(() => {
-      if (cl.parentNode) cl.remove()
+      // Keep clone visible at destination — lower z-index so remaining sweep
+      // clones land on top.  clearLayer() removes it after the full animation.
+      cl.style.zIndex = '50'
       const rest = items.filter((_, idx) => idx !== scopaIndex)
       if (rest.length === 0) return
       return sweepToCaptured(rest, capR, scale)
@@ -516,9 +518,11 @@ function sweepToCaptured(
     ps.push(
       sleep(i * SWEEP_LAG).then(() => {
         setTimeout(() => flipToBack(cl), SWEEP_MS * 0.4)
-        return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
-          if (cl.parentNode) cl.remove()
-        })
+        // Clone stays at destination after flight — clearLayer() removes it
+        // after the full animation sequence.  Removing here would cause a
+        // single-frame flicker between this clone's removal and the next
+        // staggered clone's arrival.
+        return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale)
       })
     )
   })

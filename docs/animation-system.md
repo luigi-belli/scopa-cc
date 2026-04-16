@@ -53,7 +53,7 @@ Events that arrive while busy (`store.animating || inPostAnimDelay`) are queued 
 3. Pause (150ms), glow captured cards (500ms)
 4. Snapshot positions, imperatively remove captured cards + played card
 5. FLIP remaining cards
-6. Sweep clones to captured deck (450ms, 100ms stagger). Each clone flips face→back at 40% of sweep. **Scopa exception**: the capturer card flies first (face-up, rotating 90°) to land as the scopa marker; then the remaining captured cards sweep on top with the standard flip animation.
+6. Sweep clones to captured deck (450ms, 100ms stagger). Each clone flips face→back at 40% of sweep. **Scopa exception**: the capturer card flies first (face-up, rotating 90°) to land as the scopa marker; then the remaining captured cards sweep on top with the standard flip animation. **Clones are NOT removed on arrival** — they stay at the destination to prevent flicker between staggered arrivals. `clearLayer()` cleans them all up after the full sequence.
 7. **commitState** — captured deck count, scores, etc. update
 
 ## Deal Animation (Full Deal — Initial + New Round)

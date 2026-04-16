@@ -666,6 +666,7 @@ All test knowledge, checklists, and verification procedures live in the agent de
 
 ## Development Notes
 
+- **HARD RULE — No visual flicker, pop-in, or abrupt appearance/disappearance of cards.** Cards must NEVER appear, disappear, or flicker abruptly at any point during any animation sequence. Every card must be continuously visible from the moment it starts moving until either (a) it is intentionally hidden by a completed animation step, or (b) `clearLayer()` + `commitState()` replaces clones with the Vue-rendered final state. Specifically: animation clones that arrive at a destination (e.g. captured deck) must NOT be removed individually — they stay at the destination until `clearLayer()` runs after the full animation sequence. All new code must comply with this rule.
 - The game is entirely server-authoritative — all game logic runs on the server
 - The UI supports Italian and English (see i18n section), with language selectable on the lobby screen
 - **No Symfony controllers are used** — all endpoints use API Platform State Providers and Processors
