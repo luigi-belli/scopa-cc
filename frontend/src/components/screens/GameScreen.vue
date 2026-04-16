@@ -484,22 +484,25 @@ function applyRect(el: HTMLElement, r: DOMRect) {
 
 /** Sweep face-up cards to a captured deck with staggered face-to-back flip.
  *  Each card clone starts face-up, flips to back at 40% of the sweep, then flies
- *  to the captured-deck rect and is removed on arrival. */
+ *  to the captured-deck rect and is removed on arrival.
+ *  When scopaIndex is set, that card stays face-up and rotates 90° instead of flipping. */
 function sweepToCaptured(
   items: { card: Card; rect: DOMRect }[],
   capR: DOMRect,
   scale: number | undefined,
   topIndex?: number,
+  scopaIndex?: number,
 ): Promise<void> {
   const ps: Promise<void>[] = []
   items.forEach((si, i) => {
-    const cl = mkFlippable(si.card, si.rect, true)
+    const isScopa = i === scopaIndex
+    const cl = isScopa ? mkFace(si.card, si.rect) : mkFlippable(si.card, si.rect, true)
     if (i === topIndex) cl.style.zIndex = '53'
     aLayer().appendChild(cl)
     ps.push(
       sleep(i * SWEEP_LAG).then(() => {
-        setTimeout(() => flipToBack(cl), SWEEP_MS * 0.4)
-        return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale).then(() => {
+        if (!isScopa) setTimeout(() => flipToBack(cl), SWEEP_MS * 0.4)
+        return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale, isScopa ? 90 : undefined).then(() => {
           if (cl.parentNode) cl.remove()
         })
       })
@@ -511,15 +514,16 @@ function sweepToCaptured(
 // ─── Low-level animation ───
 // Uses transform for GPU-composited smooth motion instead of left/top
 
-function flyTo(el: HTMLElement, to: DOMRect, dur: number, ease: string, scale?: number): Promise<void> {
+function flyTo(el: HTMLElement, to: DOMRect, dur: number, ease: string, scale?: number, endRotateDeg?: number): Promise<void> {
   const fromL = parseFloat(el.style.left)
   const fromT = parseFloat(el.style.top)
   const fromW = parseFloat(el.style.width)
   const fromH = parseFloat(el.style.height)
   const { dx, dy, sx, sy } = computeFlyToDelta(fromL, fromT, fromW, fromH, to, scale)
+  const rot = endRotateDeg != null ? ` rotate(${endRotateDeg}deg)` : ''
   const a = el.animate([
     { transform: 'translate(0,0) scale(1)' },
-    { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy})` },
+    { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy})${rot}` },
   ], { duration: dur, easing: ease, fill: 'forwards' })
   return new Promise(r => { a.onfinish = () => r() })
 }
@@ -1197,11 +1201,11 @@ async function animCapture(result: TurnResult) {
     }
   }
 
-  // 6. Sweep
+  // 6. Sweep — when scopa, the capturer card (index 0) rotates 90° face-up instead of flipping
   const capR = capturedR(result.playerIndex)
   if (capR && sweepItems.length > 0) {
     const scale = sweepScale(sweepItems[0].rect.width, capR)
-    await sweepToCaptured(sweepItems, capR, scale, 0)
+    await sweepToCaptured(sweepItems, capR, scale, 0, result.scopa ? 0 : undefined)
   }
 
   // 7. Scopa flash
