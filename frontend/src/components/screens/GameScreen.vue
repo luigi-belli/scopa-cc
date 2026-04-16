@@ -485,43 +485,20 @@ function applyRect(el: HTMLElement, r: DOMRect) {
 /** Sweep face-up cards to a captured deck with staggered face-to-back flip.
  *  Each card clone starts face-up, flips to back at 40% of the sweep, then flies
  *  to the captured-deck rect and stays there until clearLayer() cleans up.
- *  When scopaIndex is set, that card flies first (face-up, rotating 90°), then the
- *  remaining cards sweep with the standard flip animation on top of it. */
+ *  Clones are NOT removed on arrival — they accumulate at the destination.
+ *  clearLayer() in the caller removes them after the full animation sequence. */
 function sweepToCaptured(
   items: { card: Card; rect: DOMRect }[],
   capR: DOMRect,
   scale: number | undefined,
-  topIndex?: number,
-  scopaIndex?: number,
 ): Promise<void> {
-  // Scopa: capturer card flies first with 90° rotation, then the rest sweep normally
-  if (scopaIndex != null) {
-    const si = items[scopaIndex]
-    const cl = mkFace(si.card, si.rect)
-    cl.style.zIndex = '53'
-    aLayer().appendChild(cl)
-    return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale, 90).then(() => {
-      // Keep clone visible at destination — lower z-index so remaining sweep
-      // clones land on top.  clearLayer() removes it after the full animation.
-      cl.style.zIndex = '50'
-      const rest = items.filter((_, idx) => idx !== scopaIndex)
-      if (rest.length === 0) return
-      return sweepToCaptured(rest, capR, scale)
-    })
-  }
-
   const ps: Promise<void>[] = []
   items.forEach((si, i) => {
     const cl = mkFlippable(si.card, si.rect, true)
-    if (i === topIndex) cl.style.zIndex = '53'
     aLayer().appendChild(cl)
     ps.push(
       sleep(i * SWEEP_LAG).then(() => {
         setTimeout(() => flipToBack(cl), SWEEP_MS * 0.4)
-        // Clone stays at destination after flight — clearLayer() removes it
-        // after the full animation sequence.  Removing here would cause a
-        // single-frame flicker between this clone's removal and the next
-        // staggered clone's arrival.
         return flyTo(cl, capR, SWEEP_MS, 'ease-in-out', scale)
       })
     )
@@ -1107,10 +1084,13 @@ async function animPlace(result: TurnResult) {
 // 2. Clone slides from hand → first captured card on table (500ms)
 // 3. Pause 150ms
 // 4. Glow captured table cards via CSS class (500ms), then remove class
-// 5. Hide captured table cards (visibility:hidden, tracked)
-// 6. Sweep clones from captured positions → captured deck (450ms, stagger)
-// 7. Scopa flash if applicable
-// 8. Return. Caller restores styles, clears layer, commits state.
+// 5. Fly playClone directly from table → captured deck (NO remove-then-recreate).
+//    SCOPA: playClone flies first (90° rotation), captured cards stay visible,
+//           then captured cards sweep on top of the scopa marker.
+//    NON-SCOPA: captured cards hidden (sync with clone creation),
+//               playClone + sweep clones fly in parallel.
+// 6. Scopa flash if applicable
+// 7. Return. Caller restores styles, clears layer, commits state.
 // ════════════════════════════════════════════════════
 
 async function animCapture(result: TurnResult) {
@@ -1196,37 +1176,73 @@ async function animCapture(result: TurnResult) {
   await sleep(GLOW_MS)
   glowEls.forEach(el => el.classList.remove('captured-glow'))
 
-  // 5. Remove play clone now — sweep clones are about to be created at the same
-  //    position, so there's no visible gap.
-  if (playClone?.parentNode) playClone.remove()
+  // 5. Fly playClone directly to captured deck + sweep captured cards.
+  //    playClone is NEVER removed — it flies continuously from the table to capR.
+  //    This eliminates any remove→recreate gap that could cause flicker.
+  const capR = capturedR(result.playerIndex)
+  if (capR) {
+    const refW = (playCloneR ?? landR)?.width ?? 75
+    const scale = sweepScale(refW, capR)
 
-  // Snapshot positions of cards to sweep, then hide originals
-  const sweepItems: { card: Card; rect: DOMRect }[] = []
-  // Include played card — use its landing position (or first captured card position as fallback)
-  if (playCloneR) {
-    sweepItems.push({ card, rect: playCloneR })
-  } else if (landR) {
-    sweepItems.push({ card, rect: landR })
-  }
-  for (const cc of captured) {
-    const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
-    if (idx >= 0) {
-      const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
-      if (el) {
-        sweepItems.push({ card: cc, rect: el.getBoundingClientRect() })
-        setStyle(el, 'visibility', 'hidden')
+    // Commit playClone's visual position to inline styles so the second flyTo
+    // reads the correct origin.  The first flyTo used fill:'forwards' which
+    // keeps the visual position via transform, but style.left/top still hold
+    // the original hand position.
+    if (playClone && playCloneR) {
+      playClone.getAnimations().forEach(a => a.cancel())
+      applyRect(playClone, playCloneR)
+    }
+
+    if (result.scopa) {
+      // SCOPA: playClone flies to capR with 90° rotation FIRST.
+      // Captured cards stay visible on the table during this flight.
+      if (playClone) {
+        await flyTo(playClone, capR, SWEEP_MS, 'ease-in-out', scale, 90)
+        playClone.style.zIndex = '50'  // below sweep clones that land on top
       }
+
+      // NOW snapshot & hide captured cards, then sweep them on top of the marker.
+      const sweepItems: { card: Card; rect: DOMRect }[] = []
+      for (const cc of captured) {
+        const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
+        if (idx >= 0) {
+          const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
+          if (el) {
+            sweepItems.push({ card: cc, rect: el.getBoundingClientRect() })
+            setStyle(el, 'visibility', 'hidden')
+          }
+        }
+      }
+      if (sweepItems.length > 0) {
+        await sweepToCaptured(sweepItems, capR, scale)
+      }
+    } else {
+      // NON-SCOPA: snapshot & hide captured cards (synchronous — clones replace
+      // them in the same paint frame), then fly playClone + sweep in parallel.
+      const sweepItems: { card: Card; rect: DOMRect }[] = []
+      for (const cc of captured) {
+        const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
+        if (idx >= 0) {
+          const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
+          if (el) {
+            sweepItems.push({ card: cc, rect: el.getBoundingClientRect() })
+            setStyle(el, 'visibility', 'hidden')
+          }
+        }
+      }
+
+      const promises: Promise<void>[] = []
+      if (playClone) {
+        promises.push(flyTo(playClone, capR, SWEEP_MS, 'ease-in-out', scale))
+      }
+      if (sweepItems.length > 0) {
+        promises.push(sweepToCaptured(sweepItems, capR, scale))
+      }
+      await Promise.all(promises)
     }
   }
 
-  // 6. Sweep — when scopa, the capturer card (index 0) rotates 90° face-up instead of flipping
-  const capR = capturedR(result.playerIndex)
-  if (capR && sweepItems.length > 0) {
-    const scale = sweepScale(sweepItems[0].rect.width, capR)
-    await sweepToCaptured(sweepItems, capR, scale, 0, result.scopa ? 0 : undefined)
-  }
-
-  // 7. Scopa flash
+  // 6. Scopa flash
   if (result.scopa) {
     scopaFlashRef.value?.show()
   }

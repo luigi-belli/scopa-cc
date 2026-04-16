@@ -48,12 +48,14 @@ Events that arrive while busy (`store.animating || inPostAnimDelay`) are queued 
 8. **commitState** — scores, turn indicator, etc. update
 
 ## Capture Animation
-1. Hide source card, create clone in animation layer
-2. Clone slides to landing card on table (500ms)
+1. Hide source card, create clone (playClone) in animation layer
+2. playClone slides to landing card on table (500ms)
 3. Pause (150ms), glow captured cards (500ms)
-4. Snapshot positions, imperatively remove captured cards + played card
-5. FLIP remaining cards
-6. Sweep clones to captured deck (450ms, 100ms stagger). Each clone flips face→back at 40% of sweep. **Scopa exception**: the capturer card flies first (face-up, rotating 90°) to land as the scopa marker; then the remaining captured cards sweep on top with the standard flip animation. **Clones are NOT removed on arrival** — they stay at the destination to prevent flicker between staggered arrivals. `clearLayer()` cleans them all up after the full sequence.
+4. Commit playClone's position to inline styles (cancel fill:forwards animation, apply rect)
+5. **playClone is NEVER removed** — it flies directly from the table to the captured deck:
+   - **Scopa**: playClone flies to captured deck with 90° rotation (scopa marker). Captured cards remain visible on the table during this flight. After arrival, z-index lowered. Then captured cards are hidden and sweep clones fly on top.
+   - **Non-scopa**: captured cards hidden synchronously (clones replace them in the same paint frame). playClone + sweep clones fly to captured deck in parallel.
+6. Sweep clones to captured deck (450ms, 100ms stagger). Each clone flips face→back at 40% of sweep. **Clones are NOT removed on arrival** — they stay at the destination. `clearLayer()` cleans them all up after the full sequence.
 7. **commitState** — captured deck count, scores, etc. update
 
 ## Deal Animation (Full Deal — Initial + New Round)
