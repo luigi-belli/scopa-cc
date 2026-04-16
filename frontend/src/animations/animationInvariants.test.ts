@@ -1449,3 +1449,37 @@ describe('Fix 14: Nudge animation must not use :not(:hover) — sticky hover on 
     expect(nudging).toBe(true)
   })
 })
+
+describe('captured-glow must not have CSS transition', () => {
+  /**
+   * The captured-glow class highlights captured table cards during the glow
+   * phase (500ms).  If the class has a CSS transition on box-shadow, removing
+   * the class triggers a fade-out animation that lingers on the table while
+   * the scopa marker flies to the captured deck.
+   *
+   * In the old code this was invisible because captured cards were hidden
+   * (visibility:hidden) immediately after the glow.  After the restructured
+   * animCapture (which keeps captured cards visible during the scopa marker
+   * flight), any CSS transition on the glow becomes user-visible stale glow.
+   *
+   * Fix: captured-glow must NOT have a transition property.
+   */
+
+  it('captured-glow CSS rule has no transition property', async () => {
+    const { readFile } = await import('fs/promises')
+    const { resolve } = await import('path')
+
+    const css = await readFile(
+      resolve(__dirname, '../css/cards.css'),
+      'utf-8',
+    )
+
+    // Extract the .card.captured-glow rule block
+    const match = css.match(/\.card\.captured-glow\s*\{([^}]*)\}/)
+    expect(match).not.toBeNull()
+
+    const ruleBody = match![1]
+    // Must NOT contain a transition property (would cause lingering glow)
+    expect(ruleBody).not.toMatch(/transition/)
+  })
+})

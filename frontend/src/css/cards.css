@@ -57,7 +57,6 @@
 
 .card.captured-glow {
   box-shadow: 0 0 16px 6px rgba(255, 100, 100, 0.7);
-  transition: box-shadow 0.3s;
 }
 
 /* Nudge pulse: gentle glow + lift to remind player it's their turn.
