@@ -1167,22 +1167,23 @@ async function animCapture(result: TurnResult) {
   // 3. Pause
   await sleep(CAP_PAUSE)
 
-  // 4. Glow
-  const glowEls: HTMLElement[] = []
-  for (const cc of captured) {
-    const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
-    if (idx >= 0) {
-      const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
-      if (el) { el.classList.add('captured-glow'); glowEls.push(el) }
+  // 4. Glow (non-scopa only — scopa clears the entire table so the glow is
+  //    redundant and would require extra work to avoid residual styling).
+  if (!result.scopa) {
+    const glowEls: HTMLElement[] = []
+    for (const cc of captured) {
+      const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
+      if (idx >= 0) {
+        const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
+        if (el) { el.classList.add('captured-glow'); glowEls.push(el) }
+      }
     }
+    await sleep(GLOW_MS)
+    glowEls.forEach(el => {
+      el.style.transition = 'none'
+      el.classList.remove('captured-glow')
+    })
   }
-  await sleep(GLOW_MS)
-  // Force instant glow removal: inline transition:none prevents any residual
-  // CSS transition from animating the box-shadow change.
-  glowEls.forEach(el => {
-    el.style.transition = 'none'
-    el.classList.remove('captured-glow')
-  })
 
   // 5. Fly playClone directly to captured deck + sweep captured cards.
   //    playClone is NEVER removed — it flies continuously from the table to capR.
@@ -1202,10 +1203,9 @@ async function animCapture(result: TurnResult) {
     }
 
     if (result.scopa) {
-      // SCOPA: snapshot & hide captured cards NOW (right after glow removal),
-      // replacing them with static face-up clones in the animation layer.
-      // This guarantees no residual glow — the clones never had any CSS classes.
-      // The clones sit on the table while the marker flies, then sweep to capR.
+      // SCOPA: snapshot & hide captured cards, replacing them with static
+      // face-up clones in the animation layer.  The clones sit on the table
+      // while the marker flies, then sweep to capR.
       const sweepItems: { card: Card; rect: DOMRect }[] = []
       for (const cc of captured) {
         const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
@@ -1215,8 +1215,6 @@ async function animCapture(result: TurnResult) {
             const rect = el.getBoundingClientRect()
             sweepItems.push({ card: cc, rect })
             setStyle(el, 'visibility', 'hidden')
-            // Place a face-up clone at the same position so the card stays
-            // visible on the table during the scopa marker flight.
             const stand = mkFace(cc, rect)
             stand.style.zIndex = '50'
             aLayer().appendChild(stand)
@@ -1231,8 +1229,6 @@ async function animCapture(result: TurnResult) {
       }
 
       // Sweep captured cards on top of the marker.
-      // The standing clones are still visible at z-index 50; the sweep clones
-      // (z-index 52) fly over them.  clearLayer() removes everything afterwards.
       if (sweepItems.length > 0) {
         await sweepToCaptured(sweepItems, capR, scale)
       }
