@@ -1202,25 +1202,37 @@ async function animCapture(result: TurnResult) {
     }
 
     if (result.scopa) {
-      // SCOPA: playClone flies to capR with 90° rotation FIRST.
-      // Captured cards stay visible on the table during this flight.
-      if (playClone) {
-        await flyTo(playClone, capR, SWEEP_MS, 'ease-in-out', scale, 90)
-        playClone.style.zIndex = '50'  // below sweep clones that land on top
-      }
-
-      // NOW snapshot & hide captured cards, then sweep them on top of the marker.
+      // SCOPA: snapshot & hide captured cards NOW (right after glow removal),
+      // replacing them with static face-up clones in the animation layer.
+      // This guarantees no residual glow — the clones never had any CSS classes.
+      // The clones sit on the table while the marker flies, then sweep to capR.
       const sweepItems: { card: Card; rect: DOMRect }[] = []
       for (const cc of captured) {
         const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
         if (idx >= 0) {
           const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
           if (el) {
-            sweepItems.push({ card: cc, rect: el.getBoundingClientRect() })
+            const rect = el.getBoundingClientRect()
+            sweepItems.push({ card: cc, rect })
             setStyle(el, 'visibility', 'hidden')
+            // Place a face-up clone at the same position so the card stays
+            // visible on the table during the scopa marker flight.
+            const stand = mkFace(cc, rect)
+            stand.style.zIndex = '50'
+            aLayer().appendChild(stand)
           }
         }
       }
+
+      // playClone flies to capR with 90° rotation (scopa marker).
+      if (playClone) {
+        await flyTo(playClone, capR, SWEEP_MS, 'ease-in-out', scale, 90)
+        playClone.style.zIndex = '50'  // below sweep clones that land on top
+      }
+
+      // Sweep captured cards on top of the marker.
+      // The standing clones are still visible at z-index 50; the sweep clones
+      // (z-index 52) fly over them.  clearLayer() removes everything afterwards.
       if (sweepItems.length > 0) {
         await sweepToCaptured(sweepItems, capR, scale)
       }
