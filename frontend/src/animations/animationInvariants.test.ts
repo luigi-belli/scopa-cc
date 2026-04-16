@@ -1482,4 +1482,23 @@ describe('captured-glow must not have CSS transition', () => {
     // Must NOT contain a transition property (would cause lingering glow)
     expect(ruleBody).not.toMatch(/transition/)
   })
+
+  it('glow removal sets inline transition:none to prevent residual animation', async () => {
+    const { readFile } = await import('fs/promises')
+    const { resolve } = await import('path')
+
+    const src = await readFile(
+      resolve(__dirname, '../components/screens/GameScreen.vue'),
+      'utf-8',
+    )
+
+    // Every captured-glow removal must be preceded by transition:none
+    // to prevent browsers from using the "before-change" transition
+    // to animate the box-shadow removal.
+    const removalPattern = /el\.style\.transition\s*=\s*'none'[\s\S]{0,50}classList\.remove\(\s*'captured-glow'\s*\)/g
+    const matches = src.match(removalPattern)
+    expect(matches).not.toBeNull()
+    // Two call sites: animCapture and animateEndOfRoundSweep
+    expect(matches!.length).toBe(2)
+  })
 })

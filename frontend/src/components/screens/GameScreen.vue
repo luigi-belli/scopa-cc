@@ -712,7 +712,10 @@ async function animateEndOfRoundSweep(newState: GameState, sweep?: SweepData): P
       if (el) { el.classList.add('captured-glow'); glowEls.push(el) }
     })
     await sleep(GLOW_MS)
-    glowEls.forEach(el => el.classList.remove('captured-glow'))
+    glowEls.forEach(el => {
+      el.style.transition = 'none'
+      el.classList.remove('captured-glow')
+    })
 
     // Snapshot positions then hide originals
     const sweepItems: { card: Card; rect: DOMRect }[] = []
@@ -1174,7 +1177,12 @@ async function animCapture(result: TurnResult) {
     }
   }
   await sleep(GLOW_MS)
-  glowEls.forEach(el => el.classList.remove('captured-glow'))
+  // Force instant glow removal: inline transition:none prevents any residual
+  // CSS transition from animating the box-shadow change.
+  glowEls.forEach(el => {
+    el.style.transition = 'none'
+    el.classList.remove('captured-glow')
+  })
 
   // 5. Fly playClone directly to captured deck + sweep captured cards.
   //    playClone is NEVER removed — it flies continuously from the table to capR.
