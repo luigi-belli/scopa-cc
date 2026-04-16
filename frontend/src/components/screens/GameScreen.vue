@@ -1167,9 +1167,45 @@ async function animCapture(result: TurnResult) {
   // 3. Pause
   await sleep(CAP_PAUSE)
 
+  // 4. Glow captured cards, then hide them in the SAME loop iteration as the
+  //    glow removal.  This guarantees the glow never appears without hiding —
+  //    the user sees glow ON → glow OFF + card gone in a single paint frame.
+  const glowEls: HTMLElement[] = []
+  for (const cc of captured) {
+    const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
+    if (idx >= 0) {
+      const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
+      if (el) { el.classList.add('captured-glow'); glowEls.push(el) }
+    }
+  }
+  await sleep(GLOW_MS)
+
+  // Snapshot positions, remove glow, and hide each card atomically.
+  // For scopa: also place a face-up clone so the card stays visible during
+  // the scopa marker flight (the clone has no glow — it's a fresh element).
+  const sweepItems: { card: Card; rect: DOMRect }[] = []
+  for (const cc of captured) {
+    const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
+    if (idx >= 0) {
+      const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
+      if (el) {
+        const rect = el.getBoundingClientRect()
+        sweepItems.push({ card: cc, rect })
+        // Atomic: remove glow + hide in same statement block — no frame between
+        el.classList.remove('captured-glow')
+        setStyle(el, 'visibility', 'hidden')
+        // Scopa: place a clean clone so the card stays visible on the table
+        if (result.scopa) {
+          const stand = mkFace(cc, rect)
+          stand.style.zIndex = '50'
+          aLayer().appendChild(stand)
+        }
+      }
+    }
+  }
+
   // 5. Fly playClone directly to captured deck + sweep captured cards.
   //    playClone is NEVER removed — it flies continuously from the table to capR.
-  //    This eliminates any remove→recreate gap that could cause flicker.
   const capR = capturedR(result.playerIndex)
   if (capR) {
     const refW = (playCloneR ?? landR)?.width ?? 75
@@ -1185,26 +1221,8 @@ async function animCapture(result: TurnResult) {
     }
 
     if (result.scopa) {
-      // SCOPA: snapshot & hide captured cards, replacing them with static
-      // face-up clones in the animation layer.  The clones sit on the table
-      // while the marker flies, then sweep to capR.
-      const sweepItems: { card: Card; rect: DOMRect }[] = []
-      for (const cc of captured) {
-        const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
-        if (idx >= 0) {
-          const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
-          if (el) {
-            const rect = el.getBoundingClientRect()
-            sweepItems.push({ card: cc, rect })
-            setStyle(el, 'visibility', 'hidden')
-            const stand = mkFace(cc, rect)
-            stand.style.zIndex = '50'
-            aLayer().appendChild(stand)
-          }
-        }
-      }
-
-      // playClone flies to capR with 90° rotation (scopa marker).
+      // SCOPA: playClone flies to capR with 90° rotation (scopa marker).
+      // Standing clones keep cards visible on the table during the flight.
       if (playClone) {
         await flyTo(playClone, capR, SWEEP_MS, 'ease-in-out', scale, 90)
         playClone.style.zIndex = '50'  // below sweep clones that land on top
@@ -1215,20 +1233,7 @@ async function animCapture(result: TurnResult) {
         await sweepToCaptured(sweepItems, capR, scale)
       }
     } else {
-      // NON-SCOPA: snapshot & hide captured cards (synchronous — clones replace
-      // them in the same paint frame), then fly playClone + sweep in parallel.
-      const sweepItems: { card: Card; rect: DOMRect }[] = []
-      for (const cc of captured) {
-        const idx = table.findIndex(t => t.suit === cc.suit && t.value === cc.value)
-        if (idx >= 0) {
-          const el = q(`[data-card-key="${cardKey(cc, idx)}"]`)
-          if (el) {
-            sweepItems.push({ card: cc, rect: el.getBoundingClientRect() })
-            setStyle(el, 'visibility', 'hidden')
-          }
-        }
-      }
-
+      // NON-SCOPA: cards already hidden above. Fly playClone + sweep in parallel.
       const promises: Promise<void>[] = []
       if (playClone) {
         promises.push(flyTo(playClone, capR, SWEEP_MS, 'ease-in-out', scale))
