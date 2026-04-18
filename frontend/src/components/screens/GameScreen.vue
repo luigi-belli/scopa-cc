@@ -159,6 +159,7 @@ import { cardImagePath, cardBackPath, formatTressetteScore } from '@/types/card'
 import type { GameState, TurnResult, RoundScores, RoundEndData, GameOverData, SweepData } from '@/types/game'
 import { cardKey, sleep, computeSlotRect, computeFlyToDelta } from '@/animations/flipUtils'
 import type { SlotGridParams } from '@/animations/flipUtils'
+import { pickNextRoundState } from '@/utils/nextRoundState'
 
 import CardComponent from '@/components/game/CardComponent.vue'
 import CardBack from '@/components/game/CardBack.vue'
@@ -1683,13 +1684,13 @@ async function handleNextRound() {
   }
   nextRoundInFlight.value = true
   try {
-    await api.nextRound(props.gameId)
+    const newState = await api.nextRound(props.gameId)
     showRoundEnd.value = false; lastRoundScores.value = null
-    // Consume any state that was stashed while the overlay was visible
-    const stashed = store.serverState
-    if (stashed && stashed.state !== 'round-end' && stashed.state !== 'game-over') {
-      maybeCommitOrDeal(stashed)
-    }
+    // Prefer a stashed serverState that has already progressed past round-end
+    // (Mercure game-state arrived during the request); otherwise fall back to
+    // the API response. Without the API-response fallback the UI hangs on the
+    // round-end display whenever the Mercure event is delayed.
+    maybeCommitOrDeal(pickNextRoundState(store.serverState, newState))
   }
   catch (e: unknown) {
     console.error('Next round error:', e)
